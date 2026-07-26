@@ -40,6 +40,35 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
 
   bool get _editando => widget.servicoId != null;
 
+  /// Converte entrada de duração (minutos ou "Xh Ym") para minutos totais
+  /// Exemplos: "30" → 30, "1h 30m" → 90, "1h" → 60, "45m" → 45
+  int _parseDuracao(String entrada) {
+    entrada = entrada.trim().toLowerCase();
+    if (entrada.isEmpty) return 30;
+
+    // Se é apenas um número, trata como minutos
+    if (int.tryParse(entrada) != null) return int.parse(entrada);
+
+    // Processa formato "Xh Ym" ou variações
+    int horas = 0, minutos = 0;
+    final partes = entrada.split(RegExp(r'[h\s]+'));
+
+    for (int i = 0; i < partes.length; i++) {
+      final parte = partes[i].trim();
+      if (parte.isEmpty) continue;
+
+      if (parte.endsWith('m')) {
+        minutos = int.tryParse(parte.replaceAll('m', '').trim()) ?? minutos;
+      } else if (i == 0 && entrada.contains('h')) {
+        horas = int.tryParse(parte) ?? horas;
+      } else if (int.tryParse(parte) != null && horas == 0) {
+        horas = int.parse(parte);
+      }
+    }
+
+    return horas * 60 + minutos;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,7 +100,7 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
   Future<void> _salvar() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final duracao = int.tryParse(_duracaoController.text) ?? 30;
+    final duracao = _parseDuracao(_duracaoController.text);
     final valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
 
     final servico = _editando
@@ -128,11 +157,14 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
                       Expanded(
                         child: TextFormField(
                           controller: _duracaoController,
-                          decoration: const InputDecoration(labelText: 'Duração (min) *'),
-                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Duração *',
+                            helperText: '30, 1h, 1h 30m',
+                          ),
+                          keyboardType: TextInputType.text,
                           validator: (v) {
-                            final n = int.tryParse(v ?? '');
-                            return (n == null || n <= 0) ? 'Informe uma duração válida.' : null;
+                            final duracao = _parseDuracao(v ?? '');
+                            return (duracao <= 0) ? 'Informe uma duração válida.' : null;
                           },
                         ),
                       ),
