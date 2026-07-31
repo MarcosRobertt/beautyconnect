@@ -111,7 +111,7 @@ class AgendaScreen extends ConsumerWidget {
     required VisaoAgenda visao,
     required AgendaState estado,
     required Map<String, String> clientesPorId,
-    required AgendamentoControllerNotifier notifier,
+    required AgendamentoController notifier,
     required NumberFormat moeda,
   }) {
     if (estado.lista.isEmpty) {
