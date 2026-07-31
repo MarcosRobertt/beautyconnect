@@ -149,7 +149,7 @@ class AgendaScreen extends ConsumerWidget {
           agendamentos: estado.lista,
           clientesNomes: clientesPorId,
           onDiaSelecionado: (dia) {
-            notifier.mudarData(dia);
+            notifier.irPara(dia);
           },
           onAgendamentoTapado: (agendamento) {
             context.push('${AppRoutes.agenda}/editar/${agendamento.id}');
