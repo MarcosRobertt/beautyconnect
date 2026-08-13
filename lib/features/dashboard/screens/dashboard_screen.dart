@@ -14,21 +14,15 @@ import '../controllers/dashboard_controller.dart';
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
-  String _formatarMinutos(int minutos) {
-    final h = minutos ~/ 60;
-    final m = minutos % 60;
-    if (h == 0) return '${m}min';
-    if (m == 0) return '${h}h';
-    return '${h}h${m.toString().padLeft(2, '0')}';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metricas = ref.watch(dashboardMetricsProvider);
+    final receitaAsync = ref.watch(receitaDoDiaProvider);
     final aniversariantesAsync = ref.watch(aniversariantesDoMesProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
     final hoje = DateTime.now();
     final rotuloData = DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(hoje);
+    final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
     final clientesPorId = clientesAsync.maybeWhen(
       data: (lista) => {for (final c in lista) c.id: c.nome},
@@ -56,6 +50,8 @@ class DashboardScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Erro ao carregar dashboard: $e')),
         data: (m) {
           final aniversariantes = aniversariantesAsync.value ?? [];
+          final receitaDia = receitaAsync.value ?? 0.0;
+
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -84,9 +80,9 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.schedule,
                   ),
                   _CardMetrica(
-                    titulo: 'Horários vagos hoje',
-                    valor: _formatarMinutos(m.minutosLivresHoje),
-                    icone: Icons.event_available,
+                    titulo: 'Receita do Dia',
+                    valor: moeda.format(receitaDia),
+                    icone: Icons.attach_money,
                   ),
                   _CardMetrica(
                     titulo: 'Aniversariante do mês',
