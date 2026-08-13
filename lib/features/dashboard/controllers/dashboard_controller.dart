@@ -76,3 +76,27 @@ final aniversariantesDoMesProvider = FutureProvider<List<Cliente>>((ref) async {
   return todos.where((c) => c.aniversario != null && c.aniversario!.month == mesAtual).toList()
     ..sort((a, b) => a.aniversario!.day.compareTo(b.aniversario!.day));
 });
+
+/// Receita do dia (apenas agendamentos confirmados).
+/// Calcula a soma dos valores de todos os serviços confirmados do dia.
+/// 
+/// TODO: Esta lógica será reutilizada pelo módulo Financeiro para:
+/// - Receita do dia/semana/mês
+/// - Ticket médio
+/// - Valor recebido
+/// - Valor pendente
+/// - Fluxo de caixa
+/// - Gráficos financeiros
+final receitaDoDiaProvider = FutureProvider<double>((ref) async {
+  ref.watch(agendamentoControllerProvider);
+  final repository = ref.watch(agendamentoRepositoryProvider);
+
+  final agendaHoje = await repository.listarDia(DateTime.now());
+
+  // Soma apenas agendamentos com status Confirmado
+  final receita = agendaHoje
+      .where((a) => a.status == AgendamentoStatus.confirmado)
+      .fold<double>(0, (soma, a) => soma + a.valor);
+
+  return receita;
+});
