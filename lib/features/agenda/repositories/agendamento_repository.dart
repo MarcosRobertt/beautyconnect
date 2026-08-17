@@ -48,14 +48,40 @@ class AgendamentoRepository {
 
   Future<List<Agendamento>> listarTodos() async => _storage.listar();
 
-  /// Regra: não permitir dois agendamentos não cancelados no mesmo dia e
-  /// horário de início.
+  /// Converte "HH:mm" para minutos desde 00:00
+  int _horaParaMinutos(String hhmm) {
+    final partes = hhmm.split(':');
+    return int.parse(partes[0]) * 60 + int.parse(partes[1]);
+  }
+
+  /// Verifica se dois períodos de tempo se sobrepõem.
+  /// Dois períodos se sobrepõem se: inicio1 < fim2 AND inicio2 < fim1
+  bool _temSobreposicao(
+    String inicio1,
+    String fim1,
+    String inicio2,
+    String fim2,
+  ) {
+    final min1 = _horaParaMinutos(inicio1);
+    final min2 = _horaParaMinutos(fim1);
+    final min3 = _horaParaMinutos(inicio2);
+    final min4 = _horaParaMinutos(fim2);
+
+    // Sobreposição ocorre se: min1 < min4 AND min3 < min2
+    return min1 < min4 && min3 < min2;
+  }
+
+  /// Regra: não permitir dois agendamentos não cancelados no mesmo dia
+  /// que se sobreponham no tempo.
+  ///
+  /// Permite agendamentos encostados (ex: 10:00-11:00 e 11:00-12:00).
+  /// Bloqueia agendamentos que se sobrepõem (ex: 10:00-12:00 e 11:00-12:30).
   bool existeConflito(Agendamento novo, {String? ignorarId}) {
     return _storage.listar().any((a) =>
         a.id != ignorarId &&
         a.status != AgendamentoStatus.cancelado &&
         _mesmoDia(a.data, novo.data) &&
-        a.horaInicio == novo.horaInicio);
+        _temSobreposicao(a.horaInicio, a.horaFim, novo.horaInicio, novo.horaFim));
   }
 
   Future<void> novo(Agendamento agendamento) async {
