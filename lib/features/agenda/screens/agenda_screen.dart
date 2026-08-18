@@ -4,12 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../shared/widgets/status_chip.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
-import '../widgets/calendar_month_view.dart';
-import '../widgets/list_day_view.dart';
-import '../widgets/list_week_view.dart';
+import '../widgets/timeline_day_view.dart';
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -40,6 +39,9 @@ class AgendaScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Agenda')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
+          // CORREÇÃO (Sprint 1): antes, este botão sempre criava o agendamento
+          // para "hoje", ignorando o dia/semana/mês que a manicure estava
+          // vendo na Agenda. Agora repassamos a data atualmente visualizada.
           final dataAtual = estadoAsync.value?.dataReferencia ?? DateTime.now();
           final dataIso = dataAtual.toIso8601String().split('T').first;
           context.push(Uri(path: AppRoutes.agendaNovo, queryParameters: {'data': dataIso}).toString());
@@ -52,13 +54,11 @@ class AgendaScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Erro ao carregar agenda: $e')),
         data: (estado) {
           final notifier = ref.read(agendamentoControllerProvider.notifier);
-
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Navegação: anterior - título - próximo
                 Row(
                   children: [
                     IconButton(onPressed: notifier.voltar, icon: const Icon(Icons.chevron_left)),
@@ -73,11 +73,9 @@ class AgendaScreen extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-
-                // Seletor de visão
                 SegmentedButton<VisaoAgenda>(
                   segments: const [
-                    ButtonSegment(value: VisaoAgenda.dia, label: Text('Dia')),
+                    ButtonSegment(value: VisaoAgenda.dia, label: Text('Hoje')),
                     ButtonSegment(value: VisaoAgenda.semana, label: Text('Semana')),
                     ButtonSegment(value: VisaoAgenda.mes, label: Text('Mês')),
                   ],
@@ -85,17 +83,44 @@ class AgendaScreen extends ConsumerWidget {
                   onSelectionChanged: (novo) => notifier.mudarVisao(novo.first),
                 ),
                 const SizedBox(height: 12),
-
-                // Corpo principal: renderiza visão apropriada
                 Expanded(
-                  child: _construirVisualizacao(
-                    context: context,
-                    visao: estado.visao,
-                    estado: estado,
-                    clientesPorId: clientesPorId,
-                    notifier: notifier,
-                    moeda: moeda,
-                  ),
+                  child: estado.lista.isEmpty
+                      ? const Center(child: Text('Nenhum agendamento neste período.'))
+                      : estado.visao == VisaoAgenda.dia
+                          ? TimelineDayView(
+                              agendamentos: estado.lista,
+                              clientesPorId: clientesPorId,
+                              moeda: moeda,
+                              dataReferencia: estado.dataReferencia,
+                              onNovoAgendamento: (horaInicio) {
+                                final dataIso = estado.dataReferencia.toIso8601String().split('T').first;
+                                context.push(Uri(
+                                  path: AppRoutes.agendaNovo,
+                                  queryParameters: {'data': dataIso, 'hora': horaInicio},
+                                ).toString());
+                              },
+                              onEditar: (id) => context.push('${AppRoutes.agenda}/editar/$id'),
+                              onConfirmar: (id) => notifier.confirmar(id),
+                              onConcluir: (id) => notifier.concluir(id),
+                              onCancelar: (id) => notifier.cancelar(id),
+                            )
+                          : ListView.separated(
+                              itemCount: estado.lista.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (context, i) {
+                                final a = estado.lista[i];
+                                return _AgendamentoTile(
+                                  agendamento: a,
+                                  nomeCliente: clientesPorId[a.clienteId] ?? 'Cliente removido',
+                                  mostrarData: estado.visao != VisaoAgenda.dia,
+                                  moeda: moeda,
+                                  onEditar: () => context.push('${AppRoutes.agenda}/editar/${a.id}'),
+                                  onConfirmar: () => notifier.confirmar(a.id),
+                                  onConcluir: () => notifier.concluir(a.id),
+                                  onCancelar: () => notifier.cancelar(a.id),
+                                );
+                              },
+                            ),
                 ),
               ],
             ),
@@ -104,58 +129,75 @@ class AgendaScreen extends ConsumerWidget {
       ),
     );
   }
-
-  /// Constrói a visualização apropriada (dia/semana/mês)
-  Widget _construirVisualizacao({
-    required BuildContext context,
-    required VisaoAgenda visao,
-    required AgendaState estado,
-    required Map<String, String> clientesPorId,
-    required AgendamentoController notifier,
-    required NumberFormat moeda,
-  }) {
-    if (estado.lista.isEmpty) {
-      return const Center(child: Text('Nenhum agendamento neste período.'));
-    }
-
-    switch (visao) {
-      case VisaoAgenda.dia:
-        return ListDayView(
-          agendamentos: estado.lista,
-          clientesNomes: clientesPorId,
-          onAgendamentoTapado: (agendamento) {
-            context.push('${AppRoutes.agenda}/editar/${agendamento.id}');
-          },
-          onConfirmar: (id) => notifier.confirmar(id),
-          onConcluir: (id) => notifier.concluir(id),
-          onCancelar: (id) => notifier.cancelar(id),
-        );
-
-      case VisaoAgenda.semana:
-        return ListWeekView(
-          agendamentos: estado.lista,
-          clientesNomes: clientesPorId,
-          onAgendamentoTapado: (agendamento) {
-            context.push('${AppRoutes.agenda}/editar/${agendamento.id}');
-          },
-          onConfirmar: (id) => notifier.confirmar(id),
-          onConcluir: (id) => notifier.concluir(id),
-          onCancelar: (id) => notifier.cancelar(id),
-        );
-
-      case VisaoAgenda.mes:
-        return CalendarMonthView(
-          dataReferencia: estado.dataReferencia,
-          agendamentos: estado.lista,
-          clientesNomes: clientesPorId,
-          onDiaSelecionado: (dia) {
-            notifier.irPara(dia);
-          },
-          onAgendamentoTapado: (agendamento) {
-            context.push('${AppRoutes.agenda}/editar/${agendamento.id}');
-          },
-        );
-    }
-  }
 }
 
+class _AgendamentoTile extends StatelessWidget {
+  const _AgendamentoTile({
+    required this.agendamento,
+    required this.nomeCliente,
+    required this.mostrarData,
+    required this.moeda,
+    required this.onEditar,
+    required this.onConfirmar,
+    required this.onConcluir,
+    required this.onCancelar,
+  });
+
+  final Agendamento agendamento;
+  final String nomeCliente;
+  final bool mostrarData;
+  final NumberFormat moeda;
+  final VoidCallback onEditar;
+  final VoidCallback onConfirmar;
+  final VoidCallback onConcluir;
+  final VoidCallback onCancelar;
+
+  bool get _podeAgir =>
+      agendamento.status == AgendamentoStatus.agendado || agendamento.status == AgendamentoStatus.confirmado;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 84,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('${agendamento.horaInicio}–${agendamento.horaFim}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                if (mostrarData)
+                  Text(DateFormat('dd/MM').format(agendamento.data), style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(nomeCliente, style: Theme.of(context).textTheme.titleSmall),
+                Text('${agendamento.servico} · ${moeda.format(agendamento.valor)}', style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+          Wrap(
+            spacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              StatusChip(status: agendamento.status),
+              if (agendamento.status == AgendamentoStatus.agendado)
+                IconButton(tooltip: 'Confirmar', onPressed: onConfirmar, icon: const Icon(Icons.verified_outlined, size: 20)),
+              if (_podeAgir) ...[
+                IconButton(tooltip: 'Concluir', onPressed: onConcluir, icon: const Icon(Icons.check_circle_outline, size: 20)),
+                IconButton(tooltip: 'Editar', onPressed: onEditar, icon: const Icon(Icons.edit_outlined, size: 20)),
+                IconButton(tooltip: 'Cancelar', onPressed: onCancelar, icon: const Icon(Icons.cancel_outlined, size: 20)),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
