@@ -123,6 +123,44 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     }
   }
 
+  /// Calcula a duração em minutos entre horaInicio e horaFim
+  int _calcularDuraçãoEmMinutos(TimeOfDay inicio, TimeOfDay fim) {
+    final minInicio = inicio.hour * 60 + inicio.minute;
+    final minFim = fim.hour * 60 + fim.minute;
+    return minFim - minInicio;
+  }
+
+  /// Mostra alerta quando a duração selecionada for diferente da duração do serviço
+  Future<bool> _mostrarAlertaDuracao(
+    BuildContext context,
+    String nomeServico,
+    int duracaoServico,
+    int duracaoSelecionada,
+  ) async {
+    final resultado = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⚠️ Atenção'),
+        content: Text(
+          'O serviço "$nomeServico" possui duração prevista de $duracaoServico minutos.\n\n'
+          'O horário selecionado ocupa $duracaoSelecionada minutos.\n\n'
+          'Deseja continuar mesmo assim?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Voltar e ajustar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continuar'),
+          ),
+        ],
+      ),
+    );
+    return resultado ?? false;
+  }
+
   Future<void> _salvar() async {
     setState(() => _erro = null);
     if (!_formKey.currentState!.validate()) return;
@@ -147,6 +185,24 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         break;
       }
     }
+
+    // Validar duração
+    if (servicoEscolhido != null) {
+      final duracaoSelecionada = _calcularDuraçãoEmMinutos(_horaInicio, _horaFim);
+      final duracaoServico = servicoEscolhido.duracaoMin;
+      if (duracaoSelecionada != duracaoServico) {
+        final continuar = await _mostrarAlertaDuracao(
+          context,
+          servicoEscolhido.nome,
+          duracaoServico,
+          duracaoSelecionada,
+        );
+        if (!continuar) {
+          return;
+        }
+      }
+    }
+
     final nomeServico = servicoEscolhido?.nome ?? _servicoNomeOriginal;
     final valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
 
