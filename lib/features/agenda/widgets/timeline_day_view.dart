@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
+ 
 import '../models/agendamento.dart';
-
+ 
 class TimelineDayView extends StatelessWidget {
   const TimelineDayView({
     super.key,
@@ -16,7 +16,7 @@ class TimelineDayView extends StatelessWidget {
     required this.onConcluir,
     required this.onCancelar,
   });
-
+ 
   final List<Agendamento> agendamentos;
   final Map<String, String> clientesPorId;
   final NumberFormat moeda;
@@ -26,38 +26,38 @@ class TimelineDayView extends StatelessWidget {
   final Function(String id) onConfirmar;
   final Function(String id) onConcluir;
   final Function(String id) onCancelar;
-
+ 
   // Altura de cada slot de 30 minutos
   static const double _slotsHeight = 60.0;
-
+ 
   // Horários de início e fim da timeline (em horas)
   static const int _horaInicio = 9;
   static const int _horaFim = 18;
-
+ 
   int _horaParaMinutos(String hhmm) {
     final partes = hhmm.split(':');
     return int.parse(partes[0]) * 60 + int.parse(partes[1]);
   }
-
+ 
   String _minutosParaHora(int minutos) {
     final horas = minutos ~/ 60;
     final mins = minutos % 60;
     return '${horas.toString().padLeft(2, '0')}:${mins.toString().padLeft(2, '0')}';
   }
-
+ 
   double _calcularPosicaoY(String hhmm) {
     final minutos = _horaParaMinutos(hhmm);
     final minutosDesdeInicio = minutos - (_horaInicio * 60);
     return (minutosDesdeInicio / 30) * _slotsHeight;
   }
-
+ 
   double _calcularAltura(String horaInicio, String horaFim) {
     final minInicio = _horaParaMinutos(horaInicio);
     final minFim = _horaParaMinutos(horaFim);
     final duracao = minFim - minInicio;
     return (duracao / 30) * _slotsHeight;
   }
-
+ 
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -122,7 +122,7 @@ class TimelineDayView extends StatelessWidget {
                       ),
                 ],
               ),
-
+ 
               // Agendamentos como blocos
               Padding(
                 padding: const EdgeInsets.only(left: 60),
@@ -146,14 +146,14 @@ class TimelineDayView extends StatelessWidget {
                           color: Colors.transparent,
                         ),
                       ),
-
+ 
                       // Blocos de agendamento
                       ...agendamentos.map((a) {
                         final topPx = _calcularPosicaoY(a.horaInicio);
                         final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
-                        final nomeClie nte = clientesPorId[a.clienteId] ?? 'Cliente removido';
+                        final nomeCliente = clientesPorId[a.clienteId] ?? 'Cliente removido';
                         final cor = _obterCorStatus(a.status);
-
+ 
                         return Positioned(
                           top: topPx,
                           left: 0,
@@ -215,7 +215,7 @@ class TimelineDayView extends StatelessWidget {
       ),
     );
   }
-
+ 
   Color _obterCorStatus(AgendamentoStatus status) {
     switch (status) {
       case AgendamentoStatus.agendado:
@@ -228,7 +228,7 @@ class TimelineDayView extends StatelessWidget {
         return Colors.red.shade50;
     }
   }
-
+ 
   void _mostrarMenuAgendamento(BuildContext context, Agendamento agendamento) {
     showModalBottomSheet(
       context: context,
@@ -286,3 +286,4 @@ class TimelineDayView extends StatelessWidget {
     );
   }
 }
+ 
