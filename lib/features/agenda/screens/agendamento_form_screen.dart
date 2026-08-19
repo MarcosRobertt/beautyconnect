@@ -124,7 +124,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   }
 
   /// Calcula a duração em minutos entre horaInicio e horaFim
-  int _calcularDuraçãoEmMinutos(TimeOfDay inicio, TimeOfDay fim) {
+  int _calcularDuracaoEmMinutos(TimeOfDay inicio, TimeOfDay fim) {
     final minInicio = inicio.hour * 60 + inicio.minute;
     final minFim = fim.hour * 60 + fim.minute;
     return minFim - minInicio;
@@ -188,7 +188,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
     // Validar duração
     if (servicoEscolhido != null) {
-      final duracaoSelecionada = _calcularDuraçãoEmMinutos(_horaInicio, _horaFim);
+      final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
       final duracaoServico = servicoEscolhido.duracaoMin;
       if (duracaoSelecionada != duracaoServico) {
         final continuar = await _mostrarAlertaDuracao(
