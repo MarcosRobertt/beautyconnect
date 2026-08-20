@@ -28,8 +28,6 @@ class TimelineDayView extends StatelessWidget {
   final Function(String id) onCancelar;
 
   static const double _pixelsPorMinuto = 2.0;
-  static const int _horaInicio = 9;
-  static const int _horaFim = 18;
   static const double _larguraHorarios = 60.0;
 
   int _horaParaMinutos(String hhmm) {
@@ -37,9 +35,9 @@ class TimelineDayView extends StatelessWidget {
     return int.parse(partes[0]) * 60 + int.parse(partes[1]);
   }
 
-  double _calcularTop(String horaInicio) {
+  double _calcularTop(String horaInicio, int horaMinima) {
     final minutos = _horaParaMinutos(horaInicio);
-    final minutosDesdeInicio = minutos - (_horaInicio * 60);
+    final minutosDesdeInicio = minutos - (horaMinima * 60);
     return minutosDesdeInicio * _pixelsPorMinuto;
   }
 
@@ -64,7 +62,25 @@ class TimelineDayView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final alturaTotal = ((_horaFim - _horaInicio) * 60) * _pixelsPorMinuto;
+    // Calcular horaMinima e horaMaxima dinamicamente
+    int horaMinima = 9;
+    int horaMaxima = 18;
+
+    if (agendamentos.isNotEmpty) {
+      for (final a in agendamentos) {
+        final horaInicioInt = int.parse(a.horaInicio.split(':')[0]);
+        final horaFimInt = int.parse(a.horaFim.split(':')[0]);
+
+        if (horaInicioInt < horaMinima) {
+          horaMinima = horaInicioInt;
+        }
+        if (horaFimInt > horaMaxima) {
+          horaMaxima = horaFimInt + 1;
+        }
+      }
+    }
+
+    final alturaTotal = ((horaMaxima - horaMinima) * 60) * _pixelsPorMinuto;
 
     return SingleChildScrollView(
       child: Row(
@@ -75,7 +91,7 @@ class TimelineDayView extends StatelessWidget {
             width: _larguraHorarios,
             child: Column(
               children: [
-                for (int h = _horaInicio; h <= _horaFim; h++)
+                for (int h = horaMinima; h <= horaMaxima; h++)
                   for (int m = 0; m < 60; m += 30)
                     SizedBox(
                       height: 30 * _pixelsPorMinuto,
@@ -99,7 +115,7 @@ class TimelineDayView extends StatelessWidget {
                 onTapDown: (details) {
                   final yRelativa = details.localPosition.dy;
                   final minutosDesdeInicio = (yRelativa / _pixelsPorMinuto).toInt();
-                  final minutosAbsolutos = (_horaInicio * 60) + minutosDesdeInicio;
+                  final minutosAbsolutos = (horaMinima * 60) + minutosDesdeInicio;
                   final horas = minutosAbsolutos ~/ 60;
                   final minutos = minutosAbsolutos % 60;
 
@@ -118,7 +134,7 @@ class TimelineDayView extends StatelessWidget {
                       color: Colors.transparent,
                       child: Column(
                         children: [
-                          for (int i = 0; i < (_horaFim - _horaInicio) * 2; i++)
+                          for (int i = 0; i < (horaMaxima - horaMinima) * 2; i++)
                             Container(
                               height: 30 * _pixelsPorMinuto,
                               decoration: BoxDecoration(
@@ -136,7 +152,7 @@ class TimelineDayView extends StatelessWidget {
 
                     // Eventos posicionados
                     ...agendamentos.map((a) {
-                      final topPx = _calcularTop(a.horaInicio);
+                      final topPx = _calcularTop(a.horaInicio, horaMinima);
                       final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
                       final nomeCliente = clientesPorId[a.clienteId] ?? 'Cliente removido';
                       final cor = _obterCorStatus(a.status);
