@@ -60,9 +60,76 @@ class TimelineDayView extends StatelessWidget {
     }
   }
 
+  Widget _buildStatusBadge(AgendamentoStatus status) {
+    final statusText = _getStatusText(status);
+    final statusIcon = _getStatusIcon(status);
+    final badgeColor = _getStatusBadgeColor(status);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: badgeColor,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(statusIcon, size: 10, color: Colors.grey.shade700),
+          const SizedBox(width: 3),
+          Text(
+            statusText,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getStatusText(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado:
+        return 'Agendado';
+      case AgendamentoStatus.confirmado:
+        return 'Confirmado';
+      case AgendamentoStatus.concluido:
+        return 'Finalizado';
+      case AgendamentoStatus.cancelado:
+        return 'Cancelado';
+    }
+  }
+
+  IconData _getStatusIcon(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado:
+        return Icons.schedule;
+      case AgendamentoStatus.confirmado:
+        return Icons.check;
+      case AgendamentoStatus.concluido:
+        return Icons.check_circle;
+      case AgendamentoStatus.cancelado:
+        return Icons.cancel;
+    }
+  }
+
+  Color _getStatusBadgeColor(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado:
+        return Colors.blue.shade50;
+      case AgendamentoStatus.confirmado:
+        return Colors.green.shade50;
+      case AgendamentoStatus.concluido:
+        return Colors.grey.shade100;
+      case AgendamentoStatus.cancelado:
+        return Colors.red.shade50;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Calcular horaMinima e horaMaxima dinamicamente
     int horaMinima = 9;
     int horaMaxima = 18;
 
@@ -86,7 +153,6 @@ class TimelineDayView extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Coluna de Horários (Esquerda, Fixa)
           SizedBox(
             width: _larguraHorarios,
             child: Column(
@@ -106,8 +172,6 @@ class TimelineDayView extends StatelessWidget {
               ],
             ),
           ),
-
-          // Área de Eventos (Direita, Expandida)
           Expanded(
             child: SingleChildScrollView(
               scrollDirection: Axis.vertical,
@@ -119,7 +183,6 @@ class TimelineDayView extends StatelessWidget {
                   final horas = minutosAbsolutos ~/ 60;
                   final minutos = minutosAbsolutos % 60;
 
-                  // Arredondar para 30 minutos mais próximos
                   final minutosArredondados = (minutos ~/ 30) * 30;
                   final horaClicada =
                       '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
@@ -127,7 +190,6 @@ class TimelineDayView extends StatelessWidget {
                 },
                 child: Stack(
                   children: [
-                    // Background com grid (opcional)
                     Container(
                       width: double.infinity,
                       height: alturaTotal,
@@ -149,8 +211,6 @@ class TimelineDayView extends StatelessWidget {
                         ],
                       ),
                     ),
-
-                    // Eventos posicionados
                     ...agendamentos.map((a) {
                       final topPx = _calcularTop(a.horaInicio, horaMinima);
                       final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
@@ -162,25 +222,68 @@ class TimelineDayView extends StatelessWidget {
                         left: 8,
                         right: 8,
                         height: heightPx > 40 ? heightPx : 40,
-                        child: GestureDetector(
-                          onLongPress: () {
-                            _mostrarMenuAgendamento(context, a);
-                          },
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: cor,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: Colors.grey.shade300,
-                                width: 1,
-                              ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: cor,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: Colors.grey.shade300,
+                              width: 1,
                             ),
-                            padding: const EdgeInsets.all(6),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
+                          ),
+                          padding: const EdgeInsets.all(6),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  _buildStatusBadge(a.status),
+                                  const Spacer(),
+                                  if (a.status == AgendamentoStatus.agendado)
+                                    GestureDetector(
+                                      onTap: () => onConfirmar(a.id),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Icon(
+                                          Icons.verified_outlined,
+                                          size: 20,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  if (a.status == AgendamentoStatus.agendado ||
+                                      a.status == AgendamentoStatus.confirmado)
+                                    GestureDetector(
+                                      onTap: () => onEditar(a.id),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Icon(
+                                          Icons.edit_outlined,
+                                          size: 20,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                  if (a.status == AgendamentoStatus.agendado ||
+                                      a.status == AgendamentoStatus.confirmado)
+                                    GestureDetector(
+                                      onTap: () => onConcluir(a.id),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Icon(
+                                          Icons.check_circle_outline,
+                                          size: 20,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Flexible(
+                                child: Text(
                                   '${a.horaInicio}–${a.horaFim}',
                                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                         fontWeight: FontWeight.w600,
@@ -189,24 +292,24 @@ class TimelineDayView extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                Flexible(
-                                  child: Text(
-                                    a.servico,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  a.servico,
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                Flexible(
-                                  child: Text(
-                                    nomeCliente,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  nomeCliente,
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -217,63 +320,6 @@ class TimelineDayView extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  void _mostrarMenuAgendamento(BuildContext context, Agendamento agendamento) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: Text('${agendamento.horaInicio}–${agendamento.horaFim} • ${agendamento.servico}'),
-              subtitle: Text(clientesPorId[agendamento.clienteId] ?? 'Cliente removido'),
-            ),
-            const Divider(),
-            if (agendamento.status == AgendamentoStatus.agendado)
-              ListTile(
-                leading: const Icon(Icons.verified_outlined),
-                title: const Text('Confirmar'),
-                onTap: () {
-                  Navigator.pop(context);
-                  onConfirmar(agendamento.id);
-                },
-              ),
-            if (agendamento.status == AgendamentoStatus.agendado ||
-                agendamento.status == AgendamentoStatus.confirmado)
-              ListTile(
-                leading: const Icon(Icons.edit_outlined),
-                title: const Text('Editar'),
-                onTap: () {
-                  Navigator.pop(context);
-                  onEditar(agendamento.id);
-                },
-              ),
-            if (agendamento.status == AgendamentoStatus.agendado ||
-                agendamento.status == AgendamentoStatus.confirmado)
-              ListTile(
-                leading: const Icon(Icons.check_circle_outline),
-                title: const Text('Concluir'),
-                onTap: () {
-                  Navigator.pop(context);
-                  onConcluir(agendamento.id);
-                },
-              ),
-            if (agendamento.status == AgendamentoStatus.agendado ||
-                agendamento.status == AgendamentoStatus.confirmado)
-              ListTile(
-                leading: const Icon(Icons.cancel_outlined),
-                title: const Text('Cancelar'),
-                onTap: () {
-                  Navigator.pop(context);
-                  onCancelar(agendamento.id);
-                },
-              ),
-          ],
-        ),
       ),
     );
   }
