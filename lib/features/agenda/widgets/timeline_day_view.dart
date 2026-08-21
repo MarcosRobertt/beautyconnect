@@ -222,94 +222,99 @@ class TimelineDayView extends StatelessWidget {
                         left: 8,
                         right: 8,
                         height: heightPx > 40 ? heightPx : 40,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: cor,
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                              color: Colors.grey.shade300,
-                              width: 1,
+                        child: GestureDetector(
+                          // CORREÇÃO: Opaque barra o clique de passar para o fundo
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => onEditar(a.id),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: cor,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                color: Colors.grey.shade300,
+                                width: 1,
+                              ),
                             ),
-                          ),
-                          padding: const EdgeInsets.all(6),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  _buildStatusBadge(a.status),
-                                  const Spacer(),
-                                  if (a.status == AgendamentoStatus.agendado)
-                                    GestureDetector(
-                                      onTap: () => onConfirmar(a.id),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(4),
-                                        child: Icon(
-                                          Icons.verified_outlined,
-                                          size: 20,
-                                          color: Colors.grey.shade700,
+                            padding: const EdgeInsets.all(6),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    _buildStatusBadge(a.status),
+                                    const Spacer(),
+                                    if (a.status == AgendamentoStatus.agendado)
+                                      GestureDetector(
+                                        onTap: () => onConfirmar(a.id),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4),
+                                          child: Icon(
+                                            Icons.verified_outlined,
+                                            size: 20,
+                                            color: Colors.grey.shade700,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  if (a.status == AgendamentoStatus.agendado ||
-                                      a.status == AgendamentoStatus.confirmado)
-                                    GestureDetector(
-                                      onTap: () => onEditar(a.id),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(4),
-                                        child: Icon(
-                                          Icons.edit_outlined,
-                                          size: 20,
-                                          color: Colors.grey.shade700,
+                                    if (a.status == AgendamentoStatus.agendado ||
+                                        a.status == AgendamentoStatus.confirmado)
+                                      GestureDetector(
+                                        onTap: () => onEditar(a.id),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4),
+                                          child: Icon(
+                                            Icons.edit_outlined,
+                                            size: 20,
+                                            color: Colors.grey.shade700,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  if (a.status == AgendamentoStatus.agendado ||
-                                      a.status == AgendamentoStatus.confirmado)
-                                    GestureDetector(
-                                      onTap: () => onConcluir(a.id),
-                                      child: Padding(
-                                        padding: const EdgeInsets.all(4),
-                                        child: Icon(
-                                          Icons.check_circle_outline,
-                                          size: 20,
-                                          color: Colors.grey.shade700,
+                                    if (a.status == AgendamentoStatus.agendado ||
+                                        a.status == AgendamentoStatus.confirmado)
+                                      GestureDetector(
+                                        onTap: () => onConcluir(a.id),
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(4),
+                                          child: Icon(
+                                            Icons.check_circle_outline,
+                                            size: 20,
+                                            color: Colors.grey.shade700,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Flexible(
-                                child: Text(
-                                  '${a.horaInicio}–${a.horaFim}',
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 11,
-                                      ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  ],
                                 ),
-                              ),
-                              Flexible(
-                                child: Text(
-                                  a.servico,
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                const SizedBox(height: 4),
+                                Flexible(
+                                  child: Text(
+                                    '${a.horaInicio}–${a.horaFim}',
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 11,
+                                        ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                              Flexible(
-                                child: Text(
-                                  nomeCliente,
-                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                Flexible(
+                                  child: Text(
+                                    a.servico,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                Flexible(
+                                  child: Text(
+                                    nomeCliente,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
