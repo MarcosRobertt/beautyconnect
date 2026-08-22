@@ -11,7 +11,7 @@ class AppScaffold extends StatelessWidget {
   static const _destinos = [
     (icon: Icons.dashboard_outlined, selectedIcon: Icons.dashboard, label: 'Dashboard'),
     (icon: Icons.people_outline, selectedIcon: Icons.people, label: 'Clientes'),
-    (icon: Icons.brush_outlined, selectedIcon: Icons.brush, label: 'Serviços'),
+    (icon: Icons.spa_outlined, selectedIcon: Icons.spa, label: 'Serviços'),
     (icon: Icons.calendar_today_outlined, selectedIcon: Icons.calendar_today, label: 'Agenda'),
     (icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'Configurações'),
   ];
