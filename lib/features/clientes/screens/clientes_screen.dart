@@ -88,10 +88,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton.extended(
+        floatingActionButton: FloatingActionButton(
           onPressed: () => context.push(AppRoutes.clienteNovo),
-          icon: const Icon(Icons.add),
-          label: const Text('Novo Cliente'),
+          child: const Icon(Icons.add),
         ),
         body: Padding(
           padding: const EdgeInsets.all(16),
@@ -184,7 +183,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> {
                         buildGrid(ativas, 'Nenhuma cliente ativa no momento.'),
                         buildGrid(recorrencia, 'Nenhuma cliente em risco de evasão (15 a 30 dias).'),
                         buildGrid(inativas, 'Nenhuma cliente inativa. Excelente retenção!'),
-                        // NOVA ABA: TOP CLIENTES (Tabela igual ao print)
                         _TopClientesView(clientes: lista, agendamentos: todosAgendamentos),
                       ],
                     );
@@ -220,7 +218,7 @@ class _TopClientesViewState extends State<_TopClientesView> {
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
     final hoje = DateTime.now();
 
-    // 1. Filtro de Data
+    // 1. Filtro de Data para o Ranking
     DateTime dataCorte;
     switch (_periodo) {
       case 'Últimos 30 dias': dataCorte = hoje.subtract(const Duration(days: 30)); break;
@@ -259,14 +257,19 @@ class _TopClientesViewState extends State<_TopClientesView> {
       }
     });
 
-    // Remove quem tem valor zero para não poluir o ranking
-    clientesOrdenados.removeWhere((c) => stats[c.id]![_tipo.toLowerCase()] == 0);
+    final chaveBusca = _tipo == 'Receita' ? 'receita' : 'frequencia';
+    clientesOrdenados.removeWhere((c) => stats[c.id]![chaveBusca] == 0);
     
-    // Pega as 30 melhores
     final top30 = clientesOrdenados.take(30).toList();
     
-    // KPI Novos Clientes (Cadastradas no período selecionado)
-    final novosClientes = widget.clientes.where((c) => c.createdAt.isAfter(dataCorte)).length;
+    // REGRA SOLICITADA: "Novos Clientes" calcula estritamente os cadastrados DENTRO DO MÊS VIGENTE
+    final inicioDoMesAtual = DateTime(hoje.year, hoje.month, 1);
+    final novosClientesNoMes = widget.clientes.where((c) => 
+        c.createdAt.isAfter(inicioDoMesAtual) || 
+        (c.createdAt.year == inicioDoMesAtual.year && 
+         c.createdAt.month == inicioDoMesAtual.month && 
+         c.createdAt.day == inicioDoMesAtual.day)
+    ).length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -292,9 +295,9 @@ class _TopClientesViewState extends State<_TopClientesView> {
               Container(width: 1, height: 30, color: Colors.grey.shade200),
               Column(
                 children: [
-                  const Text('Novos Clientes', style: TextStyle(color: Colors.purple, fontSize: 12)),
+                  const Text('Novos Clientes (Mês)', style: TextStyle(color: Colors.purple, fontSize: 12)),
                   const SizedBox(height: 4),
-                  Text('$novosClientes', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple)),
+                  Text('$novosClientesNoMes', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.purple)),
                 ],
               ),
             ],
@@ -308,7 +311,7 @@ class _TopClientesViewState extends State<_TopClientesView> {
             Expanded(
               child: DropdownButtonFormField<String>(
                 value: _periodo,
-                decoration: const InputDecoration(labelText: 'Período', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                decoration: const InputDecoration(labelText: 'Período do Ranking', contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                 items: ['Últimos 30 dias', 'Últimos 6 meses', 'Últimos 12 meses', 'Sempre'].map((e) => DropdownMenuItem(value: e, child: Text(e, style: const TextStyle(fontSize: 13)))).toList(),
                 onChanged: (v) => setState(() => _periodo = v!),
               ),
@@ -352,8 +355,12 @@ class _TopClientesViewState extends State<_TopClientesView> {
                 separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade200),
                 itemBuilder: (context, i) {
                   final c = top30[i];
-                  final val = stats[c.id]![_tipo.toLowerCase()];
-                  final displayVal = _tipo == 'Receita' ? moeda.format(val) : '$val visitas';
+                  final valReceita = stats[c.id]!['receita'];
+                  final valFreq = stats[c.id]!['frequencia'];
+                  
+                  final displayVal = _tipo == 'Receita' 
+                      ? moeda.format(valReceita) 
+                      : '$valFreq visitas';
                   
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
