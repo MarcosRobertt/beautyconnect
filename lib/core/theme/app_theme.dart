@@ -27,7 +27,8 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: surfaceDim,
-      cardTheme: CardTheme(
+      // CORREÇÃO: Utilizando CardThemeData conforme exigência do Flutter 3.24+
+      cardTheme: CardThemeData(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
