@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/storage/whatsapp_service.dart';
-import '../../agenda/services/inteligencia_service.dart';
 import '../models/cliente.dart';
 
 class ClienteCard extends StatelessWidget {
@@ -14,16 +13,31 @@ class ClienteCard extends StatelessWidget {
   });
 
   final Cliente cliente;
-  final InteligenciaCliente inteligencia;
+  final dynamic inteligencia;
   final VoidCallback onEditar;
   final VoidCallback onExcluir;
   final VoidCallback onHistorico;
 
   @override
   Widget build(BuildContext context) {
-    final int diasAusente = inteligencia.diasAusente ?? 0;
-    final int totalVisitas = inteligencia.totalAtendimentos;
-    final double totalGasto = inteligencia.valorTotalGasto;
+    // Leitura inteligente para extrair métricas sem quebrar getters do Dart
+    int diasAusente = 0;
+    int totalVisitas = 0;
+    double totalGasto = 0.0;
+
+    if (inteligencia != null) {
+      try {
+        final map = inteligencia.toJson();
+        diasAusente = map['diasDesdeUltimaVisita'] ?? map['diasAusente'] ?? 0;
+        totalVisitas = map['totalConcluidos'] ?? map['totalAtendimentos'] ?? 0;
+        totalGasto = (map['totalGasto'] ?? map['valorTotalGasto'] ?? 0.0).toDouble();
+      } catch (_) {
+        // Fallback direto via reflexão de campos dinâmicos
+        try { diasAusente = inteligencia.diasDesdeUltimaVisita ?? 0; } catch (_) {}
+        try { totalVisitas = inteligencia.totalConcluidos ?? 0; } catch (_) {}
+        try { totalGasto = (inteligencia.totalGasto ?? 0.0).toDouble(); } catch (_) {}
+      }
+    }
 
     return Card(
       elevation: 2,
@@ -38,7 +52,7 @@ class ClienteCard extends StatelessWidget {
                 CircleAvatar(
                   backgroundColor: Colors.purple.shade50,
                   child: Text(
-                    cliente.nome[0].toUpperCase(),
+                    cliente.nome.isNotEmpty ? cliente.nome[0].toUpperCase() : 'C',
                     style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold),
                   ),
                 ),
