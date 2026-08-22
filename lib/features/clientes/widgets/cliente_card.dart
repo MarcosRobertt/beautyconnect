@@ -1,96 +1,93 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-
-import '../../agenda/services/inteligencia_service.dart';
+import '../../../core/services/whatsapp_service.dart';
 import '../models/cliente.dart';
 
 class ClienteCard extends StatelessWidget {
   const ClienteCard({
     super.key,
     required this.cliente,
+    required this.inteligencia,
     required this.onEditar,
     required this.onExcluir,
     required this.onHistorico,
-    this.inteligencia,
   });
 
   final Cliente cliente;
+  final Map<String, dynamic> inteligencia;
   final VoidCallback onEditar;
   final VoidCallback onExcluir;
   final VoidCallback onHistorico;
 
-  /// Último atendimento / próxima data sugerida, já calculados pela tela
-  /// (ver InteligenciaService). Nulo enquanto os agendamentos ainda carregam.
-  final InteligenciaCliente? inteligencia;
-
   @override
   Widget build(BuildContext context) {
-    final fmt = DateFormat('dd/MM/yyyy');
+    final int diasAusente = inteligencia['diasAusente'] ?? 0;
+    final int totalVisitas = inteligencia['totalVisitas'] ?? 0;
+    final double totalGasto = inteligencia['totalGasto'] ?? 0.0;
+
     return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Row(
+        padding: const EdgeInsets.all(12),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(cliente.nome, style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    const Icon(Icons.phone, size: 12),
-                    const SizedBox(width: 4),
-                    Text(cliente.telefone, style: Theme.of(context).textTheme.bodySmall),
-                  ]),
-                  if (cliente.aniversario != null) ...[
-                    const SizedBox(height: 2),
-                    Row(children: [
-                      const Icon(Icons.cake_outlined, size: 12),
-                      const SizedBox(width: 4),
-                      Text(fmt.format(cliente.aniversario!), style: Theme.of(context).textTheme.bodySmall),
-                    ]),
-                  ],
-                  if (inteligencia != null) ...[
-                    const SizedBox(height: 4),
-                    Row(children: [
-                      const Icon(Icons.history, size: 12),
-                      const SizedBox(width: 4),
-                      Text(
-                        inteligencia!.ultimoAtendimento != null
-                            ? 'Último atendimento: ${fmt.format(inteligencia!.ultimoAtendimento!)}'
-                            : 'Sem atendimentos concluídos ainda',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ]),
-                    if (inteligencia!.proximaDataSugerida != null) ...[
-                      const SizedBox(height: 2),
-                      Row(children: [
-                        Icon(Icons.event_repeat, size: 12, color: inteligencia!.atrasado ? Theme.of(context).colorScheme.error : null),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Retorno sugerido: ${fmt.format(inteligencia!.proximaDataSugerida!)}${inteligencia!.atrasado ? " (atrasado)" : ""}',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: inteligencia!.atrasado ? Theme.of(context).colorScheme.error : null,
-                                fontWeight: inteligencia!.atrasado ? FontWeight.w600 : null,
-                              ),
-                        ),
-                      ]),
-                    ],
-                  ],
-                  if (cliente.observacoes.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(cliente.observacoes,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic)),
-                  ],
-                ],
-              ),
-            ),
-            Column(
+            Row(
               children: [
-                IconButton(onPressed: onHistorico, icon: const Icon(Icons.receipt_long_outlined, size: 18), tooltip: 'Histórico'),
-                IconButton(onPressed: onEditar, icon: const Icon(Icons.edit_outlined, size: 18)),
-                IconButton(onPressed: onExcluir, icon: const Icon(Icons.delete_outline, size: 18)),
+                CircleAvatar(
+                  backgroundColor: Colors.purple.shade50,
+                  child: Text(
+                    cliente.nome[0].toUpperCase(),
+                    style: const TextStyle(color: Colors.purple, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(cliente.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                      Text(cliente.telefone, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.history, color: Colors.purple),
+                  tooltip: 'Histórico',
+                  onPressed: onHistorico,
+                ),
+              ],
+            ),
+            const Divider(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('$totalVisitas visita(s)', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                Text('R\$ ${totalGasto.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+              ],
+            ),
+            const Spacer(),
+            Row(
+              children: [
+                // BOTÃO DE AÇÃO RÁPIDA WHATSAPP
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                    ),
+                    onPressed: () => WhatsAppService.enviarReativacao(
+                      cliente: cliente,
+                      diasAusente: diasAusente,
+                    ),
+                    icon: const Icon(Icons.chat, size: 14),
+                    label: const Text('WhatsApp', style: TextStyle(fontSize: 11)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: onEditar),
+                IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red), onPressed: onExcluir),
               ],
             ),
           ],
