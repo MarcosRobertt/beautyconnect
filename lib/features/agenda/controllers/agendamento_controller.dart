@@ -1,20 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive/hive.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/services/storage/storage_service.dart';
 import '../models/agendamento.dart';
 import '../repositories/agendamento_repository.dart';
 
 enum VisaoAgenda { dia, semana, mes }
 
-final agendamentoBoxProvider = Provider<Box<Agendamento>>((ref) {
-  return Hive.box<Agendamento>(HiveBoxes.agendamentos);
-});
-
+// Repositório do Firestore desacoplado do Hive
 final agendamentoRepositoryProvider = Provider<AgendamentoRepository>((ref) {
-  final box = ref.watch(agendamentoBoxProvider);
-  return AgendamentoRepository(StorageService<Agendamento>(box, nomeCaixa: HiveBoxes.agendamentos));
+  return AgendamentoRepository(null as dynamic);
 });
 
 class AgendaState {
@@ -85,7 +78,6 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     await carregar();
   }
 
-  // NOVA FUNÇÃO AQUI:
   Future<void> mudarData(DateTime data) async {
     _dataReferencia = data;
     await carregar();
