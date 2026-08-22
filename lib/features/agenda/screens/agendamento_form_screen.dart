@@ -28,7 +28,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   final _valorController = TextEditingController(text: '0');
   final _observacaoController = TextEditingController();
   final _buscaClienteController = TextEditingController();
+  final _motivoBloqueioController = TextEditingController(); // NOVO CAMPO
 
+  bool _isBloqueio = false; // CONTROLE DE TELA (Agendamento ou Bloqueio)
   String? _clienteId;
   String? _servicoId;
   String _servicoNomeOriginal = ''; 
@@ -66,13 +68,19 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       }
       if (ag != null) {
         _original = ag;
-        _clienteId = ag.clienteId;
-        _servicoId = ag.servicoId;
-        _servicoNomeOriginal = ag.servico;
+        // Se for um bloqueio gravado no banco, prepara a tela de bloqueio
+        if (ag.clienteId == 'BLOQUEIO') {
+          _isBloqueio = true;
+          _motivoBloqueioController.text = ag.servico;
+        } else {
+          _clienteId = ag.clienteId;
+          _servicoId = ag.servicoId;
+          _servicoNomeOriginal = ag.servico;
+          _valorController.text = ag.valor.toString();
+        }
         _data = ag.data;
         _horaInicio = _parseHora(ag.horaInicio);
         _horaFim = _parseHora(ag.horaFim);
-        _valorController.text = ag.valor.toString();
         _observacaoController.text = ag.observacao;
       }
     }
@@ -119,7 +127,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       setState(() {
         if (inicio) {
           _horaInicio = selecionada;
-          if (_servicoId != null) {
+          if (_isBloqueio) {
+            _horaFim = _somarMinutos(_horaInicio, 60); // Bloqueio default: 1h
+          } else if (_servicoId != null) {
             final servicos = ref.read(servicoControllerProvider).value ?? [];
             try {
               final servicoEscolhido = servicos.firstWhere((s) => s.id == _servicoId);
@@ -169,115 +179,119 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return resultado ?? false;
   }
 
-  // NOVA FUNÇÃO: Validar Conflitos
   Future<bool> _verificarConflitoDeHorario() async {
     final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
-    
-    // Transforma a hora escolhida em minutos totais para facilitar a matemática
     final minNovoInicio = _horaInicio.hour * 60 + _horaInicio.minute;
     final minNovoFim = _horaFim.hour * 60 + _horaFim.minute;
 
     for (final agendamento in todosAgendamentos) {
-      // Ignora o próprio agendamento (se estiver editando) e agendamentos cancelados
       if ((_editando && agendamento.id == _original?.id) || 
           agendamento.status == AgendamentoStatus.cancelado) {
         continue;
       }
-
-      // Verifica se é no mesmo dia exato
       if (agendamento.data.year == _data.year &&
           agendamento.data.month == _data.month &&
           agendamento.data.day == _data.day) {
         
         final horaExistenteInicio = _parseHora(agendamento.horaInicio);
         final horaExistenteFim = _parseHora(agendamento.horaFim);
-        
         final minExistenteInicio = horaExistenteInicio.hour * 60 + horaExistenteInicio.minute;
         final minExistenteFim = horaExistenteFim.hour * 60 + horaExistenteFim.minute;
 
-        // MATEMÁTICA DA COLISÃO:
-        // O novo horário sobrepõe o existente se o Início Novo for menor que o Fim Existente
-        // E o Fim Novo for maior que o Início Existente.
         if (minNovoInicio < minExistenteFim && minNovoFim > minExistenteInicio) {
-          return true; // Encontrou conflito!
+          return true; 
         }
       }
     }
-    return false; // Sem conflito
+    return false; 
   }
 
   Future<void> _salvar() async {
     setState(() => _erro = null);
     if (!_formKey.currentState!.validate()) return;
-    if (_clienteId == null) {
-      setState(() => _erro = 'Selecione um cliente.');
-      return;
-    }
-    if (_servicoId == null) {
-      setState(() => _erro = 'Selecione um serviço.');
-      return;
-    }
+    
     if (!_horaFimDepoisDoInicio) {
       setState(() => _erro = 'A hora de fim deve ser depois da hora de início.');
       return;
     }
 
-    // CORREÇÃO UX: Trava de horário duplicado
     final temConflito = await _verificarConflitoDeHorario();
     if (temConflito) {
-      setState(() => _erro = '⚠️ Já existe um agendamento neste mesmo horário!');
+      setState(() => _erro = '⚠️ Já existe compromisso neste horário!');
       return;
     }
 
-    final servicos = ref.read(servicoControllerProvider).value ?? [];
-    Servico? servicoEscolhido;
-    for (final s in servicos) {
-      if (s.id == _servicoId) {
-        servicoEscolhido = s;
-        break;
-      }
-    }
+    String nomeServico = '';
+    double valor = 0.0;
+    String? servicoIdFinal;
 
-    if (servicoEscolhido != null) {
-      final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
-      final duracaoServico = servicoEscolhido.duracaoMin;
-      if (duracaoSelecionada != duracaoServico) {
-        final continuar = await _mostrarAlertaDuracao(
-          context,
-          servicoEscolhido.nome,
-          duracaoServico,
-          duracaoSelecionada,
-        );
-        if (!continuar) {
-          return;
+    // VALIDAÇÕES CONDICIONAIS (BLOQUEIO vs AGENDAMENTO)
+    if (_isBloqueio) {
+      if (_motivoBloqueioController.text.trim().isEmpty) {
+        setState(() => _erro = 'Informe o motivo do bloqueio (ex: Almoço).');
+        return;
+      }
+      nomeServico = _motivoBloqueioController.text.trim();
+    } else {
+      if (_clienteId == null) {
+        setState(() => _erro = 'Selecione um cliente.');
+        return;
+      }
+      if (_servicoId == null) {
+        setState(() => _erro = 'Selecione um serviço.');
+        return;
+      }
+      
+      final servicos = ref.read(servicoControllerProvider).value ?? [];
+      Servico? servicoEscolhido;
+      for (final s in servicos) {
+        if (s.id == _servicoId) {
+          servicoEscolhido = s;
+          break;
         }
       }
-    }
 
-    final nomeServico = servicoEscolhido?.nome ?? _servicoNomeOriginal;
-    final valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
+      if (servicoEscolhido != null) {
+        final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
+        final duracaoServico = servicoEscolhido.duracaoMin;
+        if (duracaoSelecionada != duracaoServico) {
+          final continuar = await _mostrarAlertaDuracao(
+            context,
+            servicoEscolhido.nome,
+            duracaoServico,
+            duracaoSelecionada,
+          );
+          if (!continuar) return;
+        }
+      }
+
+      nomeServico = servicoEscolhido?.nome ?? _servicoNomeOriginal;
+      valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
+      servicoIdFinal = _servicoId;
+    }
 
     final agendamento = _editando
         ? _original!.copyWith(
-            clienteId: _clienteId,
+            clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId,
             data: _data,
             horaInicio: _formatarHora(_horaInicio),
             horaFim: _formatarHora(_horaFim),
             servico: nomeServico,
-            servicoId: _servicoId,
+            servicoId: servicoIdFinal,
             valor: valor,
             observacao: _observacaoController.text.trim(),
+            status: _isBloqueio ? AgendamentoStatus.concluido : _original!.status, 
           )
         : Agendamento(
             id: const Uuid().v4(),
-            clienteId: _clienteId!,
+            clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId!,
             data: _data,
             horaInicio: _formatarHora(_horaInicio),
             horaFim: _formatarHora(_horaFim),
             servico: nomeServico,
-            servicoId: _servicoId,
+            servicoId: servicoIdFinal,
             valor: valor,
-            status: AgendamentoStatus.agendado,
+            status: _isBloqueio ? AgendamentoStatus.concluido : AgendamentoStatus.agendado,
             observacao: _observacaoController.text.trim(),
             createdAt: DateTime.now(),
             updatedAt: DateTime.now(),
@@ -299,6 +313,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     _valorController.dispose();
     _observacaoController.dispose();
     _buscaClienteController.dispose();
+    _motivoBloqueioController.dispose();
     super.dispose();
   }
 
@@ -416,7 +431,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     final servicosAsync = ref.watch(servicoControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_editando ? 'Editar Agendamento' : 'Novo Agendamento')),
+      appBar: AppBar(title: Text(_editando ? 'Editar Horário' : 'Novo Horário')),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
@@ -427,53 +442,73 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _construirSeletorCliente(),
-                  const SizedBox(height: 12),
-                  servicosAsync.when(
-                    loading: () => const LinearProgressIndicator(),
-                    error: (e, _) => Text('Erro ao carregar serviços: $e'),
-                    data: (servicos) {
-                      if (servicos.isEmpty) {
-                        return const Text('Cadastre ao menos um serviço antes de criar um agendamento.');
-                      }
-                      final servicoAindaExiste = _servicoId != null && servicos.any((s) => s.id == _servicoId);
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          DropdownButtonFormField<String>(
-                            value: servicoAindaExiste ? _servicoId : null,
-                            decoration: const InputDecoration(labelText: 'Serviço'),
-                            items: servicos
-                                .map((Servico s) => DropdownMenuItem(
-                                      value: s.id,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          CircleAvatar(backgroundColor: Color(s.corValor), radius: 6),
-                                          const SizedBox(width: 8),
-                                          Text('${s.nome} · ${s.duracaoMin}min'),
-                                        ],
-                                      ),
-                                    ))
-                                .toList(),
-                            onChanged: (v) {
-                              final s = servicos.firstWhere((s) => s.id == v);
-                              _selecionarServico(s);
-                            },
-                          ),
-                          if (_servicoId != null && !servicoAindaExiste)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                'Serviço original ("$_servicoNomeOriginal") não existe mais no catálogo. Selecione outro.',
-                                style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
-                              ),
-                            ),
-                        ],
-                      );
-                    },
+                  
+                  // NOVO: ALTERNADOR AGENDAMENTO / BLOQUEIO
+                  SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(value: false, label: Text('Agendamento', style: TextStyle(fontSize: 12))),
+                      ButtonSegment(value: true, label: Text('Bloqueio (Pessoal)', style: TextStyle(fontSize: 12))),
+                    ],
+                    selected: {_isBloqueio},
+                    onSelectionChanged: (set) => setState(() => _isBloqueio = set.first),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 20),
+
+                  // MOSTRA CLIENTE E SERVIÇO SÓ SE FOR AGENDAMENTO
+                  if (!_isBloqueio) ...[
+                    _construirSeletorCliente(),
+                    const SizedBox(height: 12),
+                    servicosAsync.when(
+                      loading: () => const LinearProgressIndicator(),
+                      error: (e, _) => Text('Erro ao carregar serviços: $e'),
+                      data: (servicos) {
+                        if (servicos.isEmpty) {
+                          return const Text('Cadastre ao menos um serviço.');
+                        }
+                        final servicoAindaExiste = _servicoId != null && servicos.any((s) => s.id == _servicoId);
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            DropdownButtonFormField<String>(
+                              value: servicoAindaExiste ? _servicoId : null,
+                              decoration: const InputDecoration(labelText: 'Serviço'),
+                              items: servicos
+                                  .map((Servico s) => DropdownMenuItem(
+                                        value: s.id,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            CircleAvatar(backgroundColor: Color(s.corValor), radius: 6),
+                                            const SizedBox(width: 8),
+                                            Text('${s.nome} · ${s.duracaoMin}min'),
+                                          ],
+                                        ),
+                                      ))
+                                  .toList(),
+                              onChanged: (v) {
+                                final s = servicos.firstWhere((s) => s.id == v);
+                                _selecionarServico(s);
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ] 
+                  // MOSTRA CAMPO DE MOTIVO SE FOR BLOQUEIO
+                  else ...[
+                    TextFormField(
+                      controller: _motivoBloqueioController,
+                      decoration: const InputDecoration(
+                        labelText: 'Motivo (Ex: Academia, Almoço, Médico)',
+                        prefixIcon: Icon(Icons.block, color: Colors.grey),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // LINHA DA DATA E VALOR (Valor some no bloqueio)
                   Row(
                     children: [
                       Expanded(
@@ -485,17 +520,21 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _valorController,
-                          decoration: const InputDecoration(labelText: 'Valor (R\$)'),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      if (!_isBloqueio) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _valorController,
+                            decoration: const InputDecoration(labelText: 'Valor (R\$)'),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 12),
+                  
+                  // HORÁRIOS
                   Row(
                     children: [
                       Expanded(
@@ -520,11 +559,13 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  
                   TextFormField(
                     controller: _observacaoController,
-                    decoration: const InputDecoration(labelText: 'Observação'),
+                    decoration: const InputDecoration(labelText: 'Observação extra (Opcional)'),
                     maxLines: 3,
                   ),
+                  
                   if (_erro != null) ...[
                     const SizedBox(height: 12),
                     Container(
