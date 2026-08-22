@@ -220,7 +220,7 @@ class _CardMetrica extends StatelessWidget {
   }
 }
 
-// MODAL DE ANÁLISE FINANCEIRA DETALHADA
+// MODAL DE ANÁLISE FINANCEIRA DETALHADA + COMPARATIVO ANUAL
 class _ModalDetalhesReceita extends StatefulWidget {
   const _ModalDetalhesReceita({required this.agendamentos});
   final List<Agendamento> agendamentos;
@@ -250,6 +250,10 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
     } else if (_opcaoFiltro == 'Mês Anterior') {
       inicio = DateTime(hoje.year, hoje.month - 1, 1);
       fim = DateTime(hoje.year, hoje.month, 0, 23, 59, 59);
+    } else if (_opcaoFiltro == 'vs Ano Ant.') {
+      // Período para o comparativo
+      inicio = DateTime(hoje.year, hoje.month, 1);
+      fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59);
     } else { // Este Mês
       inicio = DateTime(hoje.year, hoje.month, 1);
       fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59);
@@ -273,6 +277,32 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
       }
     }
 
+    // CÁLCULO COMPARATIVO DO ANO ANTERIOR (Quando selecionada a aba "vs Ano Ant.")
+    final inicioAnoAnterior = DateTime(hoje.year - 1, hoje.month, 1);
+    final fimAnoAnterior = DateTime(hoje.year - 1, hoje.month + 1, 0, 23, 59, 59);
+
+    final filtradosAnoAnterior = widget.agendamentos.where((a) =>
+      a.clienteId != 'BLOQUEIO' &&
+      a.status != AgendamentoStatus.cancelado &&
+      a.data.isAfter(inicioAnoAnterior.subtract(const Duration(seconds: 1))) &&
+      a.data.isBefore(fimAnoAnterior.add(const Duration(seconds: 1)))
+    ).toList();
+
+    double totalAnoAnterior = filtradosAnoAnterior.fold(0.0, (sum, a) => sum + a.valor);
+    int qtdAnoAnterior = filtradosAnoAnterior.length;
+    double ticketMedioAnoAnterior = qtdAnoAnterior > 0 ? totalAnoAnterior / qtdAnoAnterior : 0.0;
+
+    double totalMesAtual = totalConfirmado + totalPendente;
+    int qtdMesAtual = filtrados.length;
+    double ticketMedioMesAtual = qtdMesAtual > 0 ? totalMesAtual / qtdMesAtual : 0.0;
+
+    double percentualCrescimento = 0.0;
+    if (totalAnoAnterior > 0) {
+      percentualCrescimento = ((totalMesAtual - totalAnoAnterior) / totalAnoAnterior) * 100;
+    } else if (totalMesAtual > 0) {
+      percentualCrescimento = 100.0;
+    }
+
     // Agrupamento por Dia para a Lista Detalhada
     final agrupaPorDia = <String, Map<String, dynamic>>{};
     for (final a in filtrados) {
@@ -287,8 +317,11 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
     final listaDias = agrupaPorDia.values.toList();
     listaDias.sort((a, b) => (b['data'] as DateTime).compareTo(a['data'] as DateTime));
 
+    final nomeMesAtual = DateFormat("MMMM 'de' yyyy", 'pt_BR').format(hoje);
+    final nomeMesAnoAnterior = DateFormat("MMMM 'de' yyyy", 'pt_BR').format(inicioAnoAnterior);
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.75,
+      height: MediaQuery.of(context).size.height * 0.8,
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -302,56 +335,136 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
           ),
           const SizedBox(height: 12),
           
-          // Seletor do Período
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
-              ButtonSegment(value: 'Esta Semana', label: Text('Semana', style: TextStyle(fontSize: 11))),
-              ButtonSegment(value: 'Este Mês', label: Text('Este Mês', style: TextStyle(fontSize: 11))),
-              ButtonSegment(value: 'Mês Anterior', label: Text('Mês Ant.', style: TextStyle(fontSize: 11))),
-            ],
-            selected: {_opcaoFiltro},
-            onSelectionChanged: (set) => setState(() => _opcaoFiltro = set.first),
+          // Seletor do Período (Agora com comparativo de Ano Anterior)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
+                ButtonSegment(value: 'Esta Semana', label: Text('Semana', style: TextStyle(fontSize: 11))),
+                ButtonSegment(value: 'Este Mês', label: Text('Este Mês', style: TextStyle(fontSize: 11))),
+                ButtonSegment(value: 'Mês Anterior', label: Text('Mês Ant.', style: TextStyle(fontSize: 11))),
+                ButtonSegment(value: 'vs Ano Ant.', label: Text('vs Ano Ant.', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+              ],
+              selected: {_opcaoFiltro},
+              onSelectionChanged: (set) => setState(() => _opcaoFiltro = set.first),
+            ),
           ),
           const SizedBox(height: 16),
 
-          // Cards de Resumo da Receita
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+          // SE FOR A ABA DE COMPARATIVO ANUAL MOSTRA O DASHBOARD COMPARATIVO
+          if (_opcaoFiltro == 'vs Ano Ant.') ...[
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.purple.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.purple.shade200),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Realizado / Confirmado', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(moeda.format(totalConfirmado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                      Text('Comparativo ($nomeMesAtual)', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.purple)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: percentualCrescimento >= 0 ? Colors.green.shade100 : Colors.red.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${percentualCrescimento >= 0 ? '+' : ''}${percentualCrescimento.toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: percentualCrescimento >= 0 ? Colors.green.shade800 : Colors.red.shade800,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  const SizedBox(height: 16),
+                  Row(
                     children: [
-                      const Text('Previsto (Aguardando)', style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(moeda.format(totalPendente), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      // Bloco Mês Atual
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(nomeMesAtual, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Text(moeda.format(totalMesAtual), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple)),
+                            const SizedBox(height: 4),
+                            Text('$qtdMesAtual atendimento(s)', style: const TextStyle(fontSize: 11)),
+                            Text('Ticket médio: ${moeda.format(ticketMedioMesAtual)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+                      Container(width: 1, height: 60, color: Colors.purple.shade200),
+                      const SizedBox(width: 12),
+                      // Bloco Mesmo Mês do Ano Anterior
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(nomeMesAnoAnterior, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
+                            const SizedBox(height: 4),
+                            Text(moeda.format(totalAnoAnterior), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
+                            const SizedBox(height: 4),
+                            Text('$qtdAnoAnterior atendimento(s)', style: const TextStyle(fontSize: 11)),
+                            Text('Ticket médio: ${moeda.format(ticketMedioAnoAnterior)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
+            ),
+            const SizedBox(height: 16),
+          ] else ...[
+            // Cards de Resumo Padrão (Confirmado vs Previsto)
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Realizado / Confirmado', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(moeda.format(totalConfirmado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Previsto (Aguardando)', style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(moeda.format(totalPendente), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
 
-          const Text('Detalhamento por Dia', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text(
+            _opcaoFiltro == 'vs Ano Ant.' ? 'Detalhamento do Mês Atual por Dia' : 'Detalhamento por Dia',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
           const SizedBox(height: 8),
 
           Expanded(
