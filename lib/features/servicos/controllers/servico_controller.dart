@@ -1,18 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive/hive.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/services/storage/storage_service.dart';
 import '../models/servico.dart';
 import '../repositories/servico_repository.dart';
 
-final servicoBoxProvider = Provider<Box<Servico>>((ref) {
-  return Hive.box<Servico>(HiveBoxes.servicos);
-});
-
+// Repositório do Firestore desacoplado do Hive
 final servicoRepositoryProvider = Provider<ServicoRepository>((ref) {
-  final box = ref.watch(servicoBoxProvider);
-  return ServicoRepository(StorageService<Servico>(box, nomeCaixa: HiveBoxes.servicos));
+  return ServicoRepository(null as dynamic);
 });
 
 final servicoControllerProvider =
