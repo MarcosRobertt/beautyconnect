@@ -1,28 +1,55 @@
 import 'dart:convert';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 import '../../../features/agenda/models/agendamento.dart';
 import '../../../features/clientes/models/cliente.dart';
 import '../../../features/servicos/models/servico.dart';
 
 class BackupService {
-  /// Gera a string JSON estruturada contendo Clientes, Agendamentos e Serviços.
-  static String gerarTextoBackup({
+  Future<void> exportar({
     required List<Cliente> clientes,
     required List<Agendamento> agendamentos,
-    required List<Servico> servicos,
-  }) {
+    List<Servico> servicos = const [],
+  }) async {
     final mapaBackup = {
       'versao': 2,
       'dataCriacao': DateTime.now().toIso8601String(),
       'clientes': clientes.map((c) => c.toJson()).toList(),
       'agendamentos': agendamentos.map((a) => a.toJson()).toList(),
-      'servicos': servicos.map((s) => s.toJson()).toList(), // <--- Serviços incluídos
+      'servicos': servicos.map((s) => s.toJson()).toList(),
     };
 
-    return const JsonEncoder.withIndent('  ').convert(mapaBackup);
+    final jsonString = const JsonEncoder.withIndent('  ').convert(mapaBackup);
+    final bytes = utf8.encode(jsonString);
+    final blob = html.Blob([bytes], 'application/json');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+
+    final anchor = html.AnchorElement(href: url)
+      ..setAttribute('download', 'backup_beautyconnect_${DateTime.now().millisecondsSinceEpoch}.json')
+      ..click();
+
+    html.Url.revokeObjectUrl(url);
   }
 
-  /// Processa a string JSON do backup e extrai os objetos tipados.
+  Future<Map<String, dynamic>?> importar() async {
+    final uploadInput = html.FileUploadInputElement()..accept = '.json';
+    uploadInput.click();
+
+    await uploadInput.onChange.first;
+    if (uploadInput.files == null || uploadInput.files!.isEmpty) return null;
+
+    final file = uploadInput.files!.first;
+    final reader = html.FileReader();
+    reader.readAsText(file);
+
+    await reader.onLoadEnd.first;
+    final conteudoJson = reader.result as String?;
+    if (conteudoJson == null || conteudoJson.isEmpty) return null;
+
+    return processarBackupJson(conteudoJson);
+  }
+
   static Map<String, dynamic> processarBackupJson(String conteudoJson) {
     final Map<String, dynamic> dados = jsonDecode(conteudoJson) as Map<String, dynamic>;
 
