@@ -170,7 +170,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
               left: 0,
               child: Container(
                 padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(color: Colors.grey.shade600, shape: BoxShape.circle),
+                decoration: const BoxDecoration(color: Colors.grey, shape: BoxShape.circle),
                 child: Text('$total', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
               ),
             ),
@@ -182,7 +182,7 @@ class _CalendarMonthViewState extends State<CalendarMonthView> {
               right: 0,
               child: Container(
                 padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
                 child: Text('$confirmados', style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
               ),
             ),
