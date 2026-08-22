@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/theme/app_theme.dart';
 import 'core/router/app_router.dart';
@@ -9,8 +10,10 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Inicializa o calendário em Português (Brasil)
+  await initializeDateFormatting('pt_BR', null);
+
   try {
-    // Inicializa o banco de dados no Firebase
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
@@ -28,10 +31,9 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp.router(
       title: 'BeautyConnect',
-      debugShowCheckedModeBanner: true, // Modo debug ativado
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
       routerConfig: appRouter,
-      // MODO DETETIVE: Substitui a tela cinza pelo erro real
       builder: (context, widget) {
         ErrorWidget.builder = (FlutterErrorDetails details) {
           return Material(
