@@ -5,21 +5,21 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/widgets/status_chip.dart';
+import '../../agenda/controllers/agendamento_controller.dart';
+import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/dashboard_controller.dart';
 
-/// Dashboard do MVP de validação — conforme especificação, mostra apenas:
-/// atendimentos de hoje, próximo atendimento, horários vagos e cliente
-/// aniversariante do mês.
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metricas = ref.watch(dashboardMetricsProvider);
-    final receitaAsync = ref.watch(receitaDoDiaProvider);
     final aniversariantesAsync = ref.watch(aniversariantesDoMesProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
+    final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
+    
     final hoje = DateTime.now();
     final rotuloData = DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(hoje);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
@@ -28,6 +28,17 @@ class DashboardScreen extends ConsumerWidget {
       data: (lista) => {for (final c in lista) c.id: c.nome},
       orElse: () => <String, String>{},
     );
+
+    final todosAgendamentos = todosAgendamentosAsync.value ?? [];
+
+    // CÁLCULO DA RECEITA DO DIA (Agendados + Confirmados + Concluídos)
+    final receitaHoje = todosAgendamentos.where((a) =>
+        a.clienteId != 'BLOQUEIO' &&
+        a.status != AgendamentoStatus.cancelado &&
+        a.data.year == hoje.year &&
+        a.data.month == hoje.month &&
+        a.data.day == hoje.day
+    ).fold(0.0, (sum, a) => sum + a.valor);
 
     return Scaffold(
       appBar: AppBar(
@@ -40,17 +51,15 @@ class DashboardScreen extends ConsumerWidget {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => context.push(AppRoutes.agendaNovo),
-        icon: const Icon(Icons.add),
-        label: const Text('Novo Agendamento'),
+        child: const Icon(Icons.add),
       ),
       body: metricas.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar dashboard: $e')),
         data: (m) {
           final aniversariantes = aniversariantesAsync.value ?? [];
-          final receitaDia = receitaAsync.value ?? 0.0;
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -81,8 +90,9 @@ class DashboardScreen extends ConsumerWidget {
                   ),
                   _CardMetrica(
                     titulo: 'Receita do Dia',
-                    valor: moeda.format(receitaDia),
+                    valor: moeda.format(receitaHoje),
                     icone: Icons.attach_money,
+                    onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
                   _CardMetrica(
                     titulo: 'Aniversariante do mês',
@@ -124,7 +134,7 @@ class DashboardScreen extends ConsumerWidget {
                         ...m.agendaHoje.map((a) => ListTile(
                               contentPadding: EdgeInsets.zero,
                               leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
-                              title: Text('${clientesPorId[a.clienteId] ?? "Cliente removido"} — ${a.servico}'),
+                              title: Text('${clientesPorId[a.clienteId] ?? (a.clienteId == "BLOQUEIO" ? "Compromisso Pessoal" : "Cliente removido")} — ${a.servico}'),
                               trailing: StatusChip(status: a.status),
                             )),
                     ],
@@ -154,6 +164,17 @@ class DashboardScreen extends ConsumerWidget {
       ),
     );
   }
+
+  void _mostrarDetalhesReceita(BuildContext context, List<Agendamento> agendamentos) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _ModalDetalhesReceita(agendamentos: agendamentos),
+    );
+  }
 }
 
 class _CardMetrica extends StatelessWidget {
@@ -175,7 +196,14 @@ class _CardMetrica extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icone, color: Theme.of(context).colorScheme.primary),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icone, color: Theme.of(context).colorScheme.primary),
+                  if (onTap != null)
+                    const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+                ],
+              ),
               const SizedBox(height: 8),
               Text(titulo, style: Theme.of(context).textTheme.bodySmall),
               Text(
@@ -187,6 +215,173 @@ class _CardMetrica extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+// MODAL DE ANÁLISE FINANCEIRA DETALHADA
+class _ModalDetalhesReceita extends StatefulWidget {
+  const _ModalDetalhesReceita({required this.agendamentos});
+  final List<Agendamento> agendamentos;
+
+  @override
+  State<_ModalDetalhesReceita> createState() => _ModalDetalhesReceitaState();
+}
+
+class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
+  String _opcaoFiltro = 'Este Mês';
+
+  @override
+  Widget build(BuildContext context) {
+    final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
+    final hoje = DateTime.now();
+
+    DateTime inicio;
+    DateTime fim;
+
+    if (_opcaoFiltro == 'Hoje') {
+      inicio = DateTime(hoje.year, hoje.month, hoje.day);
+      fim = DateTime(hoje.year, hoje.month, hoje.day, 23, 59, 59);
+    } else if (_opcaoFiltro == 'Esta Semana') {
+      final inicioSemana = hoje.subtract(Duration(days: hoje.weekday % 7));
+      inicio = DateTime(inicioSemana.year, inicioSemana.month, inicioSemana.day);
+      fim = inicio.add(const Duration(days: 7));
+    } else if (_opcaoFiltro == 'Mês Anterior') {
+      inicio = DateTime(hoje.year, hoje.month - 1, 1);
+      fim = DateTime(hoje.year, hoje.month, 0, 23, 59, 59);
+    } else { // Este Mês
+      inicio = DateTime(hoje.year, hoje.month, 1);
+      fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59);
+    }
+
+    final filtrados = widget.agendamentos.where((a) =>
+      a.clienteId != 'BLOQUEIO' &&
+      a.status != AgendamentoStatus.cancelado &&
+      a.data.isAfter(inicio.subtract(const Duration(seconds: 1))) &&
+      a.data.isBefore(fim.add(const Duration(seconds: 1)))
+    ).toList();
+
+    double totalConfirmado = 0.0;
+    double totalPendente = 0.0;
+
+    for (final a in filtrados) {
+      if (a.status == AgendamentoStatus.concluido || a.status == AgendamentoStatus.confirmado) {
+        totalConfirmado += a.valor;
+      } else if (a.status == AgendamentoStatus.agendado) {
+        totalPendente += a.valor;
+      }
+    }
+
+    // Agrupamento por Dia para a Lista Detalhada
+    final agrupaPorDia = <String, Map<String, dynamic>>{};
+    for (final a in filtrados) {
+      final chaveDia = DateFormat('yyyy-MM-dd').format(a.data);
+      if (!agrupaPorDia.containsKey(chaveDia)) {
+        agrupaPorDia[chaveDia] = {'data': a.data, 'valor': 0.0, 'qtd': 0};
+      }
+      agrupaPorDia[chaveDia]!['valor'] += a.valor;
+      agrupaPorDia[chaveDia]!['qtd'] += 1;
+    }
+
+    final listaDias = agrupaPorDia.values.toList();
+    listaDias.sort((a, b) => (b['data'] as DateTime).compareTo(a['data'] as DateTime));
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Análise de Receita', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          // Seletor do Período
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: 'Esta Semana', label: Text('Semana', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: 'Este Mês', label: Text('Este Mês', style: TextStyle(fontSize: 11))),
+              ButtonSegment(value: 'Mês Anterior', label: Text('Mês Ant.', style: TextStyle(fontSize: 11))),
+            ],
+            selected: {_opcaoFiltro},
+            onSelectionChanged: (set) => setState(() => _opcaoFiltro = set.first),
+          ),
+          const SizedBox(height: 16),
+
+          // Cards de Resumo da Receita
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Realizado / Confirmado', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(moeda.format(totalConfirmado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Previsto (Aguardando)', style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Text(moeda.format(totalPendente), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          const Text('Detalhamento por Dia', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey)),
+          const SizedBox(height: 8),
+
+          Expanded(
+            child: listaDias.isEmpty
+                ? const Center(child: Text('Nenhum faturamento registrado para este período.'))
+                : ListView.separated(
+                    itemCount: listaDias.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, i) {
+                      final item = listaDias[i];
+                      final dataItem = item['data'] as DateTime;
+                      final valorItem = item['valor'] as double;
+                      final qtdItem = item['qtd'] as int;
+
+                      return ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          DateFormat("EEEE, dd/MM", 'pt_BR').format(dataItem),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                        ),
+                        subtitle: Text('$qtdItem atendimento(s)', style: const TextStyle(fontSize: 12)),
+                        trailing: Text(
+                          moeda.format(valorItem),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
