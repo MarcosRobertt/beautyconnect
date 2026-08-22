@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/widgets/status_chip.dart';
@@ -9,6 +8,18 @@ import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/dashboard_controller.dart';
+
+// Função segura para formatar moeda sem depender do pacote intl
+String formatarMoeda(double valor) {
+  return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+}
+
+// Função segura para formatar data sem depender do pacote intl
+String formatarData(DateTime data) {
+  final meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  final diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+  return '${diasSemana[data.weekday - 1]}, ${data.day} de ${meses[data.month - 1]}';
+}
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
@@ -21,8 +32,8 @@ class DashboardScreen extends ConsumerWidget {
     final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
     
     final hoje = DateTime.now();
-    final rotuloData = DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(hoje);
-    final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
+    final rotuloData = formatarData(hoje);
+    final larguraTela = MediaQuery.of(context).size.width;
 
     final clientesPorId = clientesAsync.maybeWhen(
       data: (lista) => {for (final c in lista) c.id: c.nome},
@@ -60,99 +71,91 @@ class DashboardScreen extends ConsumerWidget {
         data: (m) {
           final aniversariantes = aniversariantesAsync.value ?? [];
 
-          // Envolvemos a ListView em um SafeArea para garantir que não 
-          // ultrapasse os limites da tela do celular (causando a tela em branco)
-          return SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                Text(rotuloData, style: Theme.of(context).textTheme.titleLarge),
-                const SizedBox(height: 4),
-                Text('Resumo do seu dia de trabalho.', style: Theme.of(context).textTheme.bodyMedium),
-                const SizedBox(height: 20),
-                
-                // Em telas muito estreitas (celular pequeno), evitamos que a Grid estoure
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    return GridView.count(
-                      crossAxisCount: constraints.maxWidth > 600 ? 4 : 2,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      mainAxisSpacing: 12,
-                      crossAxisSpacing: 12,
-                      childAspectRatio: constraints.maxWidth < 360 ? 1.2 : 1.4,
-                      children: [
-                        _CardMetrica(
-                          titulo: 'Atendimentos hoje',
-                          valor: '${m.totalAgendamentosHoje}',
-                          icone: Icons.calendar_today,
-                        ),
-                        _CardMetrica(
-                          titulo: 'Próximo atendimento',
-                          valor: m.proximo != null
-                              ? '${m.proximo!.horaInicio} · ${clientesPorId[m.proximo!.clienteId] ?? "—"}'
-                              : 'Nenhum',
-                          icone: Icons.schedule,
-                        ),
-                        _CardMetrica(
-                          titulo: 'Receita do Dia',
-                          valor: moeda.format(receitaHoje),
-                          icone: Icons.attach_money,
-                          onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
-                        ),
-                        _CardMetrica(
-                          titulo: 'Aniversariante do mês',
-                          valor: aniversariantes.isEmpty
-                              ? 'Nenhum'
-                              : aniversariantes.length == 1
-                                  ? aniversariantes.first.nome
-                                  : '${aniversariantes.length} clientes',
-                          icone: Icons.cake_outlined,
-                          onTap: aniversariantes.isEmpty
-                              ? null
-                              : () => _mostrarAniversariantes(context, aniversariantes.map((c) => c.nome).toList()),
-                        ),
-                      ],
-                    );
-                  }
-                ),
-                const SizedBox(height: 20),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min, // Força a coluna a não crescer infinitamente
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Agenda de hoje', style: Theme.of(context).textTheme.titleMedium),
-                            TextButton(
-                              onPressed: () => context.go(AppRoutes.agenda),
-                              child: const Text('Ver completa'),
-                            ),
-                          ],
-                        ),
-                        if (m.agendaHoje.isEmpty)
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 24),
-                            child: Center(child: Text('Nenhum agendamento para hoje.')),
-                          )
-                        else
-                          ...m.agendaHoje.map((a) => ListTile(
-                                contentPadding: EdgeInsets.zero,
-                                leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
-                                title: Text('${clientesPorId[a.clienteId] ?? (a.clienteId == "BLOQUEIO" ? "Compromisso Pessoal" : "Cliente removido")} — ${a.servico}'),
-                                trailing: StatusChip(status: a.status),
-                              )),
-                      ],
-                    ),
+          return ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Text(rotuloData, style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 4),
+              Text('Resumo do seu dia de trabalho.', style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 20),
+              
+              // Grade responsiva segura e sem conflitos
+              GridView.count(
+                crossAxisCount: larguraTela > 800 ? 4 : (larguraTela < 360 ? 1 : 2),
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: larguraTela < 360 ? 2.5 : 1.4,
+                children: [
+                  _CardMetrica(
+                    titulo: 'Atendimentos hoje',
+                    valor: '${m.totalAgendamentosHoje}',
+                    icone: Icons.calendar_today,
+                  ),
+                  _CardMetrica(
+                    titulo: 'Próximo atendimento',
+                    valor: m.proximo != null
+                        ? '${m.proximo!.horaInicio} · ${clientesPorId[m.proximo!.clienteId] ?? "—"}'
+                        : 'Nenhum',
+                    icone: Icons.schedule,
+                  ),
+                  _CardMetrica(
+                    titulo: 'Receita do Dia',
+                    valor: formatarMoeda(receitaHoje),
+                    icone: Icons.attach_money,
+                    onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
+                  ),
+                  _CardMetrica(
+                    titulo: 'Aniversariante do mês',
+                    valor: aniversariantes.isEmpty
+                        ? 'Nenhum'
+                        : aniversariantes.length == 1
+                            ? aniversariantes.first.nome
+                            : '${aniversariantes.length} clientes',
+                    icone: Icons.cake_outlined,
+                    onTap: aniversariantes.isEmpty
+                        ? null
+                        : () => _mostrarAniversariantes(context, aniversariantes.map((c) => c.nome).toList()),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Agenda de hoje', style: Theme.of(context).textTheme.titleMedium),
+                          TextButton(
+                            onPressed: () => context.go(AppRoutes.agenda),
+                            child: const Text('Ver completa'),
+                          ),
+                        ],
+                      ),
+                      if (m.agendaHoje.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: Text('Nenhum agendamento para hoje.')),
+                        )
+                      else
+                        ...m.agendaHoje.map((a) => ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
+                              title: Text('${clientesPorId[a.clienteId] ?? (a.clienteId == "BLOQUEIO" ? "Compromisso Pessoal" : "Cliente removido")} — ${a.servico}'),
+                              trailing: StatusChip(status: a.status),
+                            )),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 80), // Espaço para não cobrir o final com a barra inferior
-              ],
-            ),
+              ),
+              const SizedBox(height: 60),
+            ],
           );
         },
       ),
@@ -202,7 +205,7 @@ class _CardMetrica extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(10), // Reduzi um pouco o padding para celulares
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
@@ -215,7 +218,7 @@ class _CardMetrica extends StatelessWidget {
                     const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               Text(titulo, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
               Text(
                 valor,
@@ -231,7 +234,6 @@ class _CardMetrica extends StatelessWidget {
   }
 }
 
-// MODAL DE ANÁLISE FINANCEIRA DETALHADA + COMPARATIVO ANUAL MANTIDO INTACTO
 class _ModalDetalhesReceita extends StatefulWidget {
   const _ModalDetalhesReceita({required this.agendamentos});
   final List<Agendamento> agendamentos;
@@ -245,7 +247,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
 
   @override
   Widget build(BuildContext context) {
-    final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
     final hoje = DateTime.now();
 
     DateTime inicio;
@@ -264,7 +265,7 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
     } else if (_opcaoFiltro == 'vs Ano Ant.') {
       inicio = DateTime(hoje.year, hoje.month, 1);
       fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59);
-    } else { // Este Mês
+    } else { 
       inicio = DateTime(hoje.year, hoje.month, 1);
       fim = DateTime(hoje.year, hoje.month + 1, 0, 23, 59, 59);
     }
@@ -314,7 +315,7 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
 
     final agrupaPorDia = <String, Map<String, dynamic>>{};
     for (final a in filtrados) {
-      final chaveDia = DateFormat('yyyy-MM-dd').format(a.data);
+      final chaveDia = '${a.data.year}-${a.data.month.toString().padLeft(2, '0')}-${a.data.day.toString().padLeft(2, '0')}';
       if (!agrupaPorDia.containsKey(chaveDia)) {
         agrupaPorDia[chaveDia] = {'data': a.data, 'valor': 0.0, 'qtd': 0};
       }
@@ -325,10 +326,11 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
     final listaDias = agrupaPorDia.values.toList();
     listaDias.sort((a, b) => (b['data'] as DateTime).compareTo(a['data'] as DateTime));
 
-    final nomeMesAtual = DateFormat("MMMM 'de' yyyy", 'pt_BR').format(hoje);
-    final nomeMesAnoAnterior = DateFormat("MMMM 'de' yyyy", 'pt_BR').format(inicioAnoAnterior);
+    final meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+    final nomeMesAtual = '${meses[hoje.month - 1]} de ${hoje.year}';
+    final nomeMesAnoAnterior = '${meses[inicioAnoAnterior.month - 1]} de ${inicioAnoAnterior.year}';
 
-    return SafeArea( // Adicionado SafeArea aqui também por segurança do Modal
+    return SafeArea(
       child: Container(
         height: MediaQuery.of(context).size.height * 0.8,
         padding: const EdgeInsets.all(20),
@@ -400,10 +402,10 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
                             children: [
                               Text(nomeMesAtual, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 4),
-                              Text(moeda.format(totalMesAtual), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple)),
+                              Text(formatarMoeda(totalMesAtual), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.purple)),
                               const SizedBox(height: 4),
                               Text('$qtdMesAtual atendimento(s)', style: const TextStyle(fontSize: 11)),
-                              Text('Ticket médio: ${moeda.format(ticketMedioMesAtual)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text('Ticket médio: ${formatarMoeda(ticketMedioMesAtual)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                             ],
                           ),
                         ),
@@ -415,10 +417,10 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
                             children: [
                               Text(nomeMesAnoAnterior, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w600)),
                               const SizedBox(height: 4),
-                              Text(moeda.format(totalAnoAnterior), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
+                              Text(formatarMoeda(totalAnoAnterior), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey.shade800)),
                               const SizedBox(height: 4),
                               Text('$qtdAnoAnterior atendimento(s)', style: const TextStyle(fontSize: 11)),
-                              Text('Ticket médio: ${moeda.format(ticketMedioAnoAnterior)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                              Text('Ticket médio: ${formatarMoeda(ticketMedioAnoAnterior)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                             ],
                           ),
                         ),
@@ -440,7 +442,7 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
                         children: [
                           const Text('Realizado / Confirmado', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text(moeda.format(totalConfirmado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                          Text(formatarMoeda(totalConfirmado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
                         ],
                       ),
                     ),
@@ -455,7 +457,7 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
                         children: [
                           const Text('Previsto (Aguardando)', style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text(moeda.format(totalPendente), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                          Text(formatarMoeda(totalPendente), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
                         ],
                       ),
                     ),
@@ -486,12 +488,12 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
-                            DateFormat("EEEE, dd/MM", 'pt_BR').format(dataItem),
+                            '${dataItem.day.toString().padLeft(2, '0')}/${dataItem.month.toString().padLeft(2, '0')}',
                             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                           ),
                           subtitle: Text('$qtdItem atendimento(s)', style: const TextStyle(fontSize: 12)),
                           trailing: Text(
-                            moeda.format(valorItem),
+                            formatarMoeda(valorItem),
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple),
                           ),
                         );
