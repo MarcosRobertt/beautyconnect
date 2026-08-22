@@ -20,7 +20,6 @@ class ClienteCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Leitura inteligente para extrair métricas sem quebrar getters do Dart
     int diasAusente = 0;
     int totalVisitas = 0;
     double totalGasto = 0.0;
@@ -32,7 +31,6 @@ class ClienteCard extends StatelessWidget {
         totalVisitas = map['totalConcluidos'] ?? map['totalAtendimentos'] ?? 0;
         totalGasto = (map['totalGasto'] ?? map['valorTotalGasto'] ?? 0.0).toDouble();
       } catch (_) {
-        // Fallback direto via reflexão de campos dinâmicos
         try { diasAusente = inteligencia.diasDesdeUltimaVisita ?? 0; } catch (_) {}
         try { totalVisitas = inteligencia.totalConcluidos ?? 0; } catch (_) {}
         try { totalGasto = (inteligencia.totalGasto ?? 0.0).toDouble(); } catch (_) {}
@@ -83,25 +81,27 @@ class ClienteCard extends StatelessWidget {
             ),
             const Spacer(),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                    ),
-                    onPressed: () => WhatsAppService.enviarReativacao(
-                      cliente: cliente,
-                      diasAusente: diasAusente,
-                    ),
-                    icon: const Icon(Icons.chat, size: 14),
-                    label: const Text('WhatsApp', style: TextStyle(fontSize: 11)),
+                // BOTÃO DE WHATSAPP REDUZIDO (Apenas o ícone verde minimalista)
+                IconButton.filled(
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.chat, size: 18),
+                  tooltip: 'Enviar WhatsApp de Reativação',
+                  onPressed: () => WhatsAppService.enviarReativacao(
+                    cliente: cliente,
+                    diasAusente: diasAusente,
                   ),
                 ),
-                const SizedBox(width: 8),
-                IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: onEditar),
-                IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red), onPressed: onExcluir),
+                Row(
+                  children: [
+                    IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: onEditar),
+                    IconButton(icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red), onPressed: onExcluir),
+                  ],
+                ),
               ],
             ),
           ],
