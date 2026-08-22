@@ -97,7 +97,18 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     final totalClientes = ref.watch(clienteControllerProvider).maybeWhen(data: (l) => l.length, orElse: () => 0);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Configurações')),
+      appBar: AppBar(
+        title: const Text('Configurações'),
+        actions: [
+          IconButton(
+            tooltip: 'Atualizar Aplicativo',
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              html.window.location.reload();
+            },
+          ),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
@@ -133,37 +144,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                       context,
                       MaterialPageRoute(builder: (context) => const AnaliseIAScreen()),
                     );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // NOVO CARD: ATUALIZAR / RECARREGAR APLICAÇÃO
-              Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.refresh_outlined, color: Colors.blue),
-                  ),
-                  title: const Text(
-                    'Atualizar Aplicativo',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Força o recarregamento do sistema no navegador para aplicar novas melhorias e correções.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    html.window.location.reload();
                   },
                 ),
               ),
