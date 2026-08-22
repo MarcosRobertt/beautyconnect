@@ -60,7 +60,8 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
 
   Future<void> _carregar() async {
     if (_editando) {
-      final servicos = await ref.read(servicoControllerProvider.future);
+      final servicosAsync = ref.read(servicoControllerProvider);
+      final servicos = servicosAsync.value ?? [];
       for (final s in servicos) {
         if (s.id == widget.servicoId) {
           _servicoOriginal = s;
@@ -103,16 +104,17 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
             valor: valor,
             duracaoMin: duracao,
             corValor: _corSelecionada.value,
+            createdAt: DateTime.now(),
           );
 
     final erro = await ref
         .read(servicoControllerProvider.notifier)
-        .salvar(novoServico, novo: !_editando);
+        .salvar(novoServico);
 
     if (mounted) {
       if (erro != null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(erro), backgroundColor: Colors.red),
+          SnackBar(content: Text(erro.toString()), backgroundColor: Colors.red),
         );
       } else {
         context.pop();
