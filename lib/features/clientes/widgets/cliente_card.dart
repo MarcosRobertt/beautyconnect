@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../core/services/whatsapp_service.dart';
+import '../../../core/services/storage/whatsapp_service.dart';
+import '../../agenda/services/inteligencia_service.dart';
 import '../models/cliente.dart';
 
 class ClienteCard extends StatelessWidget {
@@ -13,16 +14,16 @@ class ClienteCard extends StatelessWidget {
   });
 
   final Cliente cliente;
-  final Map<String, dynamic> inteligencia;
+  final InteligenciaCliente inteligencia;
   final VoidCallback onEditar;
   final VoidCallback onExcluir;
   final VoidCallback onHistorico;
 
   @override
   Widget build(BuildContext context) {
-    final int diasAusente = inteligencia['diasAusente'] ?? 0;
-    final int totalVisitas = inteligencia['totalVisitas'] ?? 0;
-    final double totalGasto = inteligencia['totalGasto'] ?? 0.0;
+    final int diasAusente = inteligencia.diasAusente ?? 0;
+    final int totalVisitas = inteligencia.totalAtendimentos;
+    final double totalGasto = inteligencia.valorTotalGasto;
 
     return Card(
       elevation: 2,
@@ -69,7 +70,6 @@ class ClienteCard extends StatelessWidget {
             const Spacer(),
             Row(
               children: [
-                // BOTÃO DE AÇÃO RÁPIDA WHATSAPP
                 Expanded(
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
