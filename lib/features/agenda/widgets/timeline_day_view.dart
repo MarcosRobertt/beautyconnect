@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/services/storage/whatsapp_service.dart';
 import '../models/agendamento.dart';
 
 class TimelineDayView extends StatelessWidget {
@@ -61,7 +62,6 @@ class TimelineDayView extends StatelessWidget {
   }
 
   Widget _buildStatusBadge(AgendamentoStatus status, bool isBloqueio) {
-    // Se for bloqueio, muda a badge para visual de alerta
     if (isBloqueio) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -226,23 +226,38 @@ class TimelineDayView extends StatelessWidget {
                                   children: [
                                     _buildStatusBadge(a.status, isBloqueio),
                                     const Spacer(),
-                                    // BOTOES SUMIRAM SE FOR BLOQUEIO
-                                    if (!isBloqueio && a.status == AgendamentoStatus.agendado)
+                                    if (!isBloqueio) ...[
+                                      // BOTÃO WHATSAPP DISPARA MENSAGEM PADRONIZADA
                                       GestureDetector(
-                                        onTap: () => onConfirmar(a.id),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(4),
-                                          child: Icon(Icons.verified_outlined, size: 20, color: Colors.grey.shade700),
+                                        onTap: () {
+                                          WhatsAppService.enviarConfirmacao(
+                                            telefone: '5500000000000', // O service formata com DDI
+                                            nomeCliente: nomeCliente,
+                                            agendamento: a,
+                                          );
+                                        },
+                                        child: const Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 4),
+                                          child: Icon(Icons.chat_bubble_outline, size: 18, color: Colors.green),
                                         ),
                                       ),
-                                    if (!isBloqueio && (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado))
-                                      GestureDetector(
-                                        onTap: () => onConcluir(a.id),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(4),
-                                          child: Icon(Icons.check_circle_outline, size: 20, color: Colors.grey.shade700),
+                                      if (a.status == AgendamentoStatus.agendado)
+                                        GestureDetector(
+                                          onTap: () => onConfirmar(a.id),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(4),
+                                            child: Icon(Icons.verified_outlined, size: 20, color: Colors.grey.shade700),
+                                          ),
                                         ),
-                                      ),
+                                      if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
+                                        GestureDetector(
+                                          onTap: () => onConcluir(a.id),
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(4),
+                                            child: Icon(Icons.check_circle_outline, size: 20, color: Colors.grey.shade700),
+                                          ),
+                                        ),
+                                    ],
                                   ],
                                 ),
                                 const SizedBox(height: 4),
