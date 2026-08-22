@@ -12,13 +12,6 @@ import '../../servicos/models/servico.dart';
 import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
 
-/// Tela Novo/Editar Agendamento.
-///
-/// MUDANÇA (MVP validação): o serviço agora é selecionado do catálogo de
-/// Serviços (em vez de texto livre), preenchendo automaticamente valor e
-/// duração (hora de fim). O valor pode ainda ser ajustado manualmente no
-/// momento do agendamento (ex.: desconto), mas nome e duração vêm do
-/// catálogo. Regra existente preservada: não permitir horário duplicado.
 class AgendamentoFormScreen extends ConsumerStatefulWidget {
   const AgendamentoFormScreen({super.key, this.agendamentoId, this.dataInicialIso, this.horaInicialStr});
 
@@ -38,7 +31,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
   String? _clienteId;
   String? _servicoId;
-  String _servicoNomeOriginal = ''; // preservado se o serviço original foi excluído do catálogo
+  String _servicoNomeOriginal = ''; 
   DateTime _data = DateTime.now();
   TimeOfDay _horaInicio = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _horaFim = const TimeOfDay(hour: 10, minute: 0);
@@ -53,6 +46,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     super.initState();
     if (widget.dataInicialIso != null) {
       _data = DateTime.tryParse(widget.dataInicialIso!) ?? DateTime.now();
+    }
+    if (widget.horaInicialStr != null) {
+      _horaInicio = _parseHora(widget.horaInicialStr!);
+      _horaFim = _somarMinutos(_horaInicio, 60); 
     }
     _carregar();
   }
@@ -119,18 +116,29 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   Future<void> _selecionarHora({required bool inicio}) async {
     final selecionada = await showTimePicker(context: context, initialTime: inicio ? _horaInicio : _horaFim);
     if (selecionada != null) {
-      setState(() => inicio ? _horaInicio = selecionada : _horaFim = selecionada);
+      setState(() {
+        if (inicio) {
+          _horaInicio = selecionada;
+          if (_servicoId != null) {
+            final servicos = ref.read(servicoControllerProvider).value ?? [];
+            try {
+              final servicoEscolhido = servicos.firstWhere((s) => s.id == _servicoId);
+              _horaFim = _somarMinutos(_horaInicio, servicoEscolhido.duracaoMin);
+            } catch (_) {}
+          }
+        } else {
+          _horaFim = selecionada;
+        }
+      });
     }
   }
 
-  /// Calcula a duração em minutos entre horaInicio e horaFim
   int _calcularDuracaoEmMinutos(TimeOfDay inicio, TimeOfDay fim) {
     final minInicio = inicio.hour * 60 + inicio.minute;
     final minFim = fim.hour * 60 + fim.minute;
     return minFim - minInicio;
   }
 
-  /// Mostra alerta quando a duração selecionada for diferente da duração do serviço
   Future<bool> _mostrarAlertaDuracao(
     BuildContext context,
     String nomeServico,
@@ -161,6 +169,43 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return resultado ?? false;
   }
 
+  // NOVA FUNÇÃO: Validar Conflitos
+  Future<bool> _verificarConflitoDeHorario() async {
+    final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
+    
+    // Transforma a hora escolhida em minutos totais para facilitar a matemática
+    final minNovoInicio = _horaInicio.hour * 60 + _horaInicio.minute;
+    final minNovoFim = _horaFim.hour * 60 + _horaFim.minute;
+
+    for (final agendamento in todosAgendamentos) {
+      // Ignora o próprio agendamento (se estiver editando) e agendamentos cancelados
+      if ((_editando && agendamento.id == _original?.id) || 
+          agendamento.status == AgendamentoStatus.cancelado) {
+        continue;
+      }
+
+      // Verifica se é no mesmo dia exato
+      if (agendamento.data.year == _data.year &&
+          agendamento.data.month == _data.month &&
+          agendamento.data.day == _data.day) {
+        
+        final horaExistenteInicio = _parseHora(agendamento.horaInicio);
+        final horaExistenteFim = _parseHora(agendamento.horaFim);
+        
+        final minExistenteInicio = horaExistenteInicio.hour * 60 + horaExistenteInicio.minute;
+        final minExistenteFim = horaExistenteFim.hour * 60 + horaExistenteFim.minute;
+
+        // MATEMÁTICA DA COLISÃO:
+        // O novo horário sobrepõe o existente se o Início Novo for menor que o Fim Existente
+        // E o Fim Novo for maior que o Início Existente.
+        if (minNovoInicio < minExistenteFim && minNovoFim > minExistenteInicio) {
+          return true; // Encontrou conflito!
+        }
+      }
+    }
+    return false; // Sem conflito
+  }
+
   Future<void> _salvar() async {
     setState(() => _erro = null);
     if (!_formKey.currentState!.validate()) return;
@@ -177,6 +222,13 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       return;
     }
 
+    // CORREÇÃO UX: Trava de horário duplicado
+    final temConflito = await _verificarConflitoDeHorario();
+    if (temConflito) {
+      setState(() => _erro = '⚠️ Já existe um agendamento neste mesmo horário!');
+      return;
+    }
+
     final servicos = ref.read(servicoControllerProvider).value ?? [];
     Servico? servicoEscolhido;
     for (final s in servicos) {
@@ -186,7 +238,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       }
     }
 
-    // Validar duração
     if (servicoEscolhido != null) {
       final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
       final duracaoServico = servicoEscolhido.duracaoMin;
@@ -251,8 +302,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     super.dispose();
   }
 
-  /// Constrói o seletor de cliente com busca interativa.
-  /// Permite filtrar por nome ou telefone em tempo real.
   Widget _construirSeletorCliente() {
     final clientesAsync = ref.watch(clienteControllerProvider);
 
@@ -264,10 +313,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           return const Text('Cadastre um cliente antes de criar um agendamento.');
         }
 
-        // Filtrar clientes conforme o usuário digita
         final textoBusca = _buscaClienteController.text.trim().toLowerCase();
+        
         final clientesFiltrados = textoBusca.isEmpty
-            ? <Cliente>[]
+            ? clientes 
             : clientes
                 .where((c) =>
                     c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca))
@@ -276,7 +325,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Campo de busca
             TextField(
               controller: _buscaClienteController,
               decoration: const InputDecoration(
@@ -284,25 +332,13 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 hintText: 'Buscar cliente por nome ou telefone...',
                 prefixIcon: Icon(Icons.search),
               ),
-              onChanged: (_) => setState(() {}), // Atualiza lista conforme digita
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),
 
-            // Mensagem inicial (sem texto digitado)
-            if (textoBusca.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Center(
-                  child: Text(
-                    'Digite o nome ou telefone para buscar uma cliente.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              )
-            // Resultados encontrados
-            else if (clientesFiltrados.isNotEmpty)
+            if (clientesFiltrados.isNotEmpty)
               SizedBox(
-                height: 200,
+                height: 180, 
                 child: ListView.builder(
                   shrinkWrap: true,
                   itemCount: clientesFiltrados.length,
@@ -311,21 +347,21 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     final selecionado = _clienteId == cliente.id;
 
                     return ListTile(
-                      leading: selecionado ? const Icon(Icons.check_circle) : null,
+                      leading: selecionado ? const Icon(Icons.check_circle, color: Colors.green) : null,
                       title: Text(cliente.nome),
                       subtitle: Text(cliente.telefone),
                       selected: selecionado,
                       onTap: () {
                         setState(() {
                           _clienteId = cliente.id;
-                          _buscaClienteController.clear();
+                          _buscaClienteController.clear(); 
+                          FocusScope.of(context).unfocus(); 
                         });
                       },
                     );
                   },
                 ),
               )
-            // Nenhum resultado encontrado
             else
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -349,7 +385,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 ),
               ),
 
-            // Exibir cliente selecionado
             if (_clienteId != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -361,7 +396,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    '✓ Cliente selecionado: ${clientes.firstWhere((c) => c.id == _clienteId).nome}',
+                    '✓ Cliente selecionada: ${clientes.firstWhere((c) => c.id == _clienteId).nome}',
                     style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -378,7 +413,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final clientesAsync = ref.watch(clienteControllerProvider);
     final servicosAsync = ref.watch(servicoControllerProvider);
 
     return Scaffold(
@@ -402,7 +436,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       if (servicos.isEmpty) {
                         return const Text('Cadastre ao menos um serviço antes de criar um agendamento.');
                       }
-                      // Se o serviço original foi excluído do catálogo, mostra um aviso mas não bloqueia.
                       final servicoAindaExiste = _servicoId != null && servicos.any((s) => s.id == _servicoId);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -494,7 +527,15 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   ),
                   if (_erro != null) ...[
                     const SizedBox(height: 12),
-                    Text(_erro!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.red.shade200)
+                      ),
+                      child: Text(_erro!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold)),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   Row(
@@ -513,4 +554,3 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     );
   }
 }
-
