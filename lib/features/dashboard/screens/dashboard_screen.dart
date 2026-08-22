@@ -9,12 +9,10 @@ import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/dashboard_controller.dart';
 
-// Função segura para formatar moeda sem depender do pacote intl
 String formatarMoeda(double valor) {
   return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
 }
 
-// Função segura para formatar data sem depender do pacote intl
 String formatarData(DateTime data) {
   final meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
   final diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
@@ -52,7 +50,35 @@ class DashboardScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 14,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              child: const Icon(Icons.water_drop, color: Colors.white, size: 14),
+            ),
+            const SizedBox(width: 10),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'BeautyConnect',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'by studio condeza',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Agenda Inteligente',
@@ -79,7 +105,6 @@ class DashboardScreen extends ConsumerWidget {
               Text('Resumo do seu dia de trabalho.', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 20),
               
-              // Grade responsiva segura e sem conflitos
               GridView.count(
                 crossAxisCount: larguraTela > 800 ? 4 : (larguraTela < 360 ? 1 : 2),
                 shrinkWrap: true,
