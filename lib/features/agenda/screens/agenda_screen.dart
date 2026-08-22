@@ -9,6 +9,7 @@ import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
 import '../widgets/timeline_day_view.dart';
+import '../widgets/timeline_week_view.dart'; // IMPORTAÇÃO DA VISÃO SEMANAL
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -39,9 +40,6 @@ class AgendaScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Agenda')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // CORREÇÃO (Sprint 1): antes, este botão sempre criava o agendamento
-          // para "hoje", ignorando o dia/semana/mês que a manicure estava
-          // vendo na Agenda. Agora repassamos a data atualmente visualizada.
           final dataAtual = estadoAsync.value?.dataReferencia ?? DateTime.now();
           final dataIso = dataAtual.toIso8601String().split('T').first;
           context.push(Uri(path: AppRoutes.agendaNovo, queryParameters: {'data': dataIso}).toString());
@@ -104,23 +102,34 @@ class AgendaScreen extends ConsumerWidget {
                               onConcluir: (id) => notifier.concluir(id),
                               onCancelar: (id) => notifier.cancelar(id),
                             )
-                          : ListView.separated(
-                              itemCount: estado.lista.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, i) {
-                                final a = estado.lista[i];
-                                return _AgendamentoTile(
-                                  agendamento: a,
-                                  nomeCliente: clientesPorId[a.clienteId] ?? 'Cliente removido',
-                                  mostrarData: estado.visao != VisaoAgenda.dia,
-                                  moeda: moeda,
-                                  onEditar: () => context.push('${AppRoutes.agenda}/editar/${a.id}'),
-                                  onConfirmar: () => notifier.confirmar(a.id),
-                                  onConcluir: () => notifier.concluir(a.id),
-                                  onCancelar: () => notifier.cancelar(a.id),
-                                );
-                              },
-                            ),
+                          // --- AQUI ENTRA A MÁGICA DA SEMANA ---
+                          : estado.visao == VisaoAgenda.semana
+                              ? TimelineWeekView(
+                                  agendamentos: estado.lista,
+                                  dataReferencia: estado.dataReferencia,
+                                  onIrParaDia: (dataCerta) {
+                                    notifier.mudarData(dataCerta);
+                                    notifier.mudarVisao(VisaoAgenda.dia);
+                                  },
+                                )
+                              // --- VISÃO DO MÊS CONTINUA COM A LISTA ---
+                              : ListView.separated(
+                                  itemCount: estado.lista.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1),
+                                  itemBuilder: (context, i) {
+                                    final a = estado.lista[i];
+                                    return _AgendamentoTile(
+                                      agendamento: a,
+                                      nomeCliente: clientesPorId[a.clienteId] ?? 'Cliente removido',
+                                      mostrarData: estado.visao != VisaoAgenda.dia,
+                                      moeda: moeda,
+                                      onEditar: () => context.push('${AppRoutes.agenda}/editar/${a.id}'),
+                                      onConfirmar: () => notifier.confirmar(a.id),
+                                      onConcluir: () => notifier.concluir(a.id),
+                                      onCancelar: () => notifier.cancelar(a.id),
+                                    );
+                                  },
+                                ),
                 ),
               ],
             ),
@@ -201,4 +210,3 @@ class _AgendamentoTile extends StatelessWidget {
     );
   }
 }
-
