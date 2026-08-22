@@ -1,0 +1,31 @@
+name: Deploy to Firebase Hosting (Teste)
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build_and_deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ⬇️ Checkout do código
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Configurar Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: 📦 Instalar dependências
+        run: flutter pub get
+
+      - name: 🏗️ Construir Flutter Web
+        run: flutter build web --release --base-href /
+
+      - name: 🚀 Deploy para Firebase Hosting (Teste)
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_TESTE }}'
+          projectId: beautyconnect-teste
+          channelId: live
