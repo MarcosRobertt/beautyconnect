@@ -1,19 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:hive/hive.dart';
 
-import '../../../core/constants/app_constants.dart';
-import '../../../core/services/storage/storage_service.dart';
 import '../models/cliente.dart';
 import '../repositories/cliente_repository.dart';
 
-/// Provider da Box do Hive já aberta em main.dart (ver bootstrap).
-final clienteBoxProvider = Provider<Box<Cliente>>((ref) {
-  return Hive.box<Cliente>(HiveBoxes.clientes);
-});
-
+// Repositório do Firestore desacoplado do Hive
 final clienteRepositoryProvider = Provider<ClienteRepository>((ref) {
-  final box = ref.watch(clienteBoxProvider);
-  return ClienteRepository(StorageService<Cliente>(box, nomeCaixa: HiveBoxes.clientes));
+  return ClienteRepository(null as dynamic);
 });
 
 /// Estado exposto para as telas: lista de clientes + termo de pesquisa atual.
@@ -22,17 +14,9 @@ final clienteControllerProvider =
   return ClienteController(ref.watch(clienteRepositoryProvider));
 });
 
-/// Total real de clientes cadastrados, sempre a partir do Repository —
-/// deliberadamente independente do texto de busca da tela de Clientes.
-///
-/// CORREÇÃO (Sprint 1): antes, o card "Clientes" do Dashboard usava
-/// `clienteControllerProvider` diretamente. Como esse mesmo provider também
-/// guarda o resultado de uma pesquisa em andamento na tela de Clientes, se a
-/// manicure deixasse um filtro de busca ativo lá, o Dashboard mostrava a
-/// contagem filtrada em vez do total real de clientes. Este provider corrige
-/// isso lendo sempre a lista completa.
+/// Total real de clientes cadastrados, lendo diretamente do Firestore.
 final totalClientesProvider = FutureProvider<int>((ref) async {
-  ref.watch(clienteControllerProvider); // gatilho: recalcula após salvar/editar/excluir
+  ref.watch(clienteControllerProvider);
   final repository = ref.watch(clienteRepositoryProvider);
   final todos = await repository.listar();
   return todos.length;
