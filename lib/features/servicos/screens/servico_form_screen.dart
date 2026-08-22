@@ -6,20 +6,6 @@ import 'package:uuid/uuid.dart';
 import '../controllers/servico_controller.dart';
 import '../models/servico.dart';
 
-/// Paleta fixa e pequena de cores para identificar serviços na Agenda.
-/// Simples de propósito — o objetivo é dar identidade visual rápida, não um
-/// seletor de cor completo.
-const _paletaCores = <Color>[
-  Color(0xFF8C2F5C), // berry (cor primária do app)
-  Color(0xFF3A5FCD), // azul
-  Color(0xFF2E7D4F), // verde
-  Color(0xFF8A5A00), // âmbar
-  Color(0xFFBA1A4A), // vermelho
-  Color(0xFF6D5FD1), // roxo
-  Color(0xFF00838F), // teal
-  Color(0xFFB8574F), // terracota
-];
-
 class ServicoFormScreen extends ConsumerStatefulWidget {
   const ServicoFormScreen({super.key, this.servicoId});
 
@@ -32,42 +18,39 @@ class ServicoFormScreen extends ConsumerStatefulWidget {
 class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
+  final _valorController = TextEditingController();
   final _duracaoController = TextEditingController(text: '30');
-  final _valorController = TextEditingController(text: '0');
-  Color _corSelecionada = _paletaCores.first;
-  Servico? _original;
+
+  // Cores originais + 8 Novas Cores
+  static const List<Color> coresDisponiveis = [
+    Color(0xFFE91E63),
+    Color(0xFF9C27B0),
+    Color(0xFF673AB7),
+    Color(0xFF3F51B5),
+    Color(0xFF2196F3),
+    Color(0xFF00BCD4),
+    Color(0xFF009688),
+    Color(0xFF4CAF50),
+    Color(0xFFFF9800),
+    Color(0xFFFF5722),
+    Color(0xFF795548),
+    Color(0xFF607D8B),
+    // 8 Novas Cores
+    Color(0xFFFF80AB),
+    Color(0xFFBA68C8),
+    Color(0xFF4DD0E1),
+    Color(0xFF81C784),
+    Color(0xFFFFD54F),
+    Color(0xFFFF8A65),
+    Color(0xFFA1887F),
+    Color(0xFF37474F),
+  ];
+
+  Color _corSelecionada = coresDisponiveis.first;
   bool _carregando = true;
+  Servico? _servicoOriginal;
 
   bool get _editando => widget.servicoId != null;
-
-  /// Converte entrada de duração (minutos ou "Xh Ym") para minutos totais
-  /// Exemplos: "30" → 30, "1h 30m" → 90, "1h" → 60, "45m" → 45
-  int _parseDuracao(String entrada) {
-    entrada = entrada.trim().toLowerCase();
-    if (entrada.isEmpty) return 30;
-
-    // Se é apenas um número, trata como minutos
-    if (int.tryParse(entrada) != null) return int.parse(entrada);
-
-    // Processa formato "Xh Ym" ou variações
-    int horas = 0, minutos = 0;
-    final partes = entrada.split(RegExp(r'[h\s]+'));
-
-    for (int i = 0; i < partes.length; i++) {
-      final parte = partes[i].trim();
-      if (parte.isEmpty) continue;
-
-      if (parte.endsWith('m')) {
-        minutos = int.tryParse(parte.replaceAll('m', '').trim()) ?? minutos;
-      } else if (i == 0 && entrada.contains('h')) {
-        horas = int.tryParse(parte) ?? horas;
-      } else if (int.tryParse(parte) != null && horas == 0) {
-        horas = int.parse(parte);
-      }
-    }
-
-    return horas * 60 + minutos;
-  }
 
   @override
   void initState() {
@@ -77,13 +60,16 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
 
   Future<void> _carregar() async {
     if (_editando) {
-      final servico = await ref.read(servicoControllerProvider.notifier).buscar(widget.servicoId!);
-      if (servico != null) {
-        _original = servico;
-        _nomeController.text = servico.nome;
-        _duracaoController.text = servico.duracaoMin.toString();
-        _valorController.text = servico.valor.toString();
-        _corSelecionada = Color(servico.corValor);
+      final servicos = await ref.read(servicoControllerProvider.future);
+      for (final s in servicos) {
+        if (s.id == widget.servicoId) {
+          _servicoOriginal = s;
+          _nomeController.text = s.nome;
+          _valorController.text = s.valor.toString();
+          _duracaoController.text = s.duracaoMin.toString();
+          _corSelecionada = Color(s.corValor);
+          break;
+        }
       }
     }
     setState(() => _carregando = false);
@@ -92,40 +78,46 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
   @override
   void dispose() {
     _nomeController.dispose();
-    _duracaoController.dispose();
     _valorController.dispose();
+    _duracaoController.dispose();
     super.dispose();
   }
 
   Future<void> _salvar() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final duracao = _parseDuracao(_duracaoController.text);
+    final nome = _nomeController.text.trim();
     final valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
+    final duracao = int.tryParse(_duracaoController.text) ?? 30;
 
-    final servico = _editando
-        ? _original!.copyWith(
-            nome: _nomeController.text.trim(),
-            duracaoMin: duracao,
+    final novoServico = _editando
+        ? _servicoOriginal!.copyWith(
+            nome: nome,
             valor: valor,
+            duracaoMin: duracao,
             corValor: _corSelecionada.value,
           )
         : Servico(
             id: const Uuid().v4(),
-            nome: _nomeController.text.trim(),
-            duracaoMin: duracao,
+            nome: nome,
             valor: valor,
+            duracaoMin: duracao,
             corValor: _corSelecionada.value,
-            createdAt: DateTime.now(),
           );
 
-    if (_editando) {
-      await ref.read(servicoControllerProvider.notifier).editar(servico);
-    } else {
-      await ref.read(servicoControllerProvider.notifier).salvar(servico);
-    }
+    final erro = await ref
+        .read(servicoControllerProvider.notifier)
+        .salvar(novoServico, novo: !_editando);
 
-    if (mounted) context.pop();
+    if (mounted) {
+      if (erro != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(erro), backgroundColor: Colors.red),
+        );
+      } else {
+        context.pop();
+      }
+    }
   }
 
   @override
@@ -135,84 +127,74 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: Text(_editando ? 'Editar Serviço' : 'Novo Serviço')),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+      appBar: AppBar(
+        title: Text(_editando ? 'Editar Serviço' : 'Novo Serviço'),
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _nomeController,
+                decoration: const InputDecoration(labelText: 'Nome do serviço'),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Informe o nome.' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _valorController,
+                decoration: const InputDecoration(labelText: 'Valor (R\$)'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: (v) => v == null || v.trim().isEmpty ? 'Informe o valor.' : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _duracaoController,
+                decoration: const InputDecoration(labelText: 'Duração padrão (minutos)'),
+                keyboardType: TextInputType.number,
+                validator: (v) => v == null || v.trim().isEmpty ? 'Informe a duração.' : null,
+              ),
+              const SizedBox(height: 20),
+              const Text('Cor de identificação na agenda:', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: coresDisponiveis.map((cor) {
+                  final selecionada = _corSelecionada.value == cor.value;
+                  return GestureDetector(
+                    onTap: () => setState(() => _corSelecionada = cor),
+                    child: CircleAvatar(
+                      backgroundColor: cor,
+                      radius: 18,
+                      child: selecionada
+                          ? const Icon(Icons.check, color: Colors.white, size: 20)
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 30),
+              Row(
                 children: [
-                  TextFormField(
-                    controller: _nomeController,
-                    decoration: const InputDecoration(labelText: 'Nome *'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Nome é obrigatório.' : null,
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => context.pop(),
+                      child: const Text('Cancelar'),
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _duracaoController,
-                          decoration: const InputDecoration(
-                            labelText: 'Duração *',
-                            helperText: '30, 1h, 1h 30m',
-                          ),
-                          keyboardType: TextInputType.text,
-                          validator: (v) {
-                            final duracao = _parseDuracao(v ?? '');
-                            return (duracao <= 0) ? 'Informe uma duração válida.' : null;
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: TextFormField(
-                          controller: _valorController,
-                          decoration: const InputDecoration(labelText: 'Valor (R\$) *'),
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Cor na Agenda', style: Theme.of(context).textTheme.labelLarge),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: _paletaCores.map((cor) {
-                      final selecionada = cor.value == _corSelecionada.value;
-                      return InkWell(
-                        onTap: () => setState(() => _corSelecionada = cor),
-                        borderRadius: BorderRadius.circular(20),
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: cor,
-                            shape: BoxShape.circle,
-                            border: selecionada ? Border.all(color: Colors.black87, width: 2) : null,
-                          ),
-                          child: selecionada ? const Icon(Icons.check, color: Colors.white, size: 18) : null,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(child: OutlinedButton(onPressed: () => context.pop(), child: const Text('Cancelar'))),
-                      const SizedBox(width: 12),
-                      Expanded(child: FilledButton(onPressed: _salvar, child: const Text('Salvar'))),
-                    ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _salvar,
+                      child: const Text('Salvar'),
+                    ),
                   ),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),
