@@ -7,6 +7,7 @@ import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
+import 'historico_cliente_screen.dart';
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -33,8 +34,13 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
     super.dispose();
   }
 
-  void _abrirHistoricoCliente(String clienteId) {
-    context.push('${AppRoutes.clientes}/$clienteId');
+  void _abrirHistorico(BuildContext context, String clienteId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => HistoricoClienteScreen(clienteId: clienteId),
+      ),
+    );
   }
 
   @override
@@ -79,10 +85,19 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
                 padding: const EdgeInsets.all(16),
                 child: TextField(
                   controller: _buscaController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Buscar cliente',
                     hintText: 'Nome ou telefone...',
-                    prefixIcon: Icon(Icons.search),
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: textoBusca.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _buscaController.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -155,24 +170,33 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       return const Center(child: Text('Nenhum cliente nesta categoria.'));
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: lista.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, i) {
         final cliente = lista[i];
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-          leading: CircleAvatar(
-            child: Text(cliente.nome.isNotEmpty ? cliente.nome[0].toUpperCase() : '?'),
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: CircleAvatar(
+              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+              child: Text(
+                cliente.nome.isNotEmpty ? cliente.nome[0].toUpperCase() : '?',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+              ),
+            ),
+            title: Text(
+              cliente.nome,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text(cliente.telefone),
+            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+            onTap: () => _abrirHistorico(context, cliente.id),
           ),
-          title: Text(
-            cliente.nome,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(cliente.telefone),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _abrirHistoricoCliente(cliente.id),
         );
       },
     );
@@ -198,36 +222,38 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       return const Center(child: Text('Nenhum cliente registrado.'));
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: ranking.length,
-      separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, i) {
         final item = ranking[i];
         final cliente = item['cliente'] as Cliente;
         final gasto = item['gasto'] as double;
         final visitas = item['visitas'] as int;
 
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-          leading: CircleAvatar(
-            backgroundColor: i < 3 ? Colors.amber.shade100 : null,
-            child: Text(
-              '#${i + 1}',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                color: i < 3 ? Colors.amber.shade900 : null,
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: CircleAvatar(
+              backgroundColor: i < 3 ? Colors.amber.shade100 : Colors.grey.shade200,
+              child: Text(
+                '#${i + 1}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: i < 3 ? Colors.amber.shade900 : Colors.black87,
+                ),
               ),
             ),
+            title: Text(
+              cliente.nome,
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            subtitle: Text('$visitas visita(s) · R\$ ${gasto.toStringAsFixed(2).replaceAll('.', ',')}'),
+            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+            onTap: () => _abrirHistorico(context, cliente.id),
           ),
-          title: Text(
-            cliente.nome,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          subtitle: Text('$visitas visita(s) · R\$ ${gasto.toStringAsFixed(2).replaceAll('.', ',')}'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => _abrirHistoricoCliente(cliente.id),
         );
       },
     );
