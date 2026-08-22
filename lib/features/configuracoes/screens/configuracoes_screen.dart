@@ -1,13 +1,14 @@
-import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/storage/backup_service.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
+import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
-import 'analise_ia_screen.dart';
+import '../../clientes/models/cliente.dart';
+import '../../servicos/controllers/servico_controller.dart';
+import '../../servicos/models/servico.dart';
 
-/// Tela Configurações → Exportar/Importar backup.json + Painel da Inteligência & Metas da IA.
 class ConfiguracoesScreen extends ConsumerStatefulWidget {
   const ConfiguracoesScreen({super.key});
 
@@ -18,196 +19,104 @@ class ConfiguracoesScreen extends ConsumerStatefulWidget {
 class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   final _backupService = BackupService();
   bool _processando = false;
-  String? _mensagem;
-  bool _erro = false;
 
-  Future<void> _exportar() async {
-    setState(() {
-      _processando = true;
-      _mensagem = null;
-    });
+  Future<void> _exportarBackup() async {
+    setState(() => _processando = true);
     try {
       final clientes = ref.read(clienteControllerProvider).value ?? [];
-      final agendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
-      await _backupService.exportar(clientes: clientes, agendamentos: agendamentos);
-      setState(() {
-        _mensagem = 'Backup exportado com sucesso. Guarde o arquivo em um local seguro.';
-        _erro = false;
-      });
+      final agendamentos = ref.read(todosAgendamentosProvider).value ?? [];
+      final servicos = ref.read(servicoControllerProvider).value ?? [];
+
+      await _backupService.exportar(
+        clientes: clientes,
+        agendamentos: agendamentos,
+        servicos: servicos,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Backup gerado e baixado com sucesso!')),
+        );
+      }
     } catch (e) {
-      setState(() {
-        _mensagem = 'Não foi possível exportar o backup ($e).';
-        _erro = true;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao exportar backup: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() => _processando = false);
+      if (mounted) setState(() => _processando = false);
     }
   }
 
-  Future<void> _importar() async {
-    setState(() {
-      _processando = true;
-      _mensagem = null;
-    });
+  Future<void> _importarBackup() async {
+    setState(() => _processando = true);
     try {
       final payload = await _backupService.importar();
-      if (payload == null) {
-        setState(() => _processando = false);
-        return; // usuário cancelou a seleção do arquivo
-      }
-      final confirmar = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Restaurar backup'),
-          content: Text(
-            'Isso vai substituir todos os clientes e agendamentos atuais pelos '
-            '${payload.clientes.length} cliente(s) e ${payload.agendamentos.length} agendamento(s) '
-            'do arquivo selecionado. Deseja continuar?',
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Restaurar')),
-          ],
-        ),
-      );
-      if (confirmar != true) {
-        setState(() => _processando = false);
-        return;
-      }
+      if (payload != null) {
+        final clientes = payload['clientes'] as List<Cliente>? ?? [];
+        final agendamentos = payload['agendamentos'] as List<Agendamento>? ?? [];
+        final servicos = payload['servicos'] as List<Servico>? ?? [];
 
-      await ref.read(clienteControllerProvider.notifier).substituirTudo(payload.clientes);
-      await ref.read(agendamentoControllerProvider.notifier).substituirTudo(payload.agendamentos);
+        for (final s in servicos) {
+          await ref.read(servicoControllerProvider.notifier).salvar(s);
+        }
+        for (final c in clientes) {
+          await ref.read(clienteControllerProvider.notifier).salvar(c, novo: true);
+        }
+        for (final a in agendamentos) {
+          await ref.read(agendamentoControllerProvider.notifier).salvar(a, novo: true);
+        }
 
-      setState(() {
-        _mensagem = 'Backup restaurado com sucesso.';
-        _erro = false;
-      });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Backup restaurado: ${clientes.length} cliente(s), ${servicos.length} serviço(s) e ${agendamentos.length} agendamento(s).',
+              ),
+            ),
+          );
+        }
+      }
     } catch (e) {
-      setState(() {
-        _mensagem = 'Não foi possível importar o backup ($e).';
-        _erro = true;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao importar backup: $e'), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() => _processando = false);
+      if (mounted) setState(() => _processando = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final totalClientes = ref.watch(clienteControllerProvider).maybeWhen(data: (l) => l.length, orElse: () => 0);
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Configurações'),
-        actions: [
-          IconButton(
-            tooltip: 'Atualizar Aplicativo',
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              html.window.location.reload();
-            },
-          ),
-        ],
-      ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              // CARD: ACESSO À INTELIGÊNCIA E METAS DA IA
-              Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.all(16),
-                  leading: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.shade50,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.auto_awesome, color: Colors.purple),
-                  ),
-                  title: const Text(
-                    'Inteligência & Metas da IA',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Acesse o relatório da semana passada, taxa de ocupação, ticket médio e metas calculadas pela IA.',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const AnaliseIAScreen()),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // CARD DE BACKUP DOS DADOS
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Backup dos dados', style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Os dados agora estão sincronizados na nuvem (Firebase). Use exportar/importar '
-                        'para guardar uma cópia física de segurança ou transferir os dados.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 12),
-                      Text('$totalClientes cliente(s) cadastrados no momento.',
-                          style: Theme.of(context).textTheme.bodySmall),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          FilledButton.icon(
-                            onPressed: _processando ? null : _exportar,
-                            icon: const Icon(Icons.download_outlined),
-                            label: const Text('Exportar backup.json'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _processando ? null : _importar,
-                            icon: const Icon(Icons.upload_outlined),
-                            label: const Text('Importar backup.json'),
-                          ),
-                        ],
-                      ),
-                      if (_processando) ...[
-                        const SizedBox(height: 16),
-                        const LinearProgressIndicator(),
-                      ],
-                      if (_mensagem != null) ...[
-                        const SizedBox(height: 16),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: _erro
-                                ? Theme.of(context).colorScheme.errorContainer
-                                : const Color(0xFFD9F2E3),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(_mensagem!),
-                        ),
-                      ],
-                    ],
+      appBar: AppBar(title: const Text('Configurações')),
+      body: _processando
+          ? const Center(child: CircularProgressIndicator())
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.download),
+                    title: const Text('Exportar Backup (.json)'),
+                    subtitle: const Text('Salvar dados de clientes, serviços e agenda no dispositivo'),
+                    onTap: _exportarBackup,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.upload),
+                    title: const Text('Importar Backup (.json)'),
+                    subtitle: const Text('Restaurar clientes, serviços e agenda salvos anteriormente'),
+                    onTap: _importarBackup,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
