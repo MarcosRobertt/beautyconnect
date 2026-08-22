@@ -21,6 +21,7 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
   final _valorController = TextEditingController();
   final _duracaoController = TextEditingController(text: '30');
 
+  // Cores originais + 8 Novas Cores
   static const List<Color> coresDisponiveis = [
     Color(0xFFE91E63),
     Color(0xFF9C27B0),
