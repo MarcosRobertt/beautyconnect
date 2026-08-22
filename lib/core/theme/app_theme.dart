@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 /// Tema Material 3 do BeautyConnect.
-/// Paleta berry/rosa (mundo da manicure), consistente com o protótipo
-/// validado com a cliente antes desta implementação em Flutter.
 class AppTheme {
   static const Color primary = Color(0xFF8C2F5C);
   static const Color primaryContainer = Color(0xFFFFD8E9);
@@ -27,8 +25,7 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: surfaceDim,
-      // CORREÇÃO: Utilizando CardThemeData conforme exigência do Flutter 3.24+
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
