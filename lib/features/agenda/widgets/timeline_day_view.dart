@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/services/storage/whatsapp_service.dart';
+import '../../clientes/controllers/cliente_controller.dart';
 import '../models/agendamento.dart';
 
-class TimelineDayView extends StatelessWidget {
+class TimelineDayView extends ConsumerWidget {
   const TimelineDayView({
     super.key,
     required this.agendamentos,
@@ -123,7 +125,14 @@ class TimelineDayView extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // BUSCA OS TELEFONES REAIS DOS CLIENTES NO BANCO DE DADOS
+    final clientesAsync = ref.watch(clienteControllerProvider);
+    final telefonesPorId = clientesAsync.maybeWhen(
+      data: (lista) => {for (final c in lista) c.id: c.telefone},
+      orElse: () => <String, String>{},
+    );
+
     int horaMinima = 9;
     int horaMaxima = 18;
 
@@ -200,6 +209,7 @@ class TimelineDayView extends StatelessWidget {
                       
                       final isBloqueio = a.clienteId == 'BLOQUEIO';
                       final nomeCliente = isBloqueio ? 'Compromisso Pessoal' : (clientesPorId[a.clienteId] ?? 'Cliente removido');
+                      final telefoneCliente = telefonesPorId[a.clienteId] ?? '';
                       final cor = _obterCorStatus(a.status);
 
                       return Positioned(
@@ -227,11 +237,11 @@ class TimelineDayView extends StatelessWidget {
                                     _buildStatusBadge(a.status, isBloqueio),
                                     const Spacer(),
                                     if (!isBloqueio) ...[
-                                      // BOTÃO WHATSAPP DISPARA MENSAGEM PADRONIZADA
+                                      // DISPARA O WHATSAPP COM O TELEFONE REAL DO CLIENTE
                                       GestureDetector(
                                         onTap: () {
                                           WhatsAppService.enviarConfirmacao(
-                                            telefone: '5500000000000', // O service formata com DDI
+                                            telefone: telefoneCliente,
                                             nomeCliente: nomeCliente,
                                             agendamento: a,
                                           );
