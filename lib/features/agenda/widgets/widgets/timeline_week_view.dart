@@ -15,7 +15,7 @@ class TimelineWeekView extends StatelessWidget {
   final DateTime dataReferencia;
   final Function(DateTime) onIrParaDia;
 
-  static const double _pixelsPorMinuto = 1.5; // Escala um pouco menor para caber na semana
+  static const double _pixelsPorMinuto = 1.5;
   static const double _larguraHorarios = 45.0;
 
   int _horaParaMinutos(String hhmm) {
@@ -50,7 +50,6 @@ class TimelineWeekView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Calcula os dias da semana (Domingo a Sábado) baseados na dataReferencia
     final int diasParaDomingo = dataReferencia.weekday == 7 ? 0 : dataReferencia.weekday;
     final DateTime domingo = dataReferencia.subtract(Duration(days: diasParaDomingo));
     final List<DateTime> diasSemana = List.generate(7, (index) => domingo.add(Duration(days: index)));
@@ -72,7 +71,6 @@ class TimelineWeekView extends StatelessWidget {
 
     return Column(
       children: [
-        // CABEÇALHO FIXO: Nomes e dias da semana
         Row(
           children: [
             const SizedBox(width: _larguraHorarios),
@@ -119,21 +117,18 @@ class TimelineWeekView extends StatelessWidget {
           ],
         ),
         const Divider(height: 1),
-        
-        // CORPO DA AGENDA: Grade de Horários e Cards
         Expanded(
           child: SingleChildScrollView(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Coluna de Horários
                 SizedBox(
                   width: _larguraHorarios,
                   child: Column(
                     children: [
                       for (int h = horaMinima; h <= horaMaxima; h++)
                         SizedBox(
-                          height: 60 * _pixelsPorMinuto, // Linhas de 1 em 1 hora
+                          height: 60 * _pixelsPorMinuto,
                           child: Align(
                             alignment: Alignment.topLeft,
                             child: Text(
@@ -145,9 +140,7 @@ class TimelineWeekView extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Colunas dos 7 dias
                 ...diasSemana.map((dia) {
-                  // Filtra agendamentos específicos deste dia
                   final agendamentosDoDia = agendamentos.where((a) =>
                       a.data.year == dia.year &&
                       a.data.month == dia.month &&
@@ -156,14 +149,13 @@ class TimelineWeekView extends StatelessWidget {
                   return Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTapUp: (_) => onIrParaDia(dia), // Clicar no fundo vazio do dia
+                      onTapUp: (_) => onIrParaDia(dia),
                       child: Container(
                         decoration: BoxDecoration(
                           border: Border(left: BorderSide(color: Colors.grey.shade300, width: 0.5)),
                         ),
                         child: Stack(
                           children: [
-                            // Linhas do fundo
                             SizedBox(
                               height: alturaTotal,
                               width: double.infinity,
@@ -179,7 +171,6 @@ class TimelineWeekView extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            // Renderização dos cards compactos
                             ...agendamentosDoDia.map((a) {
                               final topPx = _calcularTop(a.horaInicio, horaMinima);
                               final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
