@@ -8,7 +8,7 @@ import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/agendamento_controller.dart';
 import '../widgets/timeline_day_view.dart';
 import '../widgets/timeline_week_view.dart';
-import '../widgets/calendar_month_view.dart'; // IMPORTAÇÃO DO MÊS ADICIONADA
+import '../widgets/calendar_month_view.dart';
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -37,15 +37,17 @@ class AgendaScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Agenda')),
-      floatingActionButton: FloatingActionButton.extended(
+      
+      // CORREÇÃO: Botão flutuante simplificado (Apenas o ícone de +)
+      floatingActionButton: FloatingActionButton(
         onPressed: () {
           final dataAtual = estadoAsync.value?.dataReferencia ?? DateTime.now();
           final dataIso = dataAtual.toIso8601String().split('T').first;
           context.push(Uri(path: AppRoutes.agendaNovo, queryParameters: {'data': dataIso}).toString());
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Novo Agendamento'),
+        child: const Icon(Icons.add),
       ),
+      
       body: estadoAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar agenda: $e')),
@@ -81,7 +83,6 @@ class AgendaScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  // CORREÇÃO: O calendário do Mês e da Semana renderizam mesmo vazios
                   child: estado.visao == VisaoAgenda.dia
                       ? (estado.lista.isEmpty
                           ? const Center(child: Text('Nenhum agendamento neste dia.'))
@@ -111,7 +112,6 @@ class AgendaScreen extends ConsumerWidget {
                                 notifier.mudarVisao(VisaoAgenda.dia);
                               },
                             )
-                          // --- AQUI ENTRA A VISÃO DO MÊS ---
                           : CalendarMonthView(
                               agendamentos: estado.lista,
                               dataReferencia: estado.dataReferencia,
