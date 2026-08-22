@@ -20,6 +20,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _buscaController = TextEditingController();
+  String _filtroTopClientes = 'gasto';
 
   @override
   void initState() {
@@ -219,46 +220,73 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       };
     }).toList();
 
-    ranking.sort((a, b) => (b['gasto'] as double).compareTo(a['gasto'] as double));
-
-    if (ranking.isEmpty) {
-      return const Center(child: Text('Nenhum cliente registrado.'));
+    if (_filtroTopClientes == 'gasto') {
+      ranking.sort((a, b) => (b['gasto'] as double).compareTo(a['gasto'] as double));
+    } else {
+      ranking.sort((a, b) => (b['visitas'] as int).compareTo(a['visitas'] as int));
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: ranking.length,
-      itemBuilder: (context, i) {
-        final item = ranking[i];
-        final cliente = item['cliente'] as Cliente;
-        final gasto = item['gasto'] as double;
-        final visitas = item['visitas'] as int;
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: CircleAvatar(
-              backgroundColor: i < 3 ? Colors.amber.shade100 : Colors.grey.shade200,
-              child: Text(
-                '#${i + 1}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: i < 3 ? Colors.amber.shade900 : Colors.black87,
-                ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(
+                value: 'gasto',
+                label: Text('Mais Gastam', style: TextStyle(fontSize: 12)),
+                icon: Icon(Icons.attach_money, size: 16),
               ),
-            ),
-            title: Text(
-              cliente.nome,
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-            subtitle: Text('$visitas visita(s) · R\$ ${gasto.toStringAsFixed(2).replaceAll('.', ',')}'),
-            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-            onTap: () => _abrirHistorico(context, cliente.id),
+              ButtonSegment(
+                value: 'visitas',
+                label: Text('Mais Frequentam', style: TextStyle(fontSize: 12)),
+                icon: Icon(Icons.repeat, size: 16),
+              ),
+            ],
+            selected: {_filtroTopClientes},
+            onSelectionChanged: (set) => setState(() => _filtroTopClientes = set.first),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ranking.isEmpty
+              ? const Center(child: Text('Nenhum cliente registrado.'))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  itemCount: ranking.length,
+                  itemBuilder: (context, i) {
+                    final item = ranking[i];
+                    final cliente = item['cliente'] as Cliente;
+                    final gasto = item['gasto'] as double;
+                    final visitas = item['visitas'] as int;
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        leading: CircleAvatar(
+                          backgroundColor: i < 3 ? Colors.amber.shade100 : Colors.grey.shade200,
+                          child: Text(
+                            '#${i + 1}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              color: i < 3 ? Colors.amber.shade900 : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        title: Text(
+                          cliente.nome,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text('$visitas visita(s) · R\$ ${gasto.toStringAsFixed(2).replaceAll('.', ',')}'),
+                        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                        onTap: () => _abrirHistorico(context, cliente.id),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
