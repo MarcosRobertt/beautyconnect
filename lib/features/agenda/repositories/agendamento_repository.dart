@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/storage/storage_service.dart';
 import '../models/agendamento.dart';
 
@@ -9,15 +10,22 @@ DateTime _inicioDaSemana(DateTime data) {
   return d.subtract(Duration(days: d.weekday % 7)); // domingo como início
 }
 
-/// Repository de Agendamento. Concentra as regras de negócio da Agenda:
-/// listagem por período e checagem de conflito de horário.
+/// Repository de Agendamento. Concentra as regras de negócio da Agenda.
+/// Agora conectado ao Firebase Cloud Firestore em tempo real.
 class AgendamentoRepository {
   AgendamentoRepository(this._storage);
 
   final StorageService<Agendamento> _storage;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  Future<List<Agendamento>> listarTodos() async {
+    final snapshot = await _firestore.collection('agendamentos').get();
+    return snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
+  }
 
   Future<List<Agendamento>> listarDia(DateTime dia) async {
-    final lista = _storage.pesquisar((a) => _mesmoDia(a.data, dia));
+    final todos = await listarTodos();
+    final lista = todos.where((a) => _mesmoDia(a.data, dia)).toList();
     lista.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
     return lista;
   }
@@ -25,9 +33,9 @@ class AgendamentoRepository {
   Future<List<Agendamento>> listarSemana(DateTime referencia) async {
     final inicio = _inicioDaSemana(referencia);
     final fim = inicio.add(const Duration(days: 6));
-    final lista = _storage.pesquisar(
-      (a) => !a.data.isBefore(inicio) && !a.data.isAfter(fim),
-    );
+    final todos = await listarTodos();
+    final lista = todos.where((a) => !a.data.isBefore(inicio) && !a.data.isAfter(fim)).toList();
+    
     lista.sort((a, b) {
       final cmpData = a.data.compareTo(b.data);
       return cmpData != 0 ? cmpData : a.horaInicio.compareTo(b.horaInicio);
@@ -36,9 +44,9 @@ class AgendamentoRepository {
   }
 
   Future<List<Agendamento>> listarMes(DateTime referencia) async {
-    final lista = _storage.pesquisar(
-      (a) => a.data.year == referencia.year && a.data.month == referencia.month,
-    );
+    final todos = await listarTodos();
+    final lista = todos.where((a) => a.data.year == referencia.year && a.data.month == referencia.month).toList();
+    
     lista.sort((a, b) {
       final cmpData = a.data.compareTo(b.data);
       return cmpData != 0 ? cmpData : a.horaInicio.compareTo(b.horaInicio);
@@ -46,16 +54,11 @@ class AgendamentoRepository {
     return lista;
   }
 
-  Future<List<Agendamento>> listarTodos() async => _storage.listar();
-
-  /// Converte "HH:mm" para minutos desde 00:00
   int _horaParaMinutos(String hhmm) {
     final partes = hhmm.split(':');
     return int.parse(partes[0]) * 60 + int.parse(partes[1]);
   }
 
-  /// Verifica se dois períodos de tempo se sobrepõem.
-  /// Dois períodos se sobrepõem se: inicio1 < fim2 AND inicio2 < fim1
   bool _temSobreposicao(
     String inicio1,
     String fim1,
@@ -66,18 +69,13 @@ class AgendamentoRepository {
     final min2 = _horaParaMinutos(fim1);
     final min3 = _horaParaMinutos(inicio2);
     final min4 = _horaParaMinutos(fim2);
-
-    // Sobreposição ocorre se: min1 < min4 AND min3 < min2
     return min1 < min4 && min3 < min2;
   }
 
-  /// Regra: não permitir dois agendamentos não cancelados no mesmo dia
-  /// que se sobreponham no tempo.
-  ///
-  /// Permite agendamentos encostados (ex: 10:00-11:00 e 11:00-12:00).
-  /// Bloqueia agendamentos que se sobrepõem (ex: 10:00-12:00 e 11:00-12:30).
-  bool existeConflito(Agendamento novo, {String? ignorarId}) {
-    return _storage.listar().any((a) =>
+  // ATENÇÃO: Convertida para Future<bool> pois agora checa conflitos na nuvem
+  Future<bool> existeConflito(Agendamento novo, {String? ignorarId}) async {
+    final todos = await listarTodos();
+    return todos.any((a) =>
         a.id != ignorarId &&
         a.status != AgendamentoStatus.cancelado &&
         _mesmoDia(a.data, novo.data) &&
@@ -85,57 +83,67 @@ class AgendamentoRepository {
   }
 
   Future<void> novo(Agendamento agendamento) async {
-    if (existeConflito(agendamento)) {
+    final conflito = await existeConflito(agendamento);
+    if (conflito) {
       throw StateError(
         'Já existe um agendamento não cancelado nesse dia e horário.',
       );
     }
-    await _storage.salvar(agendamento.id, agendamento);
+    await _firestore.collection('agendamentos').doc(agendamento.id).set(agendamento.toJson());
   }
 
   Future<void> editar(Agendamento agendamento) async {
-    if (existeConflito(agendamento, ignorarId: agendamento.id)) {
+    final conflito = await existeConflito(agendamento, ignorarId: agendamento.id);
+    if (conflito) {
       throw StateError(
         'Já existe um agendamento não cancelado nesse dia e horário.',
       );
     }
-    await _storage.editar(agendamento.id, agendamento);
+    await _firestore.collection('agendamentos').doc(agendamento.id).update(agendamento.toJson());
+  }
+
+  // Método auxiliar interno para buscar um único agendamento na nuvem
+  Future<Agendamento?> _buscarNaNuvem(String id) async {
+    final doc = await _firestore.collection('agendamentos').doc(id).get();
+    if (!doc.exists || doc.data() == null) return null;
+    return Agendamento.fromJson(doc.data()!);
   }
 
   Future<void> cancelar(String id) async {
-    final atual = _storage.buscar(id);
+    final atual = await _buscarNaNuvem(id);
     if (atual == null) return;
-    await _storage.editar(
-      id,
-      atual.copyWith(status: AgendamentoStatus.cancelado, updatedAt: DateTime.now()),
-    );
+    final alterado = atual.copyWith(status: AgendamentoStatus.cancelado, updatedAt: DateTime.now());
+    await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
   }
 
   Future<void> confirmar(String id) async {
-    final atual = _storage.buscar(id);
+    final atual = await _buscarNaNuvem(id);
     if (atual == null) return;
-    await _storage.editar(
-      id,
-      atual.copyWith(status: AgendamentoStatus.confirmado, updatedAt: DateTime.now()),
-    );
+    final alterado = atual.copyWith(status: AgendamentoStatus.confirmado, updatedAt: DateTime.now());
+    await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
   }
 
   Future<void> concluir(String id) async {
-    final atual = _storage.buscar(id);
+    final atual = await _buscarNaNuvem(id);
     if (atual == null) return;
-    await _storage.editar(
-      id,
-      atual.copyWith(status: AgendamentoStatus.concluido, updatedAt: DateTime.now()),
-    );
+    final alterado = atual.copyWith(status: AgendamentoStatus.concluido, updatedAt: DateTime.now());
+    await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
   }
 
-  /// Substitui toda a base de agendamentos (usado ao restaurar um backup.json).
-  /// Ignora a checagem de conflito de horário, pois assume-se que o backup já
-  /// era um estado válido no momento em que foi exportado.
   Future<void> substituirTudo(List<Agendamento> novos) async {
-    await _storage.limparTudo();
-    for (final a in novos) {
-      await _storage.salvar(a.id, a);
+    final batch = _firestore.batch();
+    final snapshot = await _firestore.collection('agendamentos').get();
+    
+    // Limpa a nuvem atual
+    for (final doc in snapshot.docs) {
+      batch.delete(doc.reference);
     }
+    
+    // Adiciona os dados do backup
+    for (final a in novos) {
+      final docRef = _firestore.collection('agendamentos').doc(a.id);
+      batch.set(docRef, a.toJson());
+    }
+    await batch.commit();
   }
 }
