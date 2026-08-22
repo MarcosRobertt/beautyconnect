@@ -59,8 +59,6 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
           ),
           const SizedBox(height: 12),
-          
-          // Seleção visual rápida por chips
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -79,7 +77,6 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
             }).toList(),
           ),
           const SizedBox(height: 24),
-          
           FilledButton.icon(
             icon: const Icon(Icons.check_circle_outline),
             label: Text(
