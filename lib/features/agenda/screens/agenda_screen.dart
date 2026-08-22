@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/agendamento_controller.dart';
+import '../models/agendamento.dart';
+import '../widgets/modal_fechar_comanda.dart';
 import '../widgets/timeline_day_view.dart';
 import '../widgets/timeline_week_view.dart';
 import '../widgets/calendar_month_view.dart';
@@ -25,6 +27,33 @@ class AgendaScreen extends ConsumerWidget {
     }
   }
 
+  void _abrirModalComanda(
+    BuildContext context,
+    WidgetRef ref,
+    Agendamento agendamento,
+    String nomeCliente,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => ModalFecharComanda(
+        agendamento: agendamento,
+        nomeCliente: nomeCliente,
+        onConfirmar: (forma, valorFinal) {
+          final atualizado = agendamento.copyWith(
+            status: AgendamentoStatus.concluido,
+            formaPagamento: forma,
+            valor: valorFinal,
+          );
+          ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final estadoAsync = ref.watch(agendamentoControllerProvider);
@@ -37,8 +66,6 @@ class AgendaScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Agenda')),
-      
-      // CORREÇÃO: Botão flutuante simplificado (Apenas o ícone de +)
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           final dataAtual = estadoAsync.value?.dataReferencia ?? DateTime.now();
@@ -47,7 +74,6 @@ class AgendaScreen extends ConsumerWidget {
         },
         child: const Icon(Icons.add),
       ),
-      
       body: estadoAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar agenda: $e')),
@@ -100,7 +126,14 @@ class AgendaScreen extends ConsumerWidget {
                               },
                               onEditar: (id) => context.push('${AppRoutes.agenda}/editar/$id'),
                               onConfirmar: (id) => notifier.confirmar(id),
-                              onConcluir: (id) => notifier.concluir(id),
+                              onConcluir: (id) {
+                                final agendamento = estado.lista.firstWhere((a) => a.id == id);
+                                final nomeCliente = clientesPorId[agendamento.clienteId] ??
+                                    (agendamento.clienteId == 'BLOQUEIO'
+                                        ? 'Compromisso Pessoal'
+                                        : 'Cliente');
+                                _abrirModalComanda(context, ref, agendamento, nomeCliente);
+                              },
                               onCancelar: (id) => notifier.cancelar(id),
                             ))
                       : estado.visao == VisaoAgenda.semana
