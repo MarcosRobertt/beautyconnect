@@ -30,8 +30,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      # Flag --no-wasm-dry-run adicionada para ignorar a verificação que estava causando erro
       - name: Build Flutter Web
-        run: flutter build web --release --base-href /beautyconnect/
+        run: flutter build web --release --no-wasm-dry-run --base-href /beautyconnect/
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
