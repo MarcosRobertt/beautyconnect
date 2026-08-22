@@ -269,12 +269,15 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       servicoIdFinal = _servicoId;
     }
 
+    final duracaoCalculada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
+
     final agendamento = _editando
         ? _original!.copyWith(
             clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId,
             data: _data,
             horaInicio: _formatarHora(_horaInicio),
             horaFim: _formatarHora(_horaFim),
+            duracaoMinutos: duracaoCalculada,
             servico: nomeServico,
             servicoId: servicoIdFinal,
             valor: valor,
@@ -287,6 +290,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             data: _data,
             horaInicio: _formatarHora(_horaInicio),
             horaFim: _formatarHora(_horaFim),
+            duracaoMinutos: duracaoCalculada,
             servico: nomeServico,
             servicoId: servicoIdFinal,
             valor: valor,
@@ -434,7 +438,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       appBar: AppBar(
         title: Text(_editando ? 'Editar Horário' : 'Novo Horário'),
         actions: [
-          // SE ESTIVER EDITANDO UM AGENDAMENTO DE CLIENTE, EXIBE O BOTÃO DO WHATSAPP
           if (_editando && !_isBloqueio && _original != null && _clienteId != null)
             Padding(
               padding: const EdgeInsets.only(right: 8.0),
@@ -470,7 +473,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  
                   SegmentedButton<bool>(
                     segments: const [
                       ButtonSegment(value: false, label: Text('Agendamento', style: TextStyle(fontSize: 12))),
@@ -596,7 +598,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       decoration: BoxDecoration(
                         color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.red.shade200)
+                        border: Border.all(color: Colors.red.shade200),
                       ),
                       child: Text(_erro!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold)),
                     ),
