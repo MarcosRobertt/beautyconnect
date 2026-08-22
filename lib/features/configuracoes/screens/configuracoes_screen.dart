@@ -29,6 +29,42 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     html.window.location.reload();
   }
 
+  // --- FUNÇÃO DA IA COM MÉTRICAS ADICIONADA AQUI ---
+  void _abrirIA() {
+    final clientes = ref.read(clienteControllerProvider).value ?? [];
+    final agendamentos = ref.read(todosAgendamentosProvider).value ?? [];
+    final servicos = ref.read(servicoControllerProvider).value ?? [];
+
+    final concluidos = agendamentos.where((a) => a.status == AgendamentoStatus.concluido).toList();
+    final faturamentoTotal = concluidos.fold(0.0, (sum, a) => sum + a.valor);
+    final ticketMedio = concluidos.isEmpty ? 0.0 : faturamentoTotal / concluidos.length;
+    
+    final ativos = clientes.where((c) {
+      final agsCliente = concluidos.where((a) => a.clienteId == c.id);
+      if (agsCliente.isEmpty) return false;
+      final ultima = agsCliente.map((a) => a.data).reduce((a, b) => a.isAfter(b) ? a : b);
+      return DateTime.now().difference(ultima).inDays <= 30;
+    }).length;
+
+    final contextoIA = '''
+    ATUALIZAÇÃO DE MÉTRICAS DO STUDIO:
+    - Total de Clientes Cadastrados: ${clientes.length} (Ativos: $ativos)
+    - Agendamentos Concluídos: ${concluidos.length}
+    - Faturamento Total: R\$ ${faturamentoTotal.toStringAsFixed(2)}
+    - Ticket Médio (TM): R\$ ${ticketMedio.toStringAsFixed(2)}
+    - Serviços Oferecidos: ${servicos.length}
+    
+    DIRETRIZES DE ANÁLISE:
+    Analise os dados e sugira:
+    1. Estratégias práticas para aumentar o Ticket Médio (combos de serviços).
+    2. Mensagens para reativar os clientes inativos.
+    3. Ações para preencher horários ociosos na agenda.
+    ''';
+
+    context.push(AppRoutes.agendaInteligente, extra: contextoIA);
+  }
+  // ------------------------------------------------
+
   Future<void> _exportarBackup() async {
     setState(() => _processando = true);
     try {
@@ -126,10 +162,10 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.auto_awesome, color: Colors.deepPurple),
-                    title: const Text('Agenda Inteligente (IA)'),
-                    subtitle: const Text('Acesse e configure o assistente virtual da agenda'),
+                    title: const Text('Consultoria Inteligente (IA)'), // Título atualizado
+                    subtitle: const Text('Analisa TM, Retenção e sugere melhorias para o Studio'), // Subtítulo atualizado
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: () => context.push(AppRoutes.agendaInteligente),
+                    onTap: _abrirIA, // Chamada para a nova função
                   ),
                 ),
                 const SizedBox(height: 24),
