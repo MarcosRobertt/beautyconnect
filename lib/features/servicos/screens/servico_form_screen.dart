@@ -21,7 +21,6 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
   final _valorController = TextEditingController();
   final _duracaoController = TextEditingController(text: '30');
 
-  // Cores originais + 8 Novas Cores
   static const List<Color> coresDisponiveis = [
     Color(0xFFE91E63),
     Color(0xFF9C27B0),
@@ -107,17 +106,19 @@ class _ServicoFormScreenState extends ConsumerState<ServicoFormScreen> {
             createdAt: DateTime.now(),
           );
 
-    final erro = await ref
-        .read(servicoControllerProvider.notifier)
-        .salvar(novoServico);
+    try {
+      await ref
+          .read(servicoControllerProvider.notifier)
+          .salvar(novoServico);
 
-    if (mounted) {
-      if (erro != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(erro.toString()), backgroundColor: Colors.red),
-        );
-      } else {
+      if (mounted) {
         context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao salvar serviço: $e'), backgroundColor: Colors.red),
+        );
       }
     }
   }
