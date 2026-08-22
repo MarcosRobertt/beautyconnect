@@ -33,9 +33,11 @@ class Agendamento {
     required this.duracaoMinutos,
     required this.status,
     this.formaPagamento,
-    this.observacao,
+    String? observacao,
+    this.createdAt,
     this.updatedAt,
-  }) : _horaFimGuardada = horaFim;
+  })  : _horaFimGuardada = horaFim,
+        _observacaoGuardada = observacao;
 
   final String id;
   final String clienteId;
@@ -48,8 +50,12 @@ class Agendamento {
   final int duracaoMinutos;
   final AgendamentoStatus status;
   final FormaPagamento? formaPagamento;
-  final String? observacao;
+  final String? _observacaoGuardada;
+  final DateTime? createdAt;
   final DateTime? updatedAt;
+
+  String get observacao => _observacaoGuardada ?? '';
+  String get observacoes => _observacaoGuardada ?? '';
 
   String get horaFim {
     if (_horaFimGuardada != null && _horaFimGuardada!.isNotEmpty) {
@@ -63,8 +69,6 @@ class Agendamento {
     final fimDt = inicioDt.add(Duration(minutes: duracaoMinutos));
     return '${fimDt.hour.toString().padLeft(2, '0')}:${fimDt.minute.toString().padLeft(2, '0')}';
   }
-
-  String get observacoes => observacao ?? '';
 
   Map<String, dynamic> toJson() {
     return {
@@ -80,6 +84,7 @@ class Agendamento {
       'status': status.name,
       'formaPagamento': formaPagamento?.name,
       'observacao': observacao,
+      'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
   }
@@ -100,6 +105,7 @@ class Agendamento {
           ? FormaPagamento.values.byName(json['formaPagamento'] as String)
           : null,
       observacao: json['observacao'] as String? ?? json['observacoes'] as String?,
+      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'] as String) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'] as String) : null,
     );
   }
@@ -117,6 +123,7 @@ class Agendamento {
     AgendamentoStatus? status,
     FormaPagamento? formaPagamento,
     String? observacao,
+    DateTime? createdAt,
     DateTime? updatedAt,
   }) {
     return Agendamento(
@@ -131,7 +138,8 @@ class Agendamento {
       duracaoMinutos: duracaoMinutos ?? this.duracaoMinutos,
       status: status ?? this.status,
       formaPagamento: formaPagamento ?? this.formaPagamento,
-      observacao: observacao ?? this.observacao,
+      observacao: observacao ?? _observacaoGuardada,
+      createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
