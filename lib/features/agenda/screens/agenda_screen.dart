@@ -4,12 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../shared/widgets/status_chip.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/agendamento_controller.dart';
-import '../models/agendamento.dart';
 import '../widgets/timeline_day_view.dart';
-import '../widgets/timeline_week_view.dart'; 
+import '../widgets/timeline_week_view.dart';
+import '../widgets/calendar_month_view.dart'; // IMPORTAÇÃO DO MÊS ADICIONADA
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -82,10 +81,11 @@ class AgendaScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 12),
                 Expanded(
-                  child: estado.lista.isEmpty
-                      ? const Center(child: Text('Nenhum agendamento neste período.'))
-                      : estado.visao == VisaoAgenda.dia
-                          ? TimelineDayView(
+                  // CORREÇÃO: O calendário do Mês e da Semana renderizam mesmo vazios
+                  child: estado.visao == VisaoAgenda.dia
+                      ? (estado.lista.isEmpty
+                          ? const Center(child: Text('Nenhum agendamento neste dia.'))
+                          : TimelineDayView(
                               agendamentos: estado.lista,
                               clientesPorId: clientesPorId,
                               moeda: moeda,
@@ -101,109 +101,30 @@ class AgendaScreen extends ConsumerWidget {
                               onConfirmar: (id) => notifier.confirmar(id),
                               onConcluir: (id) => notifier.concluir(id),
                               onCancelar: (id) => notifier.cancelar(id),
+                            ))
+                      : estado.visao == VisaoAgenda.semana
+                          ? TimelineWeekView(
+                              agendamentos: estado.lista,
+                              dataReferencia: estado.dataReferencia,
+                              onIrParaDia: (dataCerta) {
+                                notifier.mudarData(dataCerta);
+                                notifier.mudarVisao(VisaoAgenda.dia);
+                              },
                             )
-                          : estado.visao == VisaoAgenda.semana
-                              ? TimelineWeekView(
-                                  agendamentos: estado.lista,
-                                  dataReferencia: estado.dataReferencia,
-                                  onIrParaDia: (dataCerta) {
-                                    notifier.mudarData(dataCerta);
-                                    notifier.mudarVisao(VisaoAgenda.dia);
-                                  },
-                                )
-                              : ListView.separated(
-                                  itemCount: estado.lista.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 1),
-                                  itemBuilder: (context, i) {
-                                    final a = estado.lista[i];
-                                    return _AgendamentoTile(
-                                      agendamento: a,
-                                      nomeCliente: clientesPorId[a.clienteId] ?? 'Cliente removido',
-                                      mostrarData: estado.visao != VisaoAgenda.dia,
-                                      moeda: moeda,
-                                      onEditar: () => context.push('${AppRoutes.agenda}/editar/${a.id}'),
-                                      onConfirmar: () => notifier.confirmar(a.id),
-                                      onConcluir: () => notifier.concluir(a.id),
-                                      onCancelar: () => notifier.cancelar(a.id),
-                                    );
-                                  },
-                                ),
+                          // --- AQUI ENTRA A VISÃO DO MÊS ---
+                          : CalendarMonthView(
+                              agendamentos: estado.lista,
+                              dataReferencia: estado.dataReferencia,
+                              onIrParaDia: (dataCerta) {
+                                notifier.mudarData(dataCerta);
+                                notifier.mudarVisao(VisaoAgenda.dia);
+                              },
+                            ),
                 ),
               ],
             ),
           );
         },
-      ),
-    );
-  }
-}
-
-class _AgendamentoTile extends StatelessWidget {
-  const _AgendamentoTile({
-    required this.agendamento,
-    required this.nomeCliente,
-    required this.mostrarData,
-    required this.moeda,
-    required this.onEditar,
-    required this.onConfirmar,
-    required this.onConcluir,
-    required this.onCancelar,
-  });
-
-  final Agendamento agendamento;
-  final String nomeCliente;
-  final bool mostrarData;
-  final NumberFormat moeda;
-  final VoidCallback onEditar;
-  final VoidCallback onConfirmar;
-  final VoidCallback onConcluir;
-  final VoidCallback onCancelar;
-
-  bool get _podeAgir =>
-      agendamento.status == AgendamentoStatus.agendado || agendamento.status == AgendamentoStatus.confirmado;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 84,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${agendamento.horaInicio}–${agendamento.horaFim}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                if (mostrarData)
-                  Text(DateFormat('dd/MM').format(agendamento.data), style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(nomeCliente, style: Theme.of(context).textTheme.titleSmall),
-                Text('${agendamento.servico} · ${moeda.format(agendamento.valor)}', style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ),
-          Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              StatusChip(status: agendamento.status),
-              if (agendamento.status == AgendamentoStatus.agendado)
-                IconButton(tooltip: 'Confirmar', onPressed: onConfirmar, icon: const Icon(Icons.verified_outlined, size: 20)),
-              if (_podeAgir) ...[
-                IconButton(tooltip: 'Concluir', onPressed: onConcluir, icon: const Icon(Icons.check_circle_outline, size: 20)),
-                IconButton(tooltip: 'Editar', onPressed: onEditar, icon: const Icon(Icons.edit_outlined, size: 20)),
-                IconButton(tooltip: 'Cancelar', onPressed: onCancelar, icon: const Icon(Icons.cancel_outlined, size: 20)),
-              ],
-            ],
-          ),
-        ],
       ),
     );
   }
