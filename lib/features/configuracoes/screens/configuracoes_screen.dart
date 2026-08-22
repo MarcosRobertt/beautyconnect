@@ -62,7 +62,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
           await ref.read(servicoControllerProvider.notifier).salvar(s);
         }
         for (final c in clientes) {
-          await ref.read(clienteControllerProvider.notifier).salvar(c, novo: true);
+          await ref.read(clienteControllerProvider.notifier).salvar(c);
         }
         for (final a in agendamentos) {
           await ref.read(agendamentoControllerProvider.notifier).salvar(a, novo: true);
