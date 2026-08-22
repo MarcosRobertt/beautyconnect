@@ -9,7 +9,7 @@ import '../../clientes/controllers/cliente_controller.dart';
 import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
 import '../widgets/timeline_day_view.dart';
-import '../widgets/timeline_week_view.dart'; // IMPORTAÇÃO DA VISÃO SEMANAL
+import '../widgets/timeline_week_view.dart'; 
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -102,7 +102,6 @@ class AgendaScreen extends ConsumerWidget {
                               onConcluir: (id) => notifier.concluir(id),
                               onCancelar: (id) => notifier.cancelar(id),
                             )
-                          // --- AQUI ENTRA A MÁGICA DA SEMANA ---
                           : estado.visao == VisaoAgenda.semana
                               ? TimelineWeekView(
                                   agendamentos: estado.lista,
@@ -112,7 +111,6 @@ class AgendaScreen extends ConsumerWidget {
                                     notifier.mudarVisao(VisaoAgenda.dia);
                                   },
                                 )
-                              // --- VISÃO DO MÊS CONTINUA COM A LISTA ---
                               : ListView.separated(
                                   itemCount: estado.lista.length,
                                   separatorBuilder: (_, __) => const Divider(height: 1),
