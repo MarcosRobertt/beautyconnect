@@ -1,6 +1,7 @@
+// Importação nativa da Web para abrir links sem dependência do pubspec.yaml
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 import 'package:intl/intl.dart';
-// Uso nativo para abrir URLs em Flutter Web/Navegador
-import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../../features/agenda/models/agendamento.dart';
 import '../../../features/clientes/models/cliente.dart';
@@ -14,14 +15,13 @@ class WhatsAppService {
     return apenasNumeros;
   }
 
-  static Future<void> _abrirWhatsApp(String telefone, String mensagem) async {
+  static void _abrirWhatsApp(String telefone, String mensagem) {
     final numeroFormatado = _formatarTelefone(telefone);
     final uriEncoded = Uri.encodeComponent(mensagem);
     final urlString = 'https://wa.me/$numeroFormatado?text=$uriEncoded';
 
-    if (await canLaunchUrlString(urlString)) {
-      await launchUrlString(urlString, mode: LaunchMode.externalApplication);
-    }
+    // Abre o WhatsApp direto no navegador/app sem usar url_launcher
+    html.window.open(urlString, '_blank');
   }
 
   /// 1. Mensagem de Confirmação do Horário
@@ -39,7 +39,7 @@ class WhatsAppService {
         '✨ *Serviço:* ${agendamento.servico}\n\n'
         'Podemos confirmar a sua presença?';
 
-    await _abrirWhatsApp(telefone, mensagem);
+    _abrirWhatsApp(telefone, mensagem);
   }
 
   /// 2. Mensagem de Reativação no CRM (Clientes Sumidas)
@@ -52,6 +52,6 @@ class WhatsAppService {
         'Reparei que já faz $diasAusente dias desde a sua última visita. '
         'Como estão suas unhas? Vamos agendar um horário para esta semana?';
 
-    await _abrirWhatsApp(cliente.telefone, mensagem);
+    _abrirWhatsApp(cliente.telefone, mensagem);
   }
 }
