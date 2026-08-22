@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/storage/whatsapp_service.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../../clientes/models/cliente.dart';
 import '../../servicos/controllers/servico_controller.dart';
@@ -28,9 +29,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   final _valorController = TextEditingController(text: '0');
   final _observacaoController = TextEditingController();
   final _buscaClienteController = TextEditingController();
-  final _motivoBloqueioController = TextEditingController(); // NOVO CAMPO
+  final _motivoBloqueioController = TextEditingController(); 
 
-  bool _isBloqueio = false; // CONTROLE DE TELA (Agendamento ou Bloqueio)
+  bool _isBloqueio = false; 
   String? _clienteId;
   String? _servicoId;
   String _servicoNomeOriginal = ''; 
@@ -68,7 +69,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       }
       if (ag != null) {
         _original = ag;
-        // Se for um bloqueio gravado no banco, prepara a tela de bloqueio
         if (ag.clienteId == 'BLOQUEIO') {
           _isBloqueio = true;
           _motivoBloqueioController.text = ag.servico;
@@ -128,7 +128,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         if (inicio) {
           _horaInicio = selecionada;
           if (_isBloqueio) {
-            _horaFim = _somarMinutos(_horaInicio, 60); // Bloqueio default: 1h
+            _horaFim = _somarMinutos(_horaInicio, 60); 
           } else if (_servicoId != null) {
             final servicos = ref.read(servicoControllerProvider).value ?? [];
             try {
@@ -225,7 +225,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     double valor = 0.0;
     String? servicoIdFinal;
 
-    // VALIDAÇÕES CONDICIONAIS (BLOQUEIO vs AGENDAMENTO)
     if (_isBloqueio) {
       if (_motivoBloqueioController.text.trim().isEmpty) {
         setState(() => _erro = 'Informe o motivo do bloqueio (ex: Almoço).');
@@ -429,9 +428,38 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     }
 
     final servicosAsync = ref.watch(servicoControllerProvider);
+    final clientesAsync = ref.watch(clienteControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(_editando ? 'Editar Horário' : 'Novo Horário')),
+      appBar: AppBar(
+        title: Text(_editando ? 'Editar Horário' : 'Novo Horário'),
+        actions: [
+          // SE ESTIVER EDITANDO UM AGENDAMENTO DE CLIENTE, EXIBE O BOTÃO DO WHATSAPP
+          if (_editando && !_isBloqueio && _original != null && _clienteId != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: IconButton(
+                icon: const Icon(Icons.chat, color: Colors.green),
+                tooltip: 'Enviar Confirmação pelo WhatsApp',
+                onPressed: () {
+                  final clientes = clientesAsync.value ?? [];
+                  try {
+                    final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
+                    WhatsAppService.enviarConfirmacao(
+                      telefone: clienteAtual.telefone,
+                      nomeCliente: clienteAtual.nome,
+                      agendamento: _original!,
+                    );
+                  } catch (_) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Erro ao localizar telefone da cliente.')),
+                    );
+                  }
+                },
+              ),
+            ),
+        ],
+      ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
@@ -443,7 +471,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   
-                  // NOVO: ALTERNADOR AGENDAMENTO / BLOQUEIO
                   SegmentedButton<bool>(
                     segments: const [
                       ButtonSegment(value: false, label: Text('Agendamento', style: TextStyle(fontSize: 12))),
@@ -454,7 +481,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // MOSTRA CLIENTE E SERVIÇO SÓ SE FOR AGENDAMENTO
                   if (!_isBloqueio) ...[
                     _construirSeletorCliente(),
                     const SizedBox(height: 12),
@@ -496,7 +522,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     ),
                     const SizedBox(height: 12),
                   ] 
-                  // MOSTRA CAMPO DE MOTIVO SE FOR BLOQUEIO
                   else ...[
                     TextFormField(
                       controller: _motivoBloqueioController,
@@ -508,7 +533,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     const SizedBox(height: 12),
                   ],
 
-                  // LINHA DA DATA E VALOR (Valor some no bloqueio)
                   Row(
                     children: [
                       Expanded(
@@ -534,7 +558,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   ),
                   const SizedBox(height: 12),
                   
-                  // HORÁRIOS
                   Row(
                     children: [
                       Expanded(
