@@ -30,7 +30,7 @@ class Agendamento {
     required this.data,
     required this.horaInicio,
     String? horaFim,
-    required this.duracaoMinutos,
+    this.duracaoMinutos = 60,
     required this.status,
     this.formaPagamento,
     String? observacao,
@@ -99,7 +99,7 @@ class Agendamento {
       data: DateTime.parse(json['data'] as String),
       horaInicio: json['horaInicio'] as String,
       horaFim: json['horaFim'] as String?,
-      duracaoMinutos: (json['duracaoMinutos'] as num?)?.toInt() ?? 30,
+      duracaoMinutos: (json['duracaoMinutos'] as num?)?.toInt() ?? 60,
       status: AgendamentoStatus.values.byName(json['status'] as String),
       formaPagamento: json['formaPagamento'] != null
           ? FormaPagamento.values.byName(json['formaPagamento'] as String)
