@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/services/storage/backup_service.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../clientes/controllers/cliente_controller.dart';
+import 'analise_ia_screen.dart';
 
-/// Tela Configurações → Exportar/Importar backup.json, conforme documento
-/// técnico. Esta é a persistência "de segurança": a persistência do dia a
-/// dia já acontece sozinha no Hive/IndexedDB a cada ação do usuário.
+/// Tela Configurações → Exportar/Importar backup.json + Painel da Inteligência & Metas da IA.
 class ConfiguracoesScreen extends ConsumerStatefulWidget {
   const ConfiguracoesScreen({super.key});
 
@@ -60,7 +59,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
         builder: (context) => AlertDialog(
           title: const Text('Restaurar backup'),
           content: Text(
-            'Isso vai substituir todos os ${'clientes e agendamentos atuais'} pelos '
+            'Isso vai substituir todos os clientes e agendamentos atuais pelos '
             '${payload.clientes.length} cliente(s) e ${payload.agendamentos.length} agendamento(s) '
             'do arquivo selecionado. Deseja continuar?',
           ),
@@ -104,6 +103,42 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
+              
+              // NOVO CARD: ACESSO À INTELIGÊNCIA E METAS DA IA
+              Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.auto_awesome, color: Colors.purple),
+                  ),
+                  title: const Text(
+                    'Inteligência & Metas da IA',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Acesse o relatório da semana passada, taxa de ocupação, ticket médio e metas calculadas pela IA.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const AnaliseIAScreen()),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // CARD ORIGINAL DE BACKUP MANTIDO INTACTO
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
