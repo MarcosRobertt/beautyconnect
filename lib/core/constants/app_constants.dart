@@ -19,4 +19,5 @@ class AppRoutes {
   static const String agendaNovo = '/agenda/novo';
   static const String agendaInteligente = '/agenda-inteligente';
   static const String configuracoes = '/configuracoes';
+  static const String analiseIA = '/configuracoes/ia'; // NOVA ROTA DA IA
 }
