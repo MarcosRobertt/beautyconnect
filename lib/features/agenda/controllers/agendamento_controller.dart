@@ -17,8 +17,6 @@ final agendamentoRepositoryProvider = Provider<AgendamentoRepository>((ref) {
   return AgendamentoRepository(StorageService<Agendamento>(box, nomeCaixa: HiveBoxes.agendamentos));
 });
 
-/// Estado da tela de Agenda: visão atual (dia/semana/mês), data de referência
-/// e lista de agendamentos já filtrada para o período selecionado.
 class AgendaState {
   AgendaState({
     required this.visao,
@@ -48,11 +46,8 @@ final agendamentoControllerProvider =
   return AgendamentoController(ref.watch(agendamentoRepositoryProvider));
 });
 
-/// Todos os agendamentos (sem filtro de período), de forma reativa —
-/// reaproveitado pelo Dashboard, Clientes (último atendimento/próximo
-/// retorno), Histórico do Cliente e Agenda Inteligente.
 final todosAgendamentosProvider = FutureProvider<List<Agendamento>>((ref) async {
-  ref.watch(agendamentoControllerProvider); // gatilho: recalcula após qualquer mudança
+  ref.watch(agendamentoControllerProvider); 
   final repository = ref.watch(agendamentoRepositoryProvider);
   return repository.listarTodos();
 });
@@ -90,16 +85,18 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     await carregar();
   }
 
+  // NOVA FUNÇÃO AQUI:
+  Future<void> mudarData(DateTime data) async {
+    _dataReferencia = data;
+    await carregar();
+  }
+
   Future<void> irPara(DateTime data) async {
     _dataReferencia = data;
     await carregar();
   }
 
   Future<void> avancar() async {
-    // CORREÇÃO (Sprint 1): a visão "Mês" andava em blocos fixos de 30 dias,
-    // o que causava deriva de data ao longo de várias navegações (ex.:
-    // 31/jan + 30 dias = 02/mar, não 01/fev). Agora anda por mês de
-    // calendário de verdade.
     switch (_visao) {
       case VisaoAgenda.dia:
         _dataReferencia = _dataReferencia.add(const Duration(days: 1));
@@ -108,9 +105,6 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
         _dataReferencia = _dataReferencia.add(const Duration(days: 7));
         break;
       case VisaoAgenda.mes:
-        // dia fixado em 1: a visão de mês só usa year/month (ver
-        // AgendamentoRepository.listarMes), então isso evita que dias como
-        // 29/30/31 estourem para o mês seguinte em meses mais curtos.
         _dataReferencia = DateTime(_dataReferencia.year, _dataReferencia.month + 1, 1);
         break;
     }
@@ -132,7 +126,6 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     await carregar();
   }
 
-  /// Retorna `null` em sucesso, ou uma mensagem de erro (ex.: conflito de horário).
   Future<String?> salvar(Agendamento agendamento, {required bool novo}) async {
     try {
       if (novo) {
@@ -164,7 +157,6 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
 
   Future<List<Agendamento>> todos() => _repository.listarTodos();
 
-  /// Usado pela tela de Configurações após restaurar um backup.
   Future<void> substituirTudo(List<Agendamento> novos) async {
     await _repository.substituirTudo(novos);
     await carregar();
