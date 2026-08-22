@@ -9,7 +9,7 @@ import 'firebase_options.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Inicializa o banco de dados no Firebase
+  // Inicializa o banco de dados na nuvem
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
