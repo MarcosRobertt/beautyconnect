@@ -1,6 +1,11 @@
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/services/storage/backup_service.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
@@ -19,6 +24,11 @@ class ConfiguracoesScreen extends ConsumerStatefulWidget {
 class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   final _backupService = BackupService();
   bool _processando = false;
+
+  void _atualizarPagina() {
+    // Recarrega a página web para forçar a atualização da versão
+    html.window.location.reload();
+  }
 
   Future<void> _exportarBackup() async {
     setState(() => _processando = true);
@@ -92,12 +102,45 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Configurações')),
+      appBar: AppBar(
+        title: const Text('Configurações'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar Versão / Recarregar Página',
+            onPressed: _atualizarPagina,
+          ),
+        ],
+      ),
       body: _processando
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // --- SEÇÃO IA ---
+                const Text(
+                  'Inteligência Artificial',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.auto_awesome, color: Colors.deepPurple),
+                    title: const Text('Agenda Inteligente (IA)'),
+                    subtitle: const Text('Acesse e configure o assistente virtual da agenda'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.push(AppRoutes.agendaInteligente),
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+
+                // --- SEÇÃO BACKUP ---
+                const Text(
+                  'Backup e Restauração',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.download),
