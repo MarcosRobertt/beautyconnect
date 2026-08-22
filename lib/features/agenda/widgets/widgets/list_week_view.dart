@@ -3,214 +3,231 @@ import 'package:intl/intl.dart';
 
 import '../models/agendamento.dart';
 
-/// Visualização semanal da Agenda em formato lista vertical (otimizada para celular).
-/// Agendamentos agrupados por dia, cada dia é um header seguido de seus agendamentos.
-class ListWeekView extends StatelessWidget {
-  const ListWeekView({
+class TimelineWeekView extends StatelessWidget {
+  const TimelineWeekView({
     super.key,
     required this.agendamentos,
-    required this.clientesNomes,
-    required this.onAgendamentoTapado,
-    required this.onConfirmar,
-    required this.onConcluir,
-    required this.onCancelar,
+    required this.dataReferencia,
+    required this.onIrParaDia,
   });
 
   final List<Agendamento> agendamentos;
-  final Map<String, String> clientesNomes;
-  final Function(Agendamento agendamento) onAgendamentoTapado;
-  final Function(String id) onConfirmar;
-  final Function(String id) onConcluir;
-  final Function(String id) onCancelar;
+  final DateTime dataReferencia;
+  final Function(DateTime data) onIrParaDia;
 
-  Color _corStatus(AgendamentoStatus status) {
-    switch (status) {
-      case AgendamentoStatus.agendado:
-        return const Color(0xFF4DD0E1);
-      case AgendamentoStatus.confirmado:
-        return const Color(0xFF66BB6A);
-      case AgendamentoStatus.concluido:
-        return const Color(0xFF78909C);
-      case AgendamentoStatus.cancelado:
-        return const Color(0xFFEF5350);
-    }
+  static const double _pixelsPorMinuto = 2.0;
+  static const double _larguraHorarios = 45.0;
+
+  int _horaParaMinutos(String hhmm) {
+    final partes = hhmm.split(':');
+    return int.parse(partes[0]) * 60 + int.parse(partes[1]);
   }
 
-  String _labelStatus(AgendamentoStatus status) {
-    switch (status) {
-      case AgendamentoStatus.agendado:
-        return 'Agendado';
-      case AgendamentoStatus.confirmado:
-        return 'Confirmado';
-      case AgendamentoStatus.concluido:
-        return 'Concluído';
-      case AgendamentoStatus.cancelado:
-        return 'Cancelado';
-    }
+  DateTime _obterDomingoSemana(DateTime data) {
+    return data.subtract(Duration(days: data.weekday % 7));
   }
 
-  /// Agrupa agendamentos por data
-  Map<DateTime, List<Agendamento>> _agruparPorData() {
-    final grupos = <DateTime, List<Agendamento>>{};
-    for (final a in agendamentos) {
-      final dataNormalizada = DateTime(a.data.year, a.data.month, a.data.day);
-      grupos.putIfAbsent(dataNormalizada, () => []).add(a);
+  List<Agendamento> _agendamentosDoDia(DateTime dia) {
+    return agendamentos.where((a) {
+      return a.data.year == dia.year && a.data.month == dia.month && a.data.day == dia.day;
+    }).toList();
+  }
+
+  double _calcularTop(String horaInicio, int horaMinima) {
+    final minutos = _horaParaMinutos(horaInicio);
+    final minutosDesdeInicio = minutos - (horaMinima * 60);
+    return minutosDesdeInicio * _pixelsPorMinuto;
+  }
+
+  double _calcularAltura(String horaInicio, String horaFim) {
+    final minInicio = _horaParaMinutos(horaInicio);
+    final minFim = _horaParaMinutos(horaFim);
+    return (minFim - minInicio) * _pixelsPorMinuto;
+  }
+
+  Color _obterCorStatus(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado:
+        return Colors.blue.shade100;
+      case AgendamentoStatus.confirmado:
+        return Colors.green.shade100;
+      case AgendamentoStatus.concluido:
+        return Colors.grey.shade100;
+      case AgendamentoStatus.cancelado:
+        return Colors.red.shade50;
     }
-    return grupos;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (agendamentos.isEmpty) {
-      return const Center(child: Text('Nenhum agendamento nesta semana.'));
+    final domingo = _obterDomingoSemana(dataReferencia);
+    final dias = List.generate(7, (i) => domingo.add(Duration(days: i)));
+
+    int horaMinima = 8;
+    int horaMaxima = 18;
+
+    for (final a in agendamentos) {
+      final horaInicioInt = int.parse(a.horaInicio.split(':')[0]);
+      final horaFimInt = int.parse(a.horaFim.split(':')[0]);
+
+      if (horaInicioInt < horaMinima) {
+        horaMinima = horaInicioInt;
+      }
+      if (horaFimInt > horaMaxima) {
+        horaMaxima = horaFimInt + 1;
+      }
     }
 
-    final grupos = _agruparPorData();
-    final datas = grupos.keys.toList()..sort();
-    final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
+    final alturaTotal = ((horaMaxima - horaMinima) * 60) * _pixelsPorMinuto;
+    final nomesDias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
 
-    return ListView.builder(
-      itemCount: datas.length,
-      itemBuilder: (context, index) {
-        final data = datas[index];
-        final agendamentosDoDia = grupos[data]!..sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header do dia
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(
-                DateFormat("EEEE, dd/MM", 'pt_BR').format(data).toUpperCase(),
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey),
-              ),
-            ),
-
-            // Agendamentos do dia
-            ...agendamentosDoDia.map((a) {
-              final nomeCliente = clientesNomes[a.clienteId] ?? 'Cliente removido';
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Linha 1: Horário e Status
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      children: [
+        // Header
+        SizedBox(
+          height: 60,
+          child: Row(
+            children: [
+              SizedBox(width: _larguraHorarios),
+              for (int i = 0; i < 7; i++)
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => onIrParaDia(dias[i]),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: i < 6
+                              ? BorderSide(color: Colors.grey.shade300, width: 0.5)
+                              : BorderSide.none,
+                        ),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              '${a.horaInicio}–${a.horaFim}',
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              nomesDias[i],
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: _corStatus(a.status).withOpacity(0.2),
-                                border: Border.all(color: _corStatus(a.status)),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                _labelStatus(a.status),
-                                style: TextStyle(
-                                  color: _corStatus(a.status),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-
-                        // Linha 2: Cliente
-                        Text(
-                          nomeCliente,
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-
-                        // Linha 3: Serviço e Valor
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                a.servico,
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
                             Text(
-                              moeda.format(a.valor),
-                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                              dias[i].day.toString(),
+                              style: Theme.of(context).textTheme.labelSmall,
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-
-                        // Linha 4: Botões de ação
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Tooltip(
-                              message: 'Editar',
-                              child: IconButton(
-                                onPressed: () => onAgendamentoTapado(a),
-                                icon: const Icon(Icons.edit_outlined, size: 20),
-                                padding: const EdgeInsets.all(6),
-                                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                              ),
-                            ),
-                            if (a.status == AgendamentoStatus.agendado)
-                              Tooltip(
-                                message: 'Confirmar',
-                                child: IconButton(
-                                  onPressed: () => onConfirmar(a.id),
-                                  icon: const Icon(Icons.verified_outlined, size: 20),
-                                  padding: const EdgeInsets.all(6),
-                                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                                ),
-                              ),
-                            if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
-                              Tooltip(
-                                message: 'Concluir',
-                                child: IconButton(
-                                  onPressed: () => onConcluir(a.id),
-                                  icon: const Icon(Icons.check_circle_outline, size: 20),
-                                  padding: const EdgeInsets.all(6),
-                                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                                ),
-                              ),
-                            if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
-                              Tooltip(
-                                message: 'Cancelar',
-                                child: IconButton(
-                                  onPressed: () => onCancelar(a.id),
-                                  icon: const Icon(Icons.cancel_outlined, size: 20),
-                                  padding: const EdgeInsets.all(6),
-                                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-              );
-            }),
-          ],
-        );
-      },
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+
+        // Body
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.vertical,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Coluna de Horários
+                SizedBox(
+                  width: _larguraHorarios,
+                  child: Column(
+                    children: [
+                      for (int h = horaMinima; h <= horaMaxima; h++)
+                        for (int m = 0; m < 60; m += 30)
+                          SizedBox(
+                            height: 30 * _pixelsPorMinuto,
+                            child: Align(
+                              alignment: Alignment.topLeft,
+                              child: Text(
+                                '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9),
+                              ),
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+
+                // Colunas dos Dias
+                for (int i = 0; i < 7; i++)
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          right: i < 6
+                              ? BorderSide(color: Colors.grey.shade300, width: 0.5)
+                              : BorderSide.none,
+                        ),
+                      ),
+                      child: Stack(
+                        children: [
+                          // Grid de fundo
+                          Column(
+                            children: [
+                              for (int j = 0; j < (horaMaxima - horaMinima) * 2; j++)
+                                Container(
+                                  height: 30 * _pixelsPorMinuto,
+                                  decoration: BoxDecoration(
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey.shade200,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          // Eventos do dia
+                          ..._agendamentosDoDia(dias[i]).map((a) {
+                            final topPx = _calcularTop(a.horaInicio, horaMinima);
+                            final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
+                            final cor = _obterCorStatus(a.status);
+
+                            return Positioned(
+                              top: topPx,
+                              left: 2,
+                              right: 2,
+                              height: heightPx > 20 ? heightPx : 20,
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => onIrParaDia(dias[i]),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: cor,
+                                    borderRadius: BorderRadius.circular(3),
+                                    border: Border.all(
+                                      color: Colors.grey.shade300,
+                                      width: 0.5,
+                                    ),
+                                  ),
+                                  padding: const EdgeInsets.all(2),
+                                  child: Text(
+                                    '${a.servico}',
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
