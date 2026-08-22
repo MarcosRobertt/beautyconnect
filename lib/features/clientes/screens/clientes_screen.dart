@@ -130,7 +130,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       final ultimaData = agsCliente
           .map((a) => a.data)
           .reduce((a, b) => a.isAfter(b) ? a : b);
-      return hoje.difference(ultimaData).inDays <= 45;
+      return hoje.difference(ultimaData).inDays <= 30;
     }).toList();
 
     return _construirListaPadrao(ativos);
@@ -138,12 +138,15 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
 
   Widget _construirListaRecorrencia(
       List<Cliente> clientes, List<Agendamento> agendamentos) {
+    final hoje = DateTime.now();
     final recorrentes = clientes.where((c) {
-      final qtd = agendamentos
-          .where((a) =>
-              a.clienteId == c.id && a.status == AgendamentoStatus.concluido)
-          .length;
-      return qtd >= 2;
+      final agsCliente = agendamentos.where((a) =>
+          a.clienteId == c.id && a.status != AgendamentoStatus.cancelado);
+      if (agsCliente.isEmpty) return false;
+      final ultimaData = agsCliente
+          .map((a) => a.data)
+          .reduce((a, b) => a.isAfter(b) ? a : b);
+      return hoje.difference(ultimaData).inDays <= 15;
     }).toList();
 
     return _construirListaPadrao(recorrentes);
@@ -159,7 +162,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       final ultimaData = agsCliente
           .map((a) => a.data)
           .reduce((a, b) => a.isAfter(b) ? a : b);
-      return hoje.difference(ultimaData).inDays > 45;
+      return hoje.difference(ultimaData).inDays > 30;
     }).toList();
 
     return _construirListaPadrao(inativos);
