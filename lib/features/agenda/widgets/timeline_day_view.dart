@@ -60,30 +60,36 @@ class TimelineDayView extends StatelessWidget {
     }
   }
 
-  Widget _buildStatusBadge(AgendamentoStatus status) {
+  Widget _buildStatusBadge(AgendamentoStatus status, bool isBloqueio) {
+    // Se for bloqueio, muda a badge para visual de alerta
+    if (isBloqueio) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.block, size: 10, color: Colors.grey.shade800),
+            const SizedBox(width: 3),
+            Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
+          ],
+        ),
+      );
+    }
+
     final statusText = _getStatusText(status);
     final statusIcon = _getStatusIcon(status);
     final badgeColor = _getStatusBadgeColor(status);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: badgeColor,
-        borderRadius: BorderRadius.circular(4),
-      ),
+      decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(4)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(statusIcon, size: 10, color: Colors.grey.shade700),
           const SizedBox(width: 3),
-          Text(
-            statusText,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
-            ),
-          ),
+          Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
         ],
       ),
     );
@@ -91,40 +97,28 @@ class TimelineDayView extends StatelessWidget {
 
   String _getStatusText(AgendamentoStatus status) {
     switch (status) {
-      case AgendamentoStatus.agendado:
-        return 'Agendado';
-      case AgendamentoStatus.confirmado:
-        return 'Confirmado';
-      case AgendamentoStatus.concluido:
-        return 'Finalizado';
-      case AgendamentoStatus.cancelado:
-        return 'Cancelado';
+      case AgendamentoStatus.agendado: return 'Agendado';
+      case AgendamentoStatus.confirmado: return 'Confirmado';
+      case AgendamentoStatus.concluido: return 'Finalizado';
+      case AgendamentoStatus.cancelado: return 'Cancelado';
     }
   }
 
   IconData _getStatusIcon(AgendamentoStatus status) {
     switch (status) {
-      case AgendamentoStatus.agendado:
-        return Icons.schedule;
-      case AgendamentoStatus.confirmado:
-        return Icons.check;
-      case AgendamentoStatus.concluido:
-        return Icons.check_circle;
-      case AgendamentoStatus.cancelado:
-        return Icons.cancel;
+      case AgendamentoStatus.agendado: return Icons.schedule;
+      case AgendamentoStatus.confirmado: return Icons.check;
+      case AgendamentoStatus.concluido: return Icons.check_circle;
+      case AgendamentoStatus.cancelado: return Icons.cancel;
     }
   }
 
   Color _getStatusBadgeColor(AgendamentoStatus status) {
     switch (status) {
-      case AgendamentoStatus.agendado:
-        return Colors.blue.shade50;
-      case AgendamentoStatus.confirmado:
-        return Colors.green.shade50;
-      case AgendamentoStatus.concluido:
-        return Colors.grey.shade100;
-      case AgendamentoStatus.cancelado:
-        return Colors.red.shade50;
+      case AgendamentoStatus.agendado: return Colors.blue.shade50;
+      case AgendamentoStatus.confirmado: return Colors.green.shade50;
+      case AgendamentoStatus.concluido: return Colors.grey.shade100;
+      case AgendamentoStatus.cancelado: return Colors.red.shade50;
     }
   }
 
@@ -138,12 +132,8 @@ class TimelineDayView extends StatelessWidget {
         final horaInicioInt = int.parse(a.horaInicio.split(':')[0]);
         final horaFimInt = int.parse(a.horaFim.split(':')[0]);
 
-        if (horaInicioInt < horaMinima) {
-          horaMinima = horaInicioInt;
-        }
-        if (horaFimInt > horaMaxima) {
-          horaMaxima = horaFimInt + 1;
-        }
+        if (horaInicioInt < horaMinima) horaMinima = horaInicioInt;
+        if (horaFimInt > horaMaxima) horaMaxima = horaFimInt + 1;
       }
     }
 
@@ -176,17 +166,14 @@ class TimelineDayView extends StatelessWidget {
             child: SingleChildScrollView(
               scrollDirection: Axis.vertical,
               child: GestureDetector(
-                // CORREÇÃO: Usando onTapUp para evitar colisão com o clique do card
                 onTapUp: (details) {
                   final yRelativa = details.localPosition.dy;
                   final minutosDesdeInicio = (yRelativa / _pixelsPorMinuto).toInt();
                   final minutosAbsolutos = (horaMinima * 60) + minutosDesdeInicio;
                   final horas = minutosAbsolutos ~/ 60;
                   final minutos = minutosAbsolutos % 60;
-
                   final minutosArredondados = (minutos ~/ 30) * 30;
-                  final horaClicada =
-                      '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
+                  final horaClicada = '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
                   onNovoAgendamento(horaClicada);
                 },
                 child: Stack(
@@ -201,12 +188,7 @@ class TimelineDayView extends StatelessWidget {
                             Container(
                               height: 30 * _pixelsPorMinuto,
                               decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                    color: Colors.grey.shade200,
-                                    width: 0.5,
-                                  ),
-                                ),
+                                border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
                               ),
                             ),
                         ],
@@ -215,7 +197,9 @@ class TimelineDayView extends StatelessWidget {
                     ...agendamentos.map((a) {
                       final topPx = _calcularTop(a.horaInicio, horaMinima);
                       final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
-                      final nomeCliente = clientesPorId[a.clienteId] ?? 'Cliente removido';
+                      
+                      final isBloqueio = a.clienteId == 'BLOQUEIO';
+                      final nomeCliente = isBloqueio ? 'Compromisso Pessoal' : (clientesPorId[a.clienteId] ?? 'Cliente removido');
                       final cor = _obterCorStatus(a.status);
 
                       return Positioned(
@@ -224,17 +208,13 @@ class TimelineDayView extends StatelessWidget {
                         right: 8,
                         height: heightPx > 40 ? heightPx : 40,
                         child: GestureDetector(
-                          // CORREÇÃO: Impede o clique de vazar para o fundo da tela
                           behavior: HitTestBehavior.opaque,
                           onTap: () => onEditar(a.id),
                           child: Container(
                             decoration: BoxDecoration(
                               color: cor,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: Colors.grey.shade300,
-                                width: 1,
-                              ),
+                              border: Border.all(color: Colors.grey.shade300, width: 1),
                             ),
                             padding: const EdgeInsets.all(6),
                             child: Column(
@@ -244,44 +224,23 @@ class TimelineDayView extends StatelessWidget {
                                 Row(
                                   crossAxisAlignment: CrossAxisAlignment.center,
                                   children: [
-                                    _buildStatusBadge(a.status),
+                                    _buildStatusBadge(a.status, isBloqueio),
                                     const Spacer(),
-                                    if (a.status == AgendamentoStatus.agendado)
+                                    // BOTOES SUMIRAM SE FOR BLOQUEIO
+                                    if (!isBloqueio && a.status == AgendamentoStatus.agendado)
                                       GestureDetector(
                                         onTap: () => onConfirmar(a.id),
                                         child: Padding(
                                           padding: const EdgeInsets.all(4),
-                                          child: Icon(
-                                            Icons.verified_outlined,
-                                            size: 20,
-                                            color: Colors.grey.shade700,
-                                          ),
+                                          child: Icon(Icons.verified_outlined, size: 20, color: Colors.grey.shade700),
                                         ),
                                       ),
-                                    if (a.status == AgendamentoStatus.agendado ||
-                                        a.status == AgendamentoStatus.confirmado)
-                                      GestureDetector(
-                                        onTap: () => onEditar(a.id),
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(4),
-                                          child: Icon(
-                                            Icons.edit_outlined,
-                                            size: 20,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ),
-                                    if (a.status == AgendamentoStatus.agendado ||
-                                        a.status == AgendamentoStatus.confirmado)
+                                    if (!isBloqueio && (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado))
                                       GestureDetector(
                                         onTap: () => onConcluir(a.id),
                                         child: Padding(
                                           padding: const EdgeInsets.all(4),
-                                          child: Icon(
-                                            Icons.check_circle_outline,
-                                            size: 20,
-                                            color: Colors.grey.shade700,
-                                          ),
+                                          child: Icon(Icons.check_circle_outline, size: 20, color: Colors.grey.shade700),
                                         ),
                                       ),
                                   ],
@@ -290,30 +249,25 @@ class TimelineDayView extends StatelessWidget {
                                 Flexible(
                                   child: Text(
                                     '${a.horaInicio}–${a.horaFim}',
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 11,
-                                        ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, fontSize: 11),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 Flexible(
                                   child: Text(
                                     a.servico,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, fontWeight: isBloqueio ? FontWeight.bold : FontWeight.normal),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                Flexible(
-                                  child: Text(
-                                    nomeCliente,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                if (!isBloqueio)
+                                  Flexible(
+                                    child: Text(
+                                      nomeCliente,
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
+                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
