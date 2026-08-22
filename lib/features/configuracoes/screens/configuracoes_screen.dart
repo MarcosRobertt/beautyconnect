@@ -1,3 +1,4 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -103,8 +104,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
           child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              
-              // NOVO CARD: ACESSO À INTELIGÊNCIA E METAS DA IA
+              // CARD: ACESSO À INTELIGÊNCIA E METAS DA IA
               Card(
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(16),
@@ -138,7 +138,38 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
               ),
               const SizedBox(height: 16),
 
-              // CARD ORIGINAL DE BACKUP MANTIDO INTACTO
+              // NOVO CARD: ATUALIZAR / RECARREGAR APLICAÇÃO
+              Card(
+                child: ListTile(
+                  contentPadding: const EdgeInsets.all(16),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.refresh_outlined, color: Colors.blue),
+                  ),
+                  title: const Text(
+                    'Atualizar Aplicativo',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Força o recarregamento do sistema no navegador para aplicar novas melhorias e correções.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    html.window.location.reload();
+                  },
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // CARD DE BACKUP DOS DADOS
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -148,9 +179,8 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                       Text('Backup dos dados', style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 8),
                       Text(
-                        'Este app funciona sem servidor: os dados ficam salvos localmente no '
-                        'navegador (IndexedDB, via Hive). Use exportar/importar para guardar uma '
-                        'cópia de segurança ou transferir os dados para outro computador.',
+                        'Os dados agora estão sincronizados na nuvem (Firebase). Use exportar/importar '
+                        'para guardar uma cópia física de segurança ou transferir os dados.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 12),
