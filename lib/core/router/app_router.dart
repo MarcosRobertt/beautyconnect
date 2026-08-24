@@ -8,7 +8,7 @@ import '../../features/clientes/screens/cliente_form_screen.dart';
 import '../../features/clientes/screens/clientes_screen.dart';
 import '../../features/clientes/screens/historico_cliente_screen.dart';
 import '../../features/configuracoes/screens/configuracoes_screen.dart';
-import '../../features/configuracoes/screens/analise_ia_screen.dart'; // Importação corrigida
+import '../../features/configuracoes/screens/analise_ia_screen.dart'; // IMPORTAÇÃO CORRETA AQUI
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/servicos/screens/servico_form_screen.dart';
 import '../../features/servicos/screens/servicos_screen.dart';
@@ -91,13 +91,13 @@ final appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => const AgendaInteligenteScreen(),
     ),
-    // Rota adicionada exclusivamente para a IA de Configurações
+    // Rota da IA Estratégica (apontando para AnaliseIaScreen)
     GoRoute(
       path: '/consultoria-ia',
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) {
         final contextoMetricas = state.extra as String?;
-        return AnaliseIaScreen(contextoMetricas: contextoMetricas); // Chamada da classe corrigida
+        return AnaliseIaScreen(contextoMetricas: contextoMetricas); // NOME DA CLASSE CORRETO AQUI
       },
     ),
   ],
