@@ -8,7 +8,7 @@ import '../../features/clientes/screens/cliente_form_screen.dart';
 import '../../features/clientes/screens/clientes_screen.dart';
 import '../../features/clientes/screens/historico_cliente_screen.dart';
 import '../../features/configuracoes/screens/configuracoes_screen.dart';
-import '../../features/configuracoes/screens/consultoria_ia_screen.dart'; // NOVA IMPORTAÇÃO
+import '../../features/configuracoes/screens/analise_ia_screen.dart'; // Importação atualizada para o arquivo que já existe
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/servicos/screens/servico_form_screen.dart';
 import '../../features/servicos/screens/servicos_screen.dart';
@@ -80,20 +80,21 @@ final appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => AgendamentoFormScreen(agendamentoId: state.pathParameters['id']),
     ),
-    // IA da Agenda (Operacional - Mantida intacta)
+    // IA da Agenda (Operacional - Fica no Dashboard/Agenda)
     GoRoute(
       path: AppRoutes.agendaInteligente,
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => const AgendaInteligenteScreen(),
     ),
-    // NOVA: IA de Consultoria Estratégica (Métricas de Negócio)
+    // NOVA: IA de Consultoria Estratégica (Métricas de Negócio - Fica nas Configurações)
     GoRoute(
       path: '/consultoria-ia',
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) {
         // Captura o texto com as métricas enviado pela tela de configurações
         final contextoMetricas = state.extra as String?;
-        return ConsultoriaIaScreen(contextoMetricas: contextoMetricas);
+        // Instancia a classe correta do arquivo reaproveitado
+        return AnaliseIaScreen(contextoMetricas: contextoMetricas); 
       },
     ),
   ],
