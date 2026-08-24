@@ -29,7 +29,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     html.window.location.reload();
   }
 
-  // --- FUNÇÃO DA IA COM MÉTRICAS ADICIONADA AQUI ---
   void _abrirIA() {
     final clientes = ref.read(clienteControllerProvider).value ?? [];
     final agendamentos = ref.read(todosAgendamentosProvider).value ?? [];
@@ -61,9 +60,9 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     3. Ações para preencher horários ociosos na agenda.
     ''';
 
-    context.push(AppRoutes.agendaInteligente, extra: contextoIA);
+    // A CORREÇÃO ESTÁ AQUI: Roteando para a tela de Consultoria em vez da Agenda Inteligente
+    context.push('/consultoria-ia', extra: contextoIA);
   }
-  // ------------------------------------------------
 
   Future<void> _exportarBackup() async {
     setState(() => _processando = true);
@@ -111,7 +110,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
       final agendamentos = payload['agendamentos'] as List<Agendamento>? ?? [];
       final servicos = payload['servicos'] as List<Servico>? ?? [];
 
-      // Importacao em lote paralela para evitar travamento do navegador
       await Future.wait(servicos.map((s) => ref.read(servicoControllerProvider.notifier).salvar(s)));
       await Future.wait(clientes.map((c) => ref.read(clienteControllerProvider.notifier).salvar(c)));
       await Future.wait(agendamentos.map((a) => ref.read(agendamentoControllerProvider.notifier).salvar(a, novo: true)));
@@ -162,10 +160,10 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                 Card(
                   child: ListTile(
                     leading: const Icon(Icons.auto_awesome, color: Colors.deepPurple),
-                    title: const Text('Consultoria Inteligente (IA)'), // Título atualizado
-                    subtitle: const Text('Analisa TM, Retenção e sugere melhorias para o Studio'), // Subtítulo atualizado
+                    title: const Text('Consultoria Inteligente (IA)'),
+                    subtitle: const Text('Analisa TM, Retenção e sugere melhorias para o Studio'),
                     trailing: const Icon(Icons.chevron_right),
-                    onTap: _abrirIA, // Chamada para a nova função
+                    onTap: _abrirIA, 
                   ),
                 ),
                 const SizedBox(height: 24),
