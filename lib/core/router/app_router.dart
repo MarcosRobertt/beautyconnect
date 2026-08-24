@@ -8,15 +8,13 @@ import '../../features/clientes/screens/cliente_form_screen.dart';
 import '../../features/clientes/screens/clientes_screen.dart';
 import '../../features/clientes/screens/historico_cliente_screen.dart';
 import '../../features/configuracoes/screens/configuracoes_screen.dart';
+import '../../features/configuracoes/screens/consultoria_ia_screen.dart'; // NOVA IMPORTAÇÃO
 import '../../features/dashboard/screens/dashboard_screen.dart';
 import '../../features/servicos/screens/servico_form_screen.dart';
 import '../../features/servicos/screens/servicos_screen.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../constants/app_constants.dart';
 
-/// Rotas do app, conforme documento técnico:
-/// /, /clientes, /clientes/novo, /clientes/editar, /agenda, /agenda/novo,
-/// /configuracoes.
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 final GlobalKey<NavigatorState> shellNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -24,7 +22,6 @@ final appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: AppRoutes.dashboard,
   routes: [
-    // Shell com navegação lateral/inferior — Dashboard, Clientes, Agenda, Configurações.
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) => AppScaffold(navigationShell: navigationShell),
       branches: [
@@ -45,8 +42,6 @@ final appRouter = GoRouter(
         ]),
       ],
     ),
-
-    // Telas de formulário abrem por cima do shell (rota de nível raiz).
     GoRoute(
       path: AppRoutes.clienteNovo,
       parentNavigatorKey: rootNavigatorKey,
@@ -85,10 +80,21 @@ final appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => AgendamentoFormScreen(agendamentoId: state.pathParameters['id']),
     ),
+    // IA da Agenda (Operacional - Mantida intacta)
     GoRoute(
       path: AppRoutes.agendaInteligente,
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => const AgendaInteligenteScreen(),
+    ),
+    // NOVA: IA de Consultoria Estratégica (Métricas de Negócio)
+    GoRoute(
+      path: '/consultoria-ia',
+      parentNavigatorKey: rootNavigatorKey,
+      builder: (context, state) {
+        // Captura o texto com as métricas enviado pela tela de configurações
+        final contextoMetricas = state.extra as String?;
+        return ConsultoriaIaScreen(contextoMetricas: contextoMetricas);
+      },
     ),
   ],
 );
