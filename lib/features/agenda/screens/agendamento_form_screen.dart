@@ -206,7 +206,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return resultado ?? false;
   }
 
-  // NOVA LÓGICA DE VERIFICAÇÃO PARA ACEITAR MÚLTIPLAS DATAS
   Future<bool> _verificarConflitoDeHorarioParaData(DateTime dataAlvo) async {
     final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
     final minNovoInicio = _horaInicio.hour * 60 + _horaInicio.minute;
@@ -291,7 +290,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       servicoIdFinal = _servicoId;
     }
 
-    // Geração das datas recorrentes
     List<DateTime> datasParaSalvar = [];
     if (_editando || _tipoRepeticao == 'nenhum') {
       datasParaSalvar.add(_data);
@@ -309,7 +307,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       }
     }
 
-    // Verifica conflito para TODAS as datas geradas
     for (final d in datasParaSalvar) {
       final conflito = await _verificarConflitoDeHorarioParaData(d);
       if (conflito) {
@@ -321,7 +318,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
     final duracaoCalculada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
 
-    // Salva todas as ocorrências
     for (final d in datasParaSalvar) {
       final agendamento = _editando
           ? _original!.copyWith(
@@ -337,7 +333,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               status: _isBloqueio ? AgendamentoStatus.concluido : _original!.status, 
             )
           : Agendamento(
-              id: const Uuid().v4(), // Cria um novo UUID para cada repetição
+              id: const Uuid().v4(), 
               clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId!,
               data: d,
               horaInicio: _formatarHora(_horaInicio),
@@ -393,6 +389,52 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 .where((c) =>
                     c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca))
                 .toList();
+                
+        // LÓGICA DE ALERTA DE ANIVERSÁRIO (Sem alterar mais nada)
+        Widget? alertaAniversario;
+        if (_clienteId != null) {
+          try {
+            final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
+            if (clienteAtual.aniversario != null) {
+              final hoje = DateTime.now();
+              final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
+              var niverEsteAno = DateTime(hoje.year, clienteAtual.aniversario!.month, clienteAtual.aniversario!.day);
+              
+              if (niverEsteAno.isBefore(hojeZerado)) {
+                niverEsteAno = DateTime(hoje.year + 1, clienteAtual.aniversario!.month, clienteAtual.aniversario!.day);
+              }
+              
+              final diff = niverEsteAno.difference(hojeZerado).inDays;
+              if (diff >= 0 && diff <= 15) {
+                final dia = clienteAtual.aniversario!.day.toString().padLeft(2, '0');
+                final mes = clienteAtual.aniversario!.month.toString().padLeft(2, '0');
+                alertaAniversario = Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      border: Border.all(color: Colors.purple.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.cake, color: Colors.purple),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '🎉 Atenção: Aniversário chegando dia $dia/$mes! Que tal oferecer um mimo ou desconto?',
+                            style: TextStyle(color: Colors.purple.shade800, fontWeight: FontWeight.bold, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+            }
+          } catch (_) {}
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -473,6 +515,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   ),
                 ),
               ),
+              
+            if (alertaAniversario != null) alertaAniversario,
           ],
         );
       },
@@ -613,7 +657,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     ],
                   ),
                   
-                  // LÓGICA DE REPETIÇÃO
                   if (!_editando) ...[
                     const SizedBox(height: 12),
                     Row(
@@ -642,7 +685,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             child: DropdownButtonFormField<int>(
                               value: _ocorrencias,
                               decoration: const InputDecoration(labelText: 'Quantas vezes?'),
-                              items: List.generate(11, (i) => i + 2) // 2 a 12 vezes
+                              items: List.generate(11, (i) => i + 2) 
                                   .map((v) => DropdownMenuItem(value: v, child: Text('$v vezes')))
                                   .toList(),
                               onChanged: (v) => setState(() => _ocorrencias = v!),
@@ -652,7 +695,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       ],
                     ),
                   ],
-                  // FIM REPETIÇÃO
 
                   const SizedBox(height: 12),
                   Row(
