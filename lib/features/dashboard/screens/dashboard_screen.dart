@@ -141,7 +141,18 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.cake_outlined,
                     onTap: aniversariantes.isEmpty
                         ? null
-                        : () => _mostrarAniversariantes(context, aniversariantes.map((c) => c.nome).toList()),
+                        : () => _mostrarAniversariantes(
+                              context,
+                              // AQUI É A ÚNICA ALTERAÇÃO: Adicionamos a data ao lado do nome!
+                              aniversariantes.map((c) {
+                                if (c.dataNascimento != null) {
+                                  final dia = c.dataNascimento!.day.toString().padLeft(2, '0');
+                                  final mes = c.dataNascimento!.month.toString().padLeft(2, '0');
+                                  return '${c.nome} (Dia $dia/$mes)';
+                                }
+                                return c.nome;
+                              }).toList(),
+                            ),
                   ),
                 ],
               ),
@@ -399,7 +410,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
             ),
             const SizedBox(height: 16),
 
-            // NOVO: RESUMO RÁPIDO POR FORMA DE PAGAMENTO (INCLUINDO PERMUTA)
             const Text(
               'Formas de Pagamento',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
