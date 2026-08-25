@@ -115,42 +115,45 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          // ESTRUTURA WEB-SAFE: Ícone do Sino + Indicador Vermelho Garantido
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              IconButton(
-                tooltip: 'Central de Lembretes',
-                icon: const Icon(Icons.notifications_outlined, size: 24),
-                onPressed: () => _mostrarCentralNotificacoes(
-                  context,
-                  aniversariantesProximos,
-                  inativas,
-                ),
-              ),
-              if (totalNotificacoes > 0)
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    child: Text(
-                      '$totalNotificacoes',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
+          // CORREÇÃO DO SINO: Stack dentro do ícone para garantir renderização perfeita na AppBar
+          IconButton(
+            tooltip: 'Central de Lembretes',
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(Icons.notifications_outlined),
+                if (totalNotificacoes > 0)
+                  Positioned(
+                    top: -2,
+                    right: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
                       ),
-                      textAlign: TextAlign.center,
+                      constraints: const BoxConstraints(
+                        minWidth: 14,
+                        minHeight: 14,
+                      ),
+                      child: Text(
+                        '$totalNotificacoes',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
+            onPressed: () => _mostrarCentralNotificacoes(
+              context,
+              aniversariantesProximos,
+              inativas,
+            ),
           ),
           IconButton(
             tooltip: 'Agenda Inteligente',
@@ -205,11 +208,11 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.attach_money,
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
-                  // NOVO CARD RELEVANTE: Ticket Médio do Dia
+                  // CARD ATUALIZADO: Ícone alterado para o cifrão de dinheiro
                   _CardMetrica(
                     titulo: 'Ticket Médio (Hoje)',
                     valor: formatarMoeda(ticketMedioHoje),
-                    icone: Icons.analytics_outlined,
+                    icone: Icons.attach_money,
                   ),
                 ],
               ),
