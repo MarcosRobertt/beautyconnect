@@ -97,12 +97,12 @@ class _AgendaInteligenteScreenState extends ConsumerState<AgendaInteligenteScree
               final nomeDiaFraco = nomesDias[diaMaisFraco] ?? 'Terça';
 
               // 4. CLIENTES PARA REATIVAÇÃO (Lógica original aprimorada com IA)
-              final atrasados = <({String nome, String telefone, DateTime sugerida})>[];
+              final atrasados = <({String id, String nome, String telefone, DateTime sugerida})>[];
               for (final c in clientes) {
                 final doCliente = todos.where((a) => a.clienteId == c.id).toList();
                 final info = InteligenciaService.calcularParaCliente(doCliente);
                 if (info.atrasado && info.proximaDataSugerida != null) {
-                  atrasados.add((nome: c.nome, telefone: c.telefone, sugerida: info.proximaDataSugerida!));
+                  atrasados.add((id: c.id, nome: c.nome, telefone: c.telefone, sugerida: info.proximaDataSugerida!));
                 }
               }
               atrasados.sort((a, b) => a.sugerida.compareTo(b.sugerida));
@@ -215,13 +215,30 @@ class _AgendaInteligenteScreenState extends ConsumerState<AgendaInteligenteScree
                                 side: BorderSide(color: Colors.green.shade300),
                                 padding: const EdgeInsets.symmetric(horizontal: 12),
                               ),
-                              icon: const Icon(Icons.whatsapp, size: 16),
+                              icon: const Icon(Icons.chat, size: 16), // Corrigido para Icons.chat
                               label: const Text('Convidar', style: TextStyle(fontSize: 12)),
                               onPressed: () {
-                                final msg = 'Oi ${c.nome}, tudo bem? Sentimos sua falta! 🥰\n\n'
-                                    'Estou com uma condição especial exclusiva para esta $nomeDiaFraco. '
-                                    'Que tal agendarmos seu horário e colocarmos o papo em dia?';
-                                WhatsAppService.enviarMensagemPersonalizada(telefone: c.telefone, mensagem: msg);
+                                // CORREÇÃO: Utiliza o envio de confirmação com um agendamento fictício de oferta, igual ao Dashboard!
+                                final agendamentoOferta = Agendamento(
+                                  id: 'oferta_ia',
+                                  clienteId: c.id,
+                                  data: DateTime.now(),
+                                  horaInicio: '🎁',
+                                  horaFim: '✨',
+                                  duracaoMinutos: 0,
+                                  servico: 'Condição Especial ($nomeDiaFraco)',
+                                  valor: 0.0,
+                                  status: AgendamentoStatus.agendado,
+                                  observacao: 'Sentimos sua falta! Volte a se cuidar conosco.',
+                                  createdAt: DateTime.now(),
+                                  updatedAt: DateTime.now(),
+                                );
+                                
+                                WhatsAppService.enviarConfirmacao(
+                                  telefone: c.telefone,
+                                  nomeCliente: c.nome,
+                                  agendamento: agendamentoOferta,
+                                );
                               },
                             ),
                           ),
