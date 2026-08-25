@@ -112,17 +112,19 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          Badge(
-            isLabelVisible: totalNotificacoes > 0,
-            label: Text('$totalNotificacoes'),
-            child: IconButton(
-              tooltip: 'Notificações & Lembretes',
-              icon: const Icon(Icons.notifications_outlined),
-              onPressed: () => _mostrarCentralNotificacoes(
-                context,
-                aniversariantesProximos,
-                inativas,
-              ),
+          // CORREÇÃO 1: Badge posicionado no 'icon' do IconButton para renderização perfeita
+          IconButton(
+            tooltip: 'Notificações & Lembretes',
+            icon: Badge(
+              isLabelVisible: totalNotificacoes > 0,
+              label: Text('$totalNotificacoes'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            onPressed: () => _mostrarCentralNotificacoes(
+              context,
+              aniversariantesProximos,
+              inativas,
+              abaInicial: 0,
             ),
           ),
           IconButton(
@@ -174,6 +176,7 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.attach_money,
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
+                  // CORREÇÃO 2: Passa 'abaInicial: 1' para direcionar à aba de Inativas ao clicar
                   _CardMetrica(
                     titulo: 'Clientes Inativas (>25d)',
                     valor: inativas.isEmpty
@@ -184,6 +187,7 @@ class DashboardScreen extends ConsumerWidget {
                       context,
                       aniversariantesProximos,
                       inativas,
+                      abaInicial: 1,
                     ),
                   ),
                 ],
@@ -233,8 +237,9 @@ class DashboardScreen extends ConsumerWidget {
   void _mostrarCentralNotificacoes(
     BuildContext context,
     List<Cliente> aniversariantes,
-    List<Map<String, dynamic>> inativas,
-  ) {
+    List<Map<String, dynamic>> inativas, {
+    int abaInicial = 0,
+  }) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -244,6 +249,7 @@ class DashboardScreen extends ConsumerWidget {
       builder: (context) => _ModalCentralNotificacoes(
         aniversariantes: aniversariantes,
         inativas: inativas,
+        abaInicial: abaInicial,
       ),
     );
   }
@@ -264,15 +270,18 @@ class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({
     required this.aniversariantes,
     required this.inativas,
+    this.abaInicial = 0,
   });
 
   final List<Cliente> aniversariantes;
   final List<Map<String, dynamic>> inativas;
+  final int abaInicial;
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
+      initialIndex: abaInicial,
       child: SafeArea(
         child: Container(
           height: MediaQuery.of(context).size.height * 0.75,
