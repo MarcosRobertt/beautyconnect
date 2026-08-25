@@ -21,11 +21,42 @@ String formatarData(DateTime data) {
   return '${diasSemana[data.weekday - 1]}, ${data.day} de ${meses[data.month - 1]}';
 }
 
-class DashboardScreen extends ConsumerWidget {
+// MOTOR DE INTELIGÊNCIA: Gera dicas baseadas na profissão
+String gerarDicaEstrategica(Cliente? cliente, Agendamento agendamento) {
+  if (cliente == null || cliente.id == 'BLOQUEIO') return 'Dica IA: Confirme o horário com antecedência para evitar buracos na agenda.';
+  
+  final profissao = cliente.profissao?.toLowerCase() ?? '';
+  
+  if (profissao.contains('enfermeira') || profissao.contains('médica') || profissao.contains('saúde') || profissao.contains('dentista')) {
+    return 'Dica IA: Profissionais de saúde sofrem com ressecamento pelas luvas/lavagem. Ofereça um Spa de Mãos com hidratação profunda (+R\$ 25).';
+  } else if (profissao.contains('advogada') || profissao.contains('executiva') || profissao.contains('bancária') || profissao.contains('empresária')) {
+    return 'Dica IA: Imagem impecável é crucial e o tempo é curto. Ofereça blindagem ou esmaltação em gel para garantir durabilidade sem descascar.';
+  } else if (profissao.contains('professora') || profissao.contains('vendedora') || profissao.contains('influenciadora')) {
+    return 'Dica IA: Rotina exposta! Sugira cores tendências, Nail Arts ou produtos home care como canetas hidratantes de cutícula para levar na bolsa.';
+  } else if (profissao.contains('estudante') || profissao.contains('recepcionista')) {
+    return 'Dica IA: Foco em custo-benefício. Sugira pacotes ou combos mensais de pé e mão para garantir a recorrência.';
+  }
+  
+  // Dica genérica baseada em observação ou padrão
+  if (cliente.observacoes.isNotEmpty) {
+    return 'Dica IA: Revise as observações da cliente. Use detalhes de conversas anteriores para criar conexão e oferecer um serviço complementar ao "${agendamento.servico}".';
+  }
+  
+  return 'Dica IA: Descubra a profissão desta cliente hoje! Atualize o cadastro e, no próximo atendimento, a IA trará uma estratégia de venda exclusiva.';
+}
+
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  String _filtroPlanoVoo = 'Hoje';
+
+  @override
+  Widget build(BuildContext context) {
     final metricas = ref.watch(dashboardMetricsProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
     final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
@@ -35,12 +66,12 @@ class DashboardScreen extends ConsumerWidget {
     final larguraTela = MediaQuery.of(context).size.width;
 
     final clientes = clientesAsync.value ?? [];
-    final clientesPorId = {for (final c in clientes) c.id: c.nome};
+    final clientesPorId = {for (final c in clientes) c.id: c};
     final todosAgendamentos = todosAgendamentosAsync.value ?? [];
 
     final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
     
-    // LEMBRETE 1: Aniversariantes nos próximos 15 dias
+    // NOTIFICAÇÕES (Aniversários e Inativas)
     final aniversariantesProximos = clientes.where((c) {
       if (c.aniversario == null) return false;
       var niverEsteAno = DateTime(hoje.year, c.aniversario!.month, c.aniversario!.day);
@@ -51,7 +82,6 @@ class DashboardScreen extends ConsumerWidget {
       return diff >= 0 && diff <= 15;
     }).toList();
 
-    // LEMBRETE 2: Clientes Inativas há mais de 25 dias
     final inativas = <Map<String, dynamic>>[];
     for (final c in clientes) {
       final agendamentosCliente = todosAgendamentos.where((a) =>
@@ -64,24 +94,36 @@ class DashboardScreen extends ConsumerWidget {
         final diasSemVir = hojeZerado.difference(DateTime(ultimoAgendamento.data.year, ultimoAgendamento.data.month, ultimoAgendamento.data.day)).inDays;
 
         if (diasSemVir > 25) {
-          inativas.add({
-            'cliente': c,
-            'dias': diasSemVir,
-            'ultimaData': ultimoAgendamento.data,
-          });
+          inativas.add({'cliente': c, 'dias': diasSemVir, 'ultimaData': ultimoAgendamento.data});
         }
       }
     }
-
     final totalNotificacoes = aniversariantesProximos.length + inativas.length;
 
-    final receitaHoje = todosAgendamentos.where((a) =>
-        a.clienteId != 'BLOQUEIO' &&
-        a.status != AgendamentoStatus.cancelado &&
-        a.data.year == hoje.year &&
-        a.data.month == hoje.month &&
-        a.data.day == hoje.day
-    ).fold(0.0, (sum, a) => sum + a.valor);
+    // CÁLCULOS COMPARATIVOS DA IA
+    final inicioSemanaAtual = hoje.subtract(Duration(days: hoje.weekday % 7));
+    final inicioSemanaAnterior = inicioSemanaAtual.subtract(const Duration(days: 7));
+    
+    double receitaSemanaAtual = 0;
+    double receitaSemanaAnterior = 0;
+    int atendimentosSemanaAtual = 0;
+    int atendimentosSemanaAnterior = 0;
+
+    for (final a in todosAgendamentos) {
+      if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
+      
+      if (a.data.isAfter(inicioSemanaAtual.subtract(const Duration(seconds: 1)))) {
+        receitaSemanaAtual += a.valor;
+        atendimentosSemanaAtual++;
+      } else if (a.data.isAfter(inicioSemanaAnterior.subtract(const Duration(seconds: 1))) && 
+                 a.data.isBefore(inicioSemanaAtual)) {
+        receitaSemanaAnterior += a.valor;
+        atendimentosSemanaAnterior++;
+      }
+    }
+
+    final ticketMedioAtual = atendimentosSemanaAtual > 0 ? receitaSemanaAtual / atendimentosSemanaAtual : 0.0;
+    final ticketMedioAnterior = atendimentosSemanaAnterior > 0 ? receitaSemanaAnterior / atendimentosSemanaAnterior : 0.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -98,24 +140,13 @@ class DashboardScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'BeautyConnect',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'by studio condeza',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                  ),
-                ),
+                const Text('BeautyConnect', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('by studio condeza', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w400, color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
               ],
             ),
           ],
         ),
         actions: [
-          // CORREÇÃO DO SINO: Stack dentro do ícone para garantir renderização perfeita na AppBar
           IconButton(
             tooltip: 'Central de Lembretes',
             icon: Stack(
@@ -124,36 +155,21 @@ class DashboardScreen extends ConsumerWidget {
                 const Icon(Icons.notifications_outlined),
                 if (totalNotificacoes > 0)
                   Positioned(
-                    top: -2,
-                    right: -2,
+                    top: -2, right: -2,
                     child: Container(
                       padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 14,
-                        minHeight: 14,
-                      ),
+                      decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
                       child: Text(
                         '$totalNotificacoes',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
                         textAlign: TextAlign.center,
                       ),
                     ),
                   ),
               ],
             ),
-            onPressed: () => _mostrarCentralNotificacoes(
-              context,
-              aniversariantesProximos,
-              inativas,
-            ),
+            onPressed: () => _mostrarCentralNotificacoes(context, aniversariantesProximos, inativas),
           ),
           IconButton(
             tooltip: 'Agenda Inteligente',
@@ -170,18 +186,27 @@ class DashboardScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (m) {
-          final ticketMedioHoje = m.totalAgendamentosHoje > 0
-              ? receitaHoje / m.totalAgendamentosHoje
-              : 0.0;
+          // Filtragem da lista do "Plano de Voo"
+          List<Agendamento> agendaFiltro = [];
+          if (_filtroPlanoVoo == 'Hoje') {
+            agendaFiltro = m.agendaHoje;
+          } else if (_filtroPlanoVoo == 'Amanhã') {
+            final amanha = DateTime(hoje.year, hoje.month, hoje.day + 1);
+            agendaFiltro = todosAgendamentos.where((a) =>
+              a.data.year == amanha.year && a.data.month == amanha.month && a.data.day == amanha.day
+            ).toList();
+            agendaFiltro.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
+          }
 
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
               Text(rotuloData, style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 4),
-              Text('Resumo do seu dia de trabalho.', style: Theme.of(context).textTheme.bodyMedium),
+              Text('Painel Estratégico de Desempenho.', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 20),
               
+              // GRID DE MÉTRICAS COMPARATIVAS
               GridView.count(
                 crossAxisCount: larguraTela > 800 ? 4 : (larguraTela < 360 ? 1 : 2),
                 shrinkWrap: true,
@@ -190,66 +215,135 @@ class DashboardScreen extends ConsumerWidget {
                 crossAxisSpacing: 12,
                 childAspectRatio: larguraTela < 360 ? 2.5 : 1.4,
                 children: [
-                  _CardMetrica(
-                    titulo: 'Atendimentos hoje',
-                    valor: '${m.totalAgendamentosHoje}',
-                    icone: Icons.calendar_today,
-                  ),
-                  _CardMetrica(
-                    titulo: 'Próximo atendimento',
-                    valor: m.proximo != null
-                        ? '${m.proximo!.horaInicio} · ${clientesPorId[m.proximo!.clienteId] ?? "—"}'
-                        : 'Nenhum',
-                    icone: Icons.schedule,
-                  ),
-                  _CardMetrica(
-                    titulo: 'Receita do Dia',
-                    valor: formatarMoeda(receitaHoje),
-                    icone: Icons.attach_money,
+                  _CardMetricaInteligente(
+                    titulo: 'Faturamento (Semana)',
+                    valor: formatarMoeda(receitaSemanaAtual),
+                    icone: Icons.account_balance_wallet,
+                    valorAnterior: receitaSemanaAnterior,
+                    valorAtual: receitaSemanaAtual,
+                    ehMoeda: true,
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
-                  // CARD ATUALIZADO: Ícone alterado para o cifrão de dinheiro
-                  _CardMetrica(
-                    titulo: 'Ticket Médio (Hoje)',
-                    valor: formatarMoeda(ticketMedioHoje),
-                    icone: Icons.attach_money,
+                  _CardMetricaInteligente(
+                    titulo: 'Ticket Médio (Semana)',
+                    valor: formatarMoeda(ticketMedioAtual),
+                    icone: Icons.monetization_on,
+                    valorAnterior: ticketMedioAnterior,
+                    valorAtual: ticketMedioAtual,
+                    ehMoeda: true,
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              const SizedBox(height: 24),
+              
+              // SEÇÃO PLANO DE VOO (LISTA ESTRATÉGICA)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('Plano de Voo Estratégico', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
+                      ButtonSegment(value: 'Amanhã', label: Text('Amanhã', style: TextStyle(fontSize: 11))),
+                    ],
+                    selected: {_filtroPlanoVoo},
+                    onSelectionChanged: (set) => setState(() => _filtroPlanoVoo = set.first),
+                    style: SegmentedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              if (agendaFiltro.isEmpty)
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(child: Text('Nenhum agendamento para $_filtroPlanoVoo.')),
+                  ),
+                )
+              else
+                ...agendaFiltro.map((a) {
+                  final isBloqueio = a.clienteId == "BLOQUEIO";
+                  final cliente = isBloqueio ? null : clientesPorId[a.clienteId];
+                  final nomeCliente = isBloqueio ? "Compromisso Pessoal" : (cliente?.nome ?? "Cliente removido");
+                  final profissao = cliente?.profissao?.isNotEmpty == true ? cliente!.profissao! : 'Profissão não informada';
+                  
+                  if (isBloqueio) {
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ListTile(
+                        leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
+                        title: Text(nomeCliente, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                        subtitle: Text(a.servico),
+                        trailing: StatusChip(status: a.status),
+                      ),
+                    );
+                  }
+
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.purple.shade100, width: 1)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Agenda de hoje', style: Theme.of(context).textTheme.titleMedium),
-                          TextButton(
-                            onPressed: () => context.go(AppRoutes.agenda),
-                            child: const Text('Ver completa'),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(6)),
+                                child: Text(a.horaInicio, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(nomeCliente, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                    Text('$profissao • ${a.servico}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                  ],
+                                ),
+                              ),
+                              StatusChip(status: a.status),
+                            ],
                           ),
+                          const SizedBox(height: 12),
+                          // DICA IA
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    gerarDicaEstrategica(cliente, a),
+                                    style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // CHECKLIST DE ATENDIMENTO
+                          Text('Checklist Padrão Ouro:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                          const SizedBox(height: 4),
+                          _ChecklistItem(texto: 'Chamar pelo nome e consultar restrições/observações.'),
+                          _ChecklistItem(texto: 'Oferecer um serviço complementar focado na necessidade dela.'),
+                          _ChecklistItem(texto: 'Agendar o retorno antes dela sair da cadeira.'),
                         ],
                       ),
-                      if (m.agendaHoje.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 24),
-                          child: Center(child: Text('Nenhum agendamento para hoje.')),
-                        )
-                      else
-                        ...m.agendaHoje.map((a) => ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
-                              title: Text('${clientesPorId[a.clienteId] ?? (a.clienteId == "BLOQUEIO" ? "Compromisso Pessoal" : "Cliente removido")} — ${a.servico}'),
-                              trailing: StatusChip(status: a.status),
-                            )),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
+                  );
+                }),
+                
               const SizedBox(height: 60),
             ],
           );
@@ -266,13 +360,8 @@ class DashboardScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (context) => _ModalCentralNotificacoes(
-        aniversariantes: aniversariantes,
-        inativas: inativas,
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => _ModalCentralNotificacoes(aniversariantes: aniversariantes, inativas: inativas),
     );
   }
 
@@ -280,13 +369,125 @@ class DashboardScreen extends ConsumerWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => _ModalDetalhesReceita(agendamentos: agendamentos),
     );
   }
 }
+
+class _ChecklistItem extends StatelessWidget {
+  const _ChecklistItem({required this.texto});
+  final String texto;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.check_box_outline_blank, size: 14, color: Colors.grey.shade400),
+          const SizedBox(width: 6),
+          Expanded(child: Text(texto, style: TextStyle(fontSize: 12, color: Colors.grey.shade800))),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardMetricaInteligente extends StatelessWidget {
+  const _CardMetricaInteligente({
+    required this.titulo,
+    required this.valor,
+    required this.icone,
+    required this.valorAnterior,
+    required this.valorAtual,
+    this.ehMoeda = false,
+    this.onTap,
+  });
+  
+  final String titulo;
+  final String valor;
+  final IconData icone;
+  final double valorAnterior;
+  final double valorAtual;
+  final bool ehMoeda;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Regra da Inteligência (Cores)
+    Color corBadge = Colors.grey;
+    IconData iconeSeta = Icons.remove;
+    String txtEvolucao = 'Sem base';
+
+    if (valorAnterior > 0) {
+      final variacao = ((valorAtual - valorAnterior) / valorAnterior) * 100;
+      txtEvolucao = '${variacao > 0 ? '+' : ''}${variacao.toStringAsFixed(1)}%';
+      
+      if (variacao >= 10) {
+        corBadge = Colors.green;
+        iconeSeta = Icons.trending_up;
+      } else if (variacao <= -5) {
+        corBadge = Colors.red;
+        iconeSeta = Icons.trending_down;
+      } else {
+        corBadge = Colors.amber.shade700;
+        iconeSeta = Icons.trending_flat;
+      }
+    } else if (valorAtual > 0) {
+      corBadge = Colors.green;
+      iconeSeta = Icons.trending_up;
+      txtEvolucao = 'Novo!';
+    }
+
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icone, color: Theme.of(context).colorScheme.primary, size: 20),
+                  // BADGE DE INTELIGÊNCIA
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(color: corBadge.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: corBadge.withOpacity(0.3))),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(iconeSeta, size: 10, color: corBadge),
+                        const SizedBox(width: 2),
+                        Text(txtEvolucao, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: corBadge)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(titulo, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                valor,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 16),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// OS DOIS MODAIS (_ModalCentralNotificacoes e _ModalDetalhesReceita)
+// MANTÊM EXATAMENTE O MESMO CÓDIGO DA SUA VERSÃO ORIGINAL PARA NÃO QUEBRAR NADA
 
 class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({
@@ -374,7 +575,6 @@ class _ModalCentralNotificacoes extends StatelessWidget {
                               );
                             },
                           ),
-
                     inativas.isEmpty
                         ? const Center(child: Text('Nenhuma cliente inativa encontrada.'))
                         : ListView.separated(
@@ -431,49 +631,6 @@ class _ModalCentralNotificacoes extends StatelessWidget {
   }
 }
 
-class _CardMetrica extends StatelessWidget {
-  const _CardMetrica({required this.titulo, required this.valor, required this.icone, this.onTap});
-  final String titulo;
-  final String valor;
-  final IconData icone;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(icone, color: Theme.of(context).colorScheme.primary, size: 20),
-                  if (onTap != null)
-                    const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(titulo, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(
-                valor,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _ModalDetalhesReceita extends StatefulWidget {
   const _ModalDetalhesReceita({required this.agendamentos});
   final List<Agendamento> agendamentos;
@@ -488,7 +645,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
   @override
   Widget build(BuildContext context) {
     final hoje = DateTime.now();
-
     DateTime inicio;
     DateTime fim;
 
@@ -519,10 +675,7 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
 
     double totalConfirmado = 0.0;
     double totalPendente = 0.0;
-
-    final totalPorForma = <FormaPagamento, double>{
-      for (var f in FormaPagamento.values) f: 0.0
-    };
+    final totalPorForma = <FormaPagamento, double>{ for (var f in FormaPagamento.values) f: 0.0 };
 
     for (final a in filtrados) {
       if (a.status == AgendamentoStatus.concluido || a.status == AgendamentoStatus.confirmado) {
@@ -530,7 +683,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
       } else if (a.status == AgendamentoStatus.agendado) {
         totalPendente += a.valor;
       }
-
       final forma = a.formaPagamento ?? FormaPagamento.pendente;
       totalPorForma[forma] = (totalPorForma[forma] ?? 0.0) + a.valor;
     }
@@ -563,7 +715,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
               ],
             ),
             const SizedBox(height: 12),
-            
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SegmentedButton<String>(
@@ -578,7 +729,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
               ),
             ),
             const SizedBox(height: 16),
-
             Row(
               children: [
                 Expanded(
@@ -613,11 +763,7 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
               ],
             ),
             const SizedBox(height: 16),
-
-            const Text(
-              'Formas de Pagamento',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-            ),
+            const Text('Formas de Pagamento', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 8),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -649,13 +795,8 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
               ),
             ),
             const SizedBox(height: 16),
-      
-            const Text(
-              'Detalhamento por Dia',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
-            ),
+            const Text('Detalhamento por Dia', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
             const SizedBox(height: 8),
-      
             Expanded(
               child: listaDias.isEmpty
                   ? const Center(child: Text('Nenhum faturamento registrado para este período.'))
@@ -667,7 +808,6 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
                         final dataItem = item['data'] as DateTime;
                         final valorItem = item['valor'] as double;
                         final qtdItem = item['qtd'] as int;
-      
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           title: Text(
