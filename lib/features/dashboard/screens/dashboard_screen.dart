@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../core/services/storage/whatsapp_service.dart';
 import '../../../shared/widgets/status_chip.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
@@ -38,7 +38,6 @@ class DashboardScreen extends ConsumerWidget {
     final clientesPorId = {for (final c in clientes) c.id: c.nome};
     final todosAgendamentos = todosAgendamentosAsync.value ?? [];
 
-    // CÁLCULO 1: Aniversariantes nos próximos 15 dias
     final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
     final aniversariantesProximos = clientes.where((c) {
       if (c.aniversario == null) return false;
@@ -50,7 +49,6 @@ class DashboardScreen extends ConsumerWidget {
       return diff >= 0 && diff <= 15;
     }).toList();
 
-    // CÁLCULO 2: Clientes Inativas há mais de 25 dias
     final inativas = <Map<String, dynamic>>[];
     for (final c in clientes) {
       final agendamentosCliente = todosAgendamentos.where((a) =>
@@ -114,7 +112,6 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          // NOVO: Sino de Notificações Inteligente com Contador
           Badge(
             isLabelVisible: totalNotificacoes > 0,
             label: Text('$totalNotificacoes'),
@@ -177,7 +174,6 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.attach_money,
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
-                  // CARD ATUALIZADO: Focado em Retenção de Clientes Inativas
                   _CardMetrica(
                     titulo: 'Clientes Inativas (>25d)',
                     valor: inativas.isEmpty
@@ -234,7 +230,6 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  // NOVO: Central de Notificações (Sino de Lembretes)
   void _mostrarCentralNotificacoes(
     BuildContext context,
     List<Cliente> aniversariantes,
@@ -274,10 +269,17 @@ class _ModalCentralNotificacoes extends StatelessWidget {
   final List<Cliente> aniversariantes;
   final List<Map<String, dynamic>> inativas;
 
+  Future<void> _abrirWhatsApp(String telefone, String mensagem) async {
+    final limpo = telefone.replaceAll(RegExp(r'\D'), '');
+    final comDdi = limpo.startsWith('55') ? limpo : '55$limpo';
+    final uri = Uri.parse('https://wa.me/$comDdi?text=${Uri.encodeComponent(mensagem)}');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hoje = DateTime.now();
-
     return DefaultTabController(
       length: 2,
       child: SafeArea(
@@ -300,15 +302,14 @@ class _ModalCentralNotificacoes extends StatelessWidget {
                 unselectedLabelColor: Colors.grey,
                 indicatorColor: Theme.of(context).colorScheme.primary,
                 tabs: [
-                  Tab(text: ' Aniversários (${aniversariantes.length})'),
-                  Tab(text: ' Inativas (${inativas.length})'),
+                  Tab(text: 'Aniversários (${aniversariantes.length})'),
+                  Tab(text: 'Inativas (${inativas.length})'),
                 ],
               ),
               const SizedBox(height: 12),
               Expanded(
                 child: TabBarView(
                   children: [
-                    // TAB 1: ANIVERSARIANTES (PRÓXIMOS 15 DIAS)
                     aniversariantes.isEmpty
                         ? const Center(child: Text('Nenhum aniversário nos próximos 15 dias.'))
                         : ListView.separated(
@@ -330,17 +331,14 @@ class _ModalCentralNotificacoes extends StatelessWidget {
                                   icon: const Icon(Icons.chat, color: Colors.green),
                                   tooltip: 'Enviar Parabéns no WhatsApp',
                                   onPressed: () {
-                                    WhatsAppService.abrirConversa(
-                                      telefone: cliente.telefone,
-                                      mensagem: 'Olá ${cliente.nome}! 🎉 Vi que seu aniversário está chegando ($dia/$mes) e passei para te desejar um feliz dia e oferecer um horário especial!',
-                                    );
+                                    final mensagem = 'Olá ${cliente.nome}! 🎉 Vi que seu aniversário está chegando ($dia/$mes) e passei para te desejar um feliz dia e oferecer um horário especial!';
+                                    _abrirWhatsApp(cliente.telefone, mensagem);
                                   },
                                 ),
                               );
                             },
                           ),
 
-                    // TAB 2: CLIENTES INATIVAS (> 25 DIAS)
                     inativas.isEmpty
                         ? const Center(child: Text('Nenhuma cliente inativa encontrada.'))
                         : ListView.separated(
@@ -362,10 +360,8 @@ class _ModalCentralNotificacoes extends StatelessWidget {
                                   icon: const Icon(Icons.chat, color: Colors.green),
                                   tooltip: 'Convidar no WhatsApp',
                                   onPressed: () {
-                                    WhatsAppService.abrirConversa(
-                                      telefone: cliente.telefone,
-                                      mensagem: 'Olá ${cliente.nome}! 💅 Sentimos sua falta aqui no estúdio. Que tal garantirmos seu próximo horário para deixar suas unhas impecáveis?',
-                                    );
+                                    final mensagem = 'Olá ${cliente.nome}! 💅 Sentimos sua falta aqui no estúdio. Que tal garantirmos seu próximo horário para deixar suas unhas impecáveis?';
+                                    _abrirWhatsApp(cliente.telefone, mensagem);
                                   },
                                 ),
                               );
