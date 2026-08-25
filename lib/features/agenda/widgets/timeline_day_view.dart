@@ -50,17 +50,16 @@ class TimelineDayView extends ConsumerWidget {
     return (minFim - minInicio) * _pixelsPorMinuto;
   }
 
-  // --- CORES ESCURECIDAS E MELHORADAS AQUI ---
   Color _obterCorStatus(AgendamentoStatus status) {
     switch (status) {
       case AgendamentoStatus.agendado:
-        return Colors.blue.shade300; // Escurecido
+        return Colors.blue.shade300;
       case AgendamentoStatus.confirmado:
-        return Colors.green.shade300; // Escurecido
+        return Colors.green.shade300;
       case AgendamentoStatus.concluido:
-        return Colors.grey.shade400; // Escurecido
+        return Colors.grey.shade400;
       case AgendamentoStatus.cancelado:
-        return Colors.red.shade300; // Escurecido
+        return Colors.red.shade300;
     }
   }
 
@@ -116,7 +115,6 @@ class TimelineDayView extends ConsumerWidget {
     }
   }
 
-  // --- CORES DOS BADGES AJUSTADAS PARA CONTRASTAR COM O FUNDO MAIS ESCURO ---
   Color _getStatusBadgeColor(AgendamentoStatus status) {
     switch (status) {
       case AgendamentoStatus.agendado: return Colors.blue.shade100;
@@ -150,6 +148,8 @@ class TimelineDayView extends ConsumerWidget {
     final alturaTotal = ((horaMaxima - horaMinima) * 60) * _pixelsPorMinuto;
 
     return SingleChildScrollView(
+      // CORREÇÃO AQUI: Memoriza a posição do scroll global da agenda
+      key: const PageStorageKey('agenda_scroll_dia_global'), 
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -174,6 +174,8 @@ class TimelineDayView extends ConsumerWidget {
           ),
           Expanded(
             child: SingleChildScrollView(
+              // CORREÇÃO AQUI TAMBÉM: Memoriza a posição da lista interna
+              key: const PageStorageKey('agenda_scroll_dia_interno'), 
               scrollDirection: Axis.vertical,
               child: GestureDetector(
                 onTapUp: (details) {
@@ -225,7 +227,7 @@ class TimelineDayView extends ConsumerWidget {
                             decoration: BoxDecoration(
                               color: cor,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade400, width: 1), // Borda sutilmente mais marcada
+                              border: Border.all(color: Colors.grey.shade400, width: 1), 
                             ),
                             padding: const EdgeInsets.all(6),
                             child: Column(
@@ -238,7 +240,6 @@ class TimelineDayView extends ConsumerWidget {
                                     _buildStatusBadge(a.status, isBloqueio),
                                     const Spacer(),
                                     if (!isBloqueio) ...[
-                                      // BOTÃO WHATSAPP MANTIDO COM ÁREA DE TOQUE AMPLIADA (Cor ajustada para super contraste)
                                       GestureDetector(
                                         behavior: HitTestBehavior.opaque,
                                         onTap: () {
@@ -254,7 +255,6 @@ class TimelineDayView extends ConsumerWidget {
                                         ),
                                       ),
                                       if (a.status == AgendamentoStatus.agendado)
-                                        // BOTÃO CONFIRMAR MANTIDO COM ÁREA DE TOQUE AMPLIADA (Cor ajustada)
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
                                           onTap: () => onConfirmar(a.id),
@@ -264,7 +264,6 @@ class TimelineDayView extends ConsumerWidget {
                                           ),
                                         ),
                                       if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
-                                        // BOTÃO CONCLUIR MANTIDO COM ÁREA DE TOQUE AMPLIADA (Cor ajustada)
                                         GestureDetector(
                                           behavior: HitTestBehavior.opaque,
                                           onTap: () => onConcluir(a.id),
