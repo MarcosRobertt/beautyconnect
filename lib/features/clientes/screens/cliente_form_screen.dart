@@ -9,7 +9,7 @@ import '../models/cliente.dart';
 
 /// Tela Novo/Editar Cliente.
 /// Regras (conforme documento técnico): Nome obrigatório, Telefone
-/// obrigatório, Aniversário opcional.
+/// obrigatório, Aniversário e Profissão opcionais.
 class ClienteFormScreen extends ConsumerStatefulWidget {
   const ClienteFormScreen({super.key, this.clienteId});
 
@@ -23,6 +23,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nomeController = TextEditingController();
   final _telefoneController = TextEditingController();
+  final _profissaoController = TextEditingController(); // NOVO CAMPO: Profissão
   final _observacoesController = TextEditingController();
   DateTime? _aniversario;
   Cliente? _clienteOriginal;
@@ -45,6 +46,8 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         _telefoneController.text = cliente.telefone;
         _observacoesController.text = cliente.observacoes;
         _aniversario = cliente.aniversario;
+        // Tenta preencher a profissão caso já exista no cliente
+        _profissaoController.text = cliente.profissao ?? ''; 
       }
     }
     setState(() => _carregando = false);
@@ -54,6 +57,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
   void dispose() {
     _nomeController.dispose();
     _telefoneController.dispose();
+    _profissaoController.dispose(); // NOVO CAMPO
     _observacoesController.dispose();
     super.dispose();
   }
@@ -65,6 +69,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
         ? _clienteOriginal!.copyWith(
             nome: _nomeController.text.trim(),
             telefone: _telefoneController.text.trim(),
+            profissao: _profissaoController.text.trim(), // NOVO CAMPO
             aniversario: _aniversario,
             observacoes: _observacoesController.text.trim(),
           )
@@ -72,6 +77,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
             id: const Uuid().v4(),
             nome: _nomeController.text.trim(),
             telefone: _telefoneController.text.trim(),
+            profissao: _profissaoController.text.trim(), // NOVO CAMPO
             aniversario: _aniversario,
             observacoes: _observacoesController.text.trim(),
             createdAt: DateTime.now(),
@@ -117,6 +123,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                   TextFormField(
                     controller: _nomeController,
                     decoration: const InputDecoration(labelText: 'Nome *'),
+                    textCapitalization: TextCapitalization.words,
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'Nome é obrigatório.' : null,
                   ),
                   const SizedBox(height: 12),
@@ -127,6 +134,15 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                     validator: (v) => (v == null || v.trim().isEmpty) ? 'WhatsApp é obrigatório.' : null,
                   ),
                   const SizedBox(height: 12),
+                  
+                  // NOVO CAMPO: Profissão
+                  TextFormField(
+                    controller: _profissaoController,
+                    decoration: const InputDecoration(labelText: 'Profissão (opcional)'),
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  const SizedBox(height: 12),
+
                   InkWell(
                     onTap: _selecionarAniversario,
                     child: InputDecorator(
@@ -138,6 +154,7 @@ class _ClienteFormScreenState extends ConsumerState<ClienteFormScreen> {
                   TextFormField(
                     controller: _observacoesController,
                     decoration: const InputDecoration(labelText: 'Observações'),
+                    textCapitalization: TextCapitalization.sentences,
                     maxLines: 3,
                   ),
                   const SizedBox(height: 20),
