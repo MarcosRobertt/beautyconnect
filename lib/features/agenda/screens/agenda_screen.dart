@@ -41,14 +41,44 @@ class AgendaScreen extends ConsumerWidget {
       builder: (context) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        onConfirmar: (forma, valorFinal) {
+        onConfirmar: (forma, valorFinal, houveAtraso) {
+          final obsAtual = agendamento.observacao;
+          final novaObs = houveAtraso && !obsAtual.contains('[Cliente Atrasou]')
+              ? (obsAtual.isEmpty ? '[Cliente Atrasou]' : '$obsAtual | [Cliente Atrasou]')
+              : obsAtual;
+
           final atualizado = agendamento.copyWith(
             status: AgendamentoStatus.concluido,
             formaPagamento: forma,
             valor: valorFinal,
+            observacao: novaObs,
           );
           ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
         },
+      ),
+    );
+  }
+
+  void _confirmarCancelamento(BuildContext context, WidgetRef ref, String id) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmar Desmarque'),
+        content: const Text('Deseja realmente registrar o cancelamento deste agendamento? Ele continuará salvo no histórico de registros do sistema.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Voltar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(agendamentoControllerProvider.notifier).cancelar(id);
+            },
+            child: const Text('Confirmar Cancelamento'),
+          ),
+        ],
       ),
     );
   }
@@ -133,7 +163,7 @@ class AgendaScreen extends ConsumerWidget {
                                         : 'Cliente');
                                 _abrirModalComanda(context, ref, agendamento, nomeCliente);
                               },
-                              onCancelar: (id) => notifier.cancelar(id),
+                              onCancelar: (id) => _confirmarCancelamento(context, ref, id),
                             ))
                       : estado.visao == VisaoAgenda.semana
                           ? TimelineWeekView(
@@ -172,7 +202,7 @@ class ModalFecharComanda extends StatefulWidget {
 
   final Agendamento agendamento;
   final String nomeCliente;
-  final void Function(FormaPagamento forma, double valorFinal) onConfirmar;
+  final void Function(FormaPagamento forma, double valorFinal, bool houveAtraso) onConfirmar;
 
   @override
   State<ModalFecharComanda> createState() => _ModalFecharComandaState();
@@ -181,6 +211,7 @@ class ModalFecharComanda extends StatefulWidget {
 class _ModalFecharComandaState extends State<ModalFecharComanda> {
   late double _valorFinal;
   FormaPagamento _formaSelecionada = FormaPagamento.pix;
+  bool _houveAtraso = false;
 
   @override
   void initState() {
@@ -246,7 +277,22 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
                 );
               }).toList(),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              value: _houveAtraso,
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Cliente chegou atrasada?',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+              subtitle: const Text(
+                'Registra o atraso no histórico para métricas futuras.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (val) => setState(() => _houveAtraso = val ?? false),
+            ),
+            const SizedBox(height: 20),
             FilledButton.icon(
               icon: const Icon(Icons.check_circle_outline),
               label: Text(
@@ -256,7 +302,7 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
               ),
               onPressed: () {
                 Navigator.pop(context);
-                widget.onConfirmar(_formaSelecionada, _valorFinal);
+                widget.onConfirmar(_formaSelecionada, _valorFinal, _houveAtraso);
               },
             ),
           ],
