@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../../core/services/storage/whatsapp_service.dart';
 import '../../clientes/controllers/cliente_controller.dart';
@@ -22,7 +22,7 @@ class TimelineDayView extends ConsumerWidget {
 
   final List<Agendamento> agendamentos;
   final Map<String, String> clientesPorId;
-  final NumberFormat moeda;
+  final dynamic moeda;
   final DateTime dataReferencia;
   final Function(String horaInicio) onNovoAgendamento;
   final Function(String id) onEditar;
@@ -59,7 +59,7 @@ class TimelineDayView extends ConsumerWidget {
       case AgendamentoStatus.concluido:
         return Colors.grey.shade400;
       case AgendamentoStatus.cancelado:
-        return Colors.red.shade300;
+        return Colors.red.shade300; // Nunca será renderizado aqui, mas mantido por segurança
     }
   }
 
@@ -132,11 +132,14 @@ class TimelineDayView extends ConsumerWidget {
       orElse: () => <String, String>{},
     );
 
+    // FILTRO LIMPO: Oculta cancelados da visão diária para não sobrepor
+    final agendamentosAtivos = agendamentos.where((a) => a.status != AgendamentoStatus.cancelado).toList();
+
     int horaMinima = 9;
     int horaMaxima = 18;
 
-    if (agendamentos.isNotEmpty) {
-      for (final a in agendamentos) {
+    if (agendamentosAtivos.isNotEmpty) {
+      for (final a in agendamentosAtivos) {
         final horaInicioInt = int.parse(a.horaInicio.split(':')[0]);
         final horaFimInt = int.parse(a.horaFim.split(':')[0]);
 
@@ -146,9 +149,14 @@ class TimelineDayView extends ConsumerWidget {
     }
 
     final alturaTotal = ((horaMaxima - horaMinima) * 60) * _pixelsPorMinuto;
+    
+    // VERIFICADOR DO DIA ATUAL PARA A LINHA DO TEMPO
+    final agora = DateTime.now();
+    final isHoje = dataReferencia.year == agora.year && 
+                   dataReferencia.month == agora.month && 
+                   dataReferencia.day == agora.day;
 
     return SingleChildScrollView(
-      // CORREÇÃO AQUI: Memoriza a posição do scroll global da agenda
       key: const PageStorageKey('agenda_scroll_dia_global'), 
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -174,7 +182,6 @@ class TimelineDayView extends ConsumerWidget {
           ),
           Expanded(
             child: SingleChildScrollView(
-              // CORREÇÃO AQUI TAMBÉM: Memoriza a posição da lista interna
               key: const PageStorageKey('agenda_scroll_dia_interno'), 
               scrollDirection: Axis.vertical,
               child: GestureDetector(
@@ -206,7 +213,7 @@ class TimelineDayView extends ConsumerWidget {
                         ],
                       ),
                     ),
-                    ...agendamentos.map((a) {
+                    ...agendamentosAtivos.map((a) {
                       final topPx = _calcularTop(a.horaInicio, horaMinima);
                       final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
                       
@@ -304,6 +311,47 @@ class TimelineDayView extends ConsumerWidget {
                         ),
                       );
                     }).toList(),
+
+                    // LINHA DO TEMPO REAL SE FOR HOJE
+                    if (isHoje)
+                      StreamBuilder(
+                        stream: Stream.periodic(const Duration(minutes: 1)),
+                        builder: (context, snapshot) {
+                          final tempoAtual = DateTime.now();
+                          final minutosAtual = tempoAtual.hour * 60 + tempoAtual.minute;
+                          
+                          // Só renderiza se estiver dentro da grade visível
+                          if (minutosAtual < horaMinima * 60 || minutosAtual > horaMaxima * 60) {
+                            return const SizedBox.shrink();
+                          }
+                          
+                          final topPxAtual = (minutosAtual - (horaMinima * 60)) * _pixelsPorMinuto;
+                          
+                          return Positioned(
+                            top: topPxAtual - 4, // Centraliza a bolinha
+                            left: 0,
+                            right: 0,
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.red,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Container(
+                                    height: 1.5,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                      ),
                   ],
                 ),
               ),
