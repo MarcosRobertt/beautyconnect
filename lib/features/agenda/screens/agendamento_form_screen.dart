@@ -95,6 +95,13 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   String _formatarHora(TimeOfDay hora) =>
       '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
 
+  // FORMATADOR ESTILO GOOGLE AGENDA PARA PT-BR
+  String _formatarDataGoogle(DateTime data) {
+    final meses = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+    final dias = ['Seg.', 'Ter.', 'Qua.', 'Qui.', 'Sex.', 'Sáb.', 'Dom.'];
+    return '${dias[data.weekday - 1]}, ${data.day} de ${meses[data.month - 1]} de ${data.year}';
+  }
+
   TimeOfDay _somarMinutos(TimeOfDay hora, int minutos) {
     final total = (hora.hour * 60 + hora.minute + minutos) % (24 * 60);
     return TimeOfDay(hour: total ~/ 60, minute: total % 60);
@@ -111,7 +118,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     });
   }
 
-  // Correção: Removida a trava de locale que causava tela vermelha, mantida apenas tradução dos botões
   Future<void> _selecionarData() async {
     final selecionada = await showDatePicker(
       context: context,
@@ -127,7 +133,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     if (selecionada != null) setState(() => _data = selecionada);
   }
 
-  // Correção: Removida a trava de locale que causava tela vermelha, mantida apenas tradução dos botões
   Future<void> _selecionarHora({required bool inicio}) async {
     final selecionada = await showTimePicker(
       context: context, 
@@ -135,6 +140,13 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       cancelText: 'Cancelar',
       confirmText: 'OK',
       helpText: 'Selecione o horário',
+      builder: (context, child) {
+        // FORÇA O RELÓGIO A TRABALHAR NO MODO 24 HORAS (EVITA O AM/PM INGLÊS)
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
+          child: child!,
+        );
+      },
     );
     if (selecionada != null) {
       setState(() {
@@ -555,7 +567,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                           onTap: _selecionarData,
                           child: InputDecorator(
                             decoration: const InputDecoration(labelText: 'Data'),
-                            child: Text(DateFormat('dd/MM/yyyy').format(_data)),
+                            child: Text(_formatarDataGoogle(_data)), // <-- TEXTO ESTILO GOOGLE APLICADO
                           ),
                         ),
                       ),
