@@ -15,9 +15,15 @@ class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
 
   String _rotulo(AgendaState estado) {
+    final hoje = DateTime.now();
+    final isHoje = estado.dataReferencia.year == hoje.year &&
+                   estado.dataReferencia.month == hoje.month &&
+                   estado.dataReferencia.day == hoje.day;
+
     switch (estado.visao) {
       case VisaoAgenda.dia:
-        return DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(estado.dataReferencia);
+        final dataFormatada = DateFormat("EEEE, d 'de' MMMM", 'pt_BR').format(estado.dataReferencia);
+        return isHoje ? 'Hoje, $dataFormatada' : dataFormatada;
       case VisaoAgenda.semana:
         final inicio = estado.dataReferencia.subtract(Duration(days: estado.dataReferencia.weekday % 7));
         return 'Semana de ${DateFormat('dd/MM').format(inicio)}';
@@ -26,7 +32,6 @@ class AgendaScreen extends ConsumerWidget {
     }
   }
 
-  // NOVO MODAL INTELIGENTE DE CANCELAMENTO / REAGENDAMENTO
   void _abrirModalCancelamento(BuildContext context, WidgetRef ref, Agendamento agendamento) {
     final motivoController = TextEditingController();
 
@@ -57,8 +62,8 @@ class AgendaScreen extends ConsumerWidget {
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context); // Fecha o modal
-              context.push('${AppRoutes.agenda}/editar/${agendamento.id}'); // Vai para edição
+              Navigator.pop(context); 
+              context.push('${AppRoutes.agenda}/editar/${agendamento.id}'); 
             },
             child: const Text('Reagendar', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
           ),
@@ -69,7 +74,6 @@ class AgendaScreen extends ConsumerWidget {
               final motivo = motivoController.text.trim();
               
               if (motivo.isNotEmpty) {
-                // Se digitou motivo, adiciona na observação e muda o status para cancelado
                 final novaObs = agendamento.observacao.isEmpty
                     ? '[Cancelado: $motivo]'
                     : '${agendamento.observacao} | [Cancelado: $motivo]';
@@ -80,7 +84,6 @@ class AgendaScreen extends ConsumerWidget {
                 );
                 ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
               } else {
-                // Se não digitou nada, apenas cancela padrão
                 ref.read(agendamentoControllerProvider.notifier).cancelar(agendamento.id);
               }
             },
@@ -152,6 +155,13 @@ class AgendaScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Erro ao carregar agenda: $e')),
         data: (estado) {
           final notifier = ref.read(agendamentoControllerProvider.notifier);
+          
+          // Verifica se a data atual da visão é o dia de hoje
+          final hoje = DateTime.now();
+          final isHoje = estado.dataReferencia.year == hoje.year &&
+                         estado.dataReferencia.month == hoje.month &&
+                         estado.dataReferencia.day == hoje.day;
+
           return Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -164,7 +174,11 @@ class AgendaScreen extends ConsumerWidget {
                       child: Text(
                         _rotulo(estado),
                         textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium,
+                        // DESTAQUE DE COR APLICADO AQUI:
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: isHoje ? Theme.of(context).colorScheme.primary : null,
+                          fontWeight: isHoje ? FontWeight.bold : null,
+                        ),
                       ),
                     ),
                     IconButton(onPressed: notifier.avancar, icon: const Icon(Icons.chevron_right)),
