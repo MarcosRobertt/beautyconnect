@@ -143,11 +143,11 @@ class DashboardScreen extends ConsumerWidget {
                         ? null
                         : () => _mostrarAniversariantes(
                               context,
-                              // AQUI É A ÚNICA ALTERAÇÃO: Adicionamos a data ao lado do nome!
+                              // Correção do nome da propriedade: usando .aniversario
                               aniversariantes.map((c) {
-                                if (c.dataNascimento != null) {
-                                  final dia = c.dataNascimento!.day.toString().padLeft(2, '0');
-                                  final mes = c.dataNascimento!.month.toString().padLeft(2, '0');
+                                if (c.aniversario != null) {
+                                  final dia = c.aniversario!.day.toString().padLeft(2, '0');
+                                  final mes = c.aniversario!.month.toString().padLeft(2, '0');
                                   return '${c.nome} (Dia $dia/$mes)';
                                 }
                                 return c.nome;
