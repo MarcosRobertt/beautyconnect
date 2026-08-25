@@ -26,6 +26,71 @@ class AgendaScreen extends ConsumerWidget {
     }
   }
 
+  // NOVO MODAL INTELIGENTE DE CANCELAMENTO / REAGENDAMENTO
+  void _abrirModalCancelamento(BuildContext context, WidgetRef ref, Agendamento agendamento) {
+    final motivoController = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancelar ou Reagendar?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Você pode excluir este agendamento ou reagendá-lo para outra data.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: motivoController,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opcional)',
+                hintText: 'Ex: Cliente teve imprevisto',
+              ),
+              textCapitalization: TextCapitalization.sentences,
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Voltar'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Fecha o modal
+              context.push('${AppRoutes.agenda}/editar/${agendamento.id}'); // Vai para edição
+            },
+            child: const Text('Reagendar', style: TextStyle(color: Colors.blue, fontWeight: FontWeight.bold)),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              final motivo = motivoController.text.trim();
+              
+              if (motivo.isNotEmpty) {
+                // Se digitou motivo, adiciona na observação e muda o status para cancelado
+                final novaObs = agendamento.observacao.isEmpty
+                    ? '[Cancelado: $motivo]'
+                    : '${agendamento.observacao} | [Cancelado: $motivo]';
+                
+                final atualizado = agendamento.copyWith(
+                  status: AgendamentoStatus.cancelado,
+                  observacao: novaObs,
+                );
+                ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+              } else {
+                // Se não digitou nada, apenas cancela padrão
+                ref.read(agendamentoControllerProvider.notifier).cancelar(agendamento.id);
+              }
+            },
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _abrirModalComanda(
     BuildContext context,
     WidgetRef ref,
@@ -55,30 +120,9 @@ class AgendaScreen extends ConsumerWidget {
           );
           ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
         },
-      ),
-    );
-  }
-
-  void _confirmarCancelamento(BuildContext context, WidgetRef ref, String id) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirmar Desmarque'),
-        content: const Text('Deseja realmente registrar o cancelamento deste agendamento? Ele continuará salvo no histórico de registros do sistema.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Voltar'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(context);
-              ref.read(agendamentoControllerProvider.notifier).cancelar(id);
-            },
-            child: const Text('Confirmar Cancelamento'),
-          ),
-        ],
+        onCancelarAtendimento: () {
+          _abrirModalCancelamento(context, ref, agendamento);
+        },
       ),
     );
   }
@@ -163,7 +207,10 @@ class AgendaScreen extends ConsumerWidget {
                                         : 'Cliente');
                                 _abrirModalComanda(context, ref, agendamento, nomeCliente);
                               },
-                              onCancelar: (id) => _confirmarCancelamento(context, ref, id),
+                              onCancelar: (id) {
+                                final agendamento = estado.lista.firstWhere((a) => a.id == id);
+                                _abrirModalCancelamento(context, ref, agendamento);
+                              },
                             ))
                       : estado.visao == VisaoAgenda.semana
                           ? TimelineWeekView(
@@ -198,11 +245,13 @@ class ModalFecharComanda extends StatefulWidget {
     required this.agendamento,
     required this.nomeCliente,
     required this.onConfirmar,
+    required this.onCancelarAtendimento,
   });
 
   final Agendamento agendamento;
   final String nomeCliente;
   final void Function(FormaPagamento forma, double valorFinal, bool houveAtraso) onConfirmar;
+  final VoidCallback onCancelarAtendimento;
 
   @override
   State<ModalFecharComanda> createState() => _ModalFecharComandaState();
@@ -293,17 +342,56 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
               onChanged: (val) => setState(() => _houveAtraso = val ?? false),
             ),
             const SizedBox(height: 20),
-            FilledButton.icon(
-              icon: const Icon(Icons.check_circle_outline),
-              label: Text(
-                _formaSelecionada == FormaPagamento.pendente
-                    ? 'Manter Comanda Aberta'
-                    : 'Confirmar Recebimento',
-              ),
-              onPressed: () {
-                Navigator.pop(context);
-                widget.onConfirmar(_formaSelecionada, _valorFinal, _houveAtraso);
-              },
+            Row(
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context); // Fecha a comanda
+                      widget.onCancelarAtendimento(); // Abre o modal de cancelar/reagendar
+                    },
+                    child: const Text(
+                      'Cancelar\nAtendimento',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onConfirmar(_formaSelecionada, _valorFinal, _houveAtraso);
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_outline, size: 18),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _formaSelecionada == FormaPagamento.pendente
+                                ? 'Manter Aberta'
+                                : 'Confirmar Recebimento',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 12),
+                            maxLines: 2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
