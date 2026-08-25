@@ -111,22 +111,23 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     });
   }
 
-  // --- ALTERAÇÃO AQUI: Tradução do calendário para pt-BR ---
+  // Correção: Removida a trava de locale que causava tela vermelha, mantida apenas tradução dos botões
   Future<void> _selecionarData() async {
     final selecionada = await showDatePicker(
       context: context,
       initialDate: _data,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
-      locale: const Locale('pt', 'BR'),
       cancelText: 'Cancelar',
       confirmText: 'OK',
       helpText: 'Selecione a data',
+      fieldLabelText: 'Insira a data',
+      fieldHintText: 'Mês/Dia/Ano',
     );
     if (selecionada != null) setState(() => _data = selecionada);
   }
 
-  // --- ALTERAÇÃO AQUI: Tradução do relógio para pt-BR ---
+  // Correção: Removida a trava de locale que causava tela vermelha, mantida apenas tradução dos botões
   Future<void> _selecionarHora({required bool inicio}) async {
     final selecionada = await showTimePicker(
       context: context, 
@@ -134,13 +135,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       cancelText: 'Cancelar',
       confirmText: 'OK',
       helpText: 'Selecione o horário',
-      builder: (context, child) {
-        return Localizations.override(
-          context: context,
-          locale: const Locale('pt', 'BR'),
-          child: child ?? const SizedBox.shrink(),
-        );
-      },
     );
     if (selecionada != null) {
       setState(() {
