@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../controllers/servico_controller.dart';
+import '../models/servico.dart'; // Importação do modelo adicionada para manipular o valor
 
 class ServicosScreen extends ConsumerWidget {
   const ServicosScreen({super.key});
@@ -15,7 +16,20 @@ class ServicosScreen extends ConsumerWidget {
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Serviços')),
+      appBar: AppBar(
+        title: const Text('Serviços'),
+        actions: [
+          // NOVO: Botão de Reajuste em Lote aparece apenas quando os dados estão carregados
+          estado.maybeWhen(
+            data: (lista) => IconButton(
+              icon: const Icon(Icons.price_change),
+              tooltip: 'Reajuste em Lote',
+              onPressed: () => _mostrarReajusteLote(context, ref, lista),
+            ),
+            orElse: () => const SizedBox.shrink(),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(AppRoutes.servicoNovo),
         icon: const Icon(Icons.add),
@@ -80,5 +94,186 @@ class ServicosScreen extends ConsumerWidget {
     if (confirmar == true) {
       await ref.read(servicoControllerProvider.notifier).excluir(id);
     }
+  }
+
+  // NOVO: Função que invoca o Modal de Reajuste
+  void _mostrarReajusteLote(BuildContext context, WidgetRef ref, List<Servico> servicos) {
+    if (servicos.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum serviço para reajustar.')),
+      );
+      return;
+    }
+    showDialog(
+      context: context,
+      builder: (context) => _ModalReajusteLote(servicos: servicos, ref: ref),
+    );
+  }
+}
+
+// NOVO: Widget do Modal que cuida da lógica do reajuste
+class _ModalReajusteLote extends StatefulWidget {
+  const _ModalReajusteLote({required this.servicos, required this.ref});
+  final List<Servico> servicos;
+  final WidgetRef ref;
+
+  @override
+  State<_ModalReajusteLote> createState() => _ModalReajusteLoteState();
+}
+
+class _ModalReajusteLoteState extends State<_ModalReajusteLote> {
+  late Set<String> _selecionados;
+  final _porcentagemController = TextEditingController();
+  bool _processando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Por padrão, todos os serviços vêm selecionados
+    _selecionados = widget.servicos.map((s) => s.id).toSet();
+  }
+
+  @override
+  void dispose() {
+    _porcentagemController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _aplicarReajuste() async {
+    final texto = _porcentagemController.text.replaceAll(',', '.');
+    final porcentagem = double.tryParse(texto);
+    
+    if (porcentagem == null || porcentagem == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Digite um valor válido de porcentagem (ex: 10 ou -5).')),
+      );
+      return;
+    }
+
+    if (_selecionados.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione pelo menos um serviço para reajustar.')),
+      );
+      return;
+    }
+
+    setState(() => _processando = true);
+
+    try {
+      final notifier = widget.ref.read(servicoControllerProvider.notifier);
+      
+      for (final servico in widget.servicos) {
+        if (_selecionados.contains(servico.id)) {
+          // Calcula o novo valor baseado na porcentagem (ex: 10% = valor * 1.10)
+          final novoValor = servico.valor * (1 + (porcentagem / 100));
+          
+          // Arredonda para 2 casas decimais
+          final valorArredondado = double.parse(novoValor.toStringAsFixed(2));
+          
+          final atualizado = servico.copyWith(valor: valorArredondado);
+          await notifier.salvar(atualizado);
+        }
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Reajuste de $porcentagem% aplicado a ${_selecionados.length} serviço(s)!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao aplicar reajuste: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _processando = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reajuste em Lote'),
+      content: SizedBox(
+        width: 400,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _porcentagemController,
+              decoration: const InputDecoration(
+                labelText: 'Porcentagem (%)',
+                hintText: 'Ex: 10 (Aumento) ou -5 (Desconto)',
+                prefixIcon: Icon(Icons.percent),
+              ),
+              keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Serviços afetados:', style: TextStyle(fontWeight: FontWeight.bold)),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      if (_selecionados.length == widget.servicos.length) {
+                        _selecionados.clear();
+                      } else {
+                        _selecionados = widget.servicos.map((s) => s.id).toSet();
+                      }
+                    });
+                  },
+                  child: Text(_selecionados.length == widget.servicos.length ? 'Desmarcar todos' : 'Marcar todos'),
+                ),
+              ],
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: widget.servicos.length,
+                itemBuilder: (context, index) {
+                  final s = widget.servicos[index];
+                  return CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(s.nome),
+                    subtitle: Text('Valor atual: R\$ ${s.valor.toStringAsFixed(2).replaceAll('.', ',')}'),
+                    value: _selecionados.contains(s.id),
+                    onChanged: (val) {
+                      setState(() {
+                        if (val == true) {
+                          _selecionados.add(s.id);
+                        } else {
+                          _selecionados.remove(s.id);
+                        }
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _processando ? null : () => Navigator.pop(context),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: _processando ? null : _aplicarReajuste,
+          child: _processando 
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Aplicar Reajuste'),
+        ),
+      ],
+    );
   }
 }
