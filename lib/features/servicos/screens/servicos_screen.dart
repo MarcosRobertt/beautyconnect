@@ -19,14 +19,13 @@ class ServicosScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Serviços'),
         actions: [
-          // CORREÇÃO: Transformado em um botão preenchido e visível
+          // CORREÇÃO: Removida a propriedade 'tooltip' que causou o erro no FilledButton
           estado.maybeWhen(
             data: (lista) => Padding(
               padding: const EdgeInsets.only(right: 12.0),
               child: FilledButton.icon(
                 icon: const Icon(Icons.price_change, size: 18),
                 label: const Text('Reajuste'),
-                tooltip: 'Reajuste em Lote',
                 onPressed: () => _mostrarReajusteLote(context, ref, lista),
               ),
             ),
