@@ -50,16 +50,17 @@ class TimelineDayView extends ConsumerWidget {
     return (minFim - minInicio) * _pixelsPorMinuto;
   }
 
+  // --- CORES ESCURECIDAS E MELHORADAS AQUI ---
   Color _obterCorStatus(AgendamentoStatus status) {
     switch (status) {
       case AgendamentoStatus.agendado:
-        return Colors.blue.shade100;
+        return Colors.blue.shade300; // Escurecido
       case AgendamentoStatus.confirmado:
-        return Colors.green.shade100;
+        return Colors.green.shade300; // Escurecido
       case AgendamentoStatus.concluido:
-        return Colors.grey.shade100;
+        return Colors.grey.shade400; // Escurecido
       case AgendamentoStatus.cancelado:
-        return Colors.red.shade50;
+        return Colors.red.shade300; // Escurecido
     }
   }
 
@@ -71,9 +72,9 @@ class TimelineDayView extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block, size: 10, color: Colors.grey.shade800),
+            Icon(Icons.block, size: 10, color: Colors.grey.shade900),
             const SizedBox(width: 3),
-            Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
+            Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
           ],
         ),
       );
@@ -89,9 +90,9 @@ class TimelineDayView extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, size: 10, color: Colors.grey.shade700),
+          Icon(statusIcon, size: 10, color: Colors.grey.shade900),
           const SizedBox(width: 3),
-          Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+          Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
         ],
       ),
     );
@@ -115,18 +116,18 @@ class TimelineDayView extends ConsumerWidget {
     }
   }
 
+  // --- CORES DOS BADGES AJUSTADAS PARA CONTRASTAR COM O FUNDO MAIS ESCURO ---
   Color _getStatusBadgeColor(AgendamentoStatus status) {
     switch (status) {
-      case AgendamentoStatus.agendado: return Colors.blue.shade50;
-      case AgendamentoStatus.confirmado: return Colors.green.shade50;
-      case AgendamentoStatus.concluido: return Colors.grey.shade100;
-      case AgendamentoStatus.cancelado: return Colors.red.shade50;
+      case AgendamentoStatus.agendado: return Colors.blue.shade100;
+      case AgendamentoStatus.confirmado: return Colors.green.shade100;
+      case AgendamentoStatus.concluido: return Colors.grey.shade200;
+      case AgendamentoStatus.cancelado: return Colors.red.shade100;
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // BUSCA OS TELEFONES REAIS DOS CLIENTES NO BANCO DE DADOS
     final clientesAsync = ref.watch(clienteControllerProvider);
     final telefonesPorId = clientesAsync.maybeWhen(
       data: (lista) => {for (final c in lista) c.id: c.telefone},
@@ -224,7 +225,7 @@ class TimelineDayView extends ConsumerWidget {
                             decoration: BoxDecoration(
                               color: cor,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade300, width: 1),
+                              border: Border.all(color: Colors.grey.shade400, width: 1), // Borda sutilmente mais marcada
                             ),
                             padding: const EdgeInsets.all(6),
                             child: Column(
@@ -237,8 +238,9 @@ class TimelineDayView extends ConsumerWidget {
                                     _buildStatusBadge(a.status, isBloqueio),
                                     const Spacer(),
                                     if (!isBloqueio) ...[
-                                      // DISPARA O WHATSAPP COM O TELEFONE REAL DO CLIENTE
+                                      // BOTÃO WHATSAPP MANTIDO COM ÁREA DE TOQUE AMPLIADA (Cor ajustada para super contraste)
                                       GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
                                         onTap: () {
                                           WhatsAppService.enviarConfirmacao(
                                             telefone: telefoneCliente,
@@ -246,25 +248,29 @@ class TimelineDayView extends ConsumerWidget {
                                             agendamento: a,
                                           );
                                         },
-                                        child: const Padding(
-                                          padding: EdgeInsets.symmetric(horizontal: 4),
-                                          child: Icon(Icons.chat_bubble_outline, size: 18, color: Colors.green),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                          child: Icon(Icons.chat_bubble_outline, size: 24, color: Colors.green.shade900), 
                                         ),
                                       ),
                                       if (a.status == AgendamentoStatus.agendado)
+                                        // BOTÃO CONFIRMAR MANTIDO COM ÁREA DE TOQUE AMPLIADA (Cor ajustada)
                                         GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
                                           onTap: () => onConfirmar(a.id),
                                           child: Padding(
-                                            padding: const EdgeInsets.all(4),
-                                            child: Icon(Icons.verified_outlined, size: 20, color: Colors.grey.shade700),
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            child: Icon(Icons.verified_outlined, size: 24, color: Colors.grey.shade900),
                                           ),
                                         ),
                                       if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
+                                        // BOTÃO CONCLUIR MANTIDO COM ÁREA DE TOQUE AMPLIADA (Cor ajustada)
                                         GestureDetector(
+                                          behavior: HitTestBehavior.opaque,
                                           onTap: () => onConcluir(a.id),
                                           child: Padding(
-                                            padding: const EdgeInsets.all(4),
-                                            child: Icon(Icons.check_circle_outline, size: 20, color: Colors.grey.shade700),
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            child: Icon(Icons.check_circle_outline, size: 24, color: Colors.grey.shade900),
                                           ),
                                         ),
                                     ],
@@ -274,14 +280,14 @@ class TimelineDayView extends ConsumerWidget {
                                 Flexible(
                                   child: Text(
                                     '${a.horaInicio}–${a.horaFim}',
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w600, fontSize: 11),
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 11, color: Colors.black87),
                                     maxLines: 1, overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 Flexible(
                                   child: Text(
                                     a.servico,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, fontWeight: isBloqueio ? FontWeight.bold : FontWeight.normal),
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: isBloqueio ? FontWeight.bold : FontWeight.w600, color: Colors.black87),
                                     maxLines: 1, overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
@@ -289,7 +295,7 @@ class TimelineDayView extends ConsumerWidget {
                                   Flexible(
                                     child: Text(
                                       nomeCliente,
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10),
+                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, color: Colors.black87),
                                       maxLines: 1, overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
