@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/storage/whatsapp_service.dart';
 import '../../../shared/widgets/status_chip.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
+import '../../clientes/models/cliente.dart';
 import '../controllers/dashboard_controller.dart';
 
 String formatarMoeda(double valor) {
@@ -25,7 +27,6 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final metricas = ref.watch(dashboardMetricsProvider);
-    final aniversariantesAsync = ref.watch(aniversariantesDoMesProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
     final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
     
@@ -33,12 +34,45 @@ class DashboardScreen extends ConsumerWidget {
     final rotuloData = formatarData(hoje);
     final larguraTela = MediaQuery.of(context).size.width;
 
-    final clientesPorId = clientesAsync.maybeWhen(
-      data: (lista) => {for (final c in lista) c.id: c.nome},
-      orElse: () => <String, String>{},
-    );
-
+    final clientes = clientesAsync.value ?? [];
+    final clientesPorId = {for (final c in clientes) c.id: c.nome};
     final todosAgendamentos = todosAgendamentosAsync.value ?? [];
+
+    // CÁLCULO 1: Aniversariantes nos próximos 15 dias
+    final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
+    final aniversariantesProximos = clientes.where((c) {
+      if (c.aniversario == null) return false;
+      var niverEsteAno = DateTime(hoje.year, c.aniversario!.month, c.aniversario!.day);
+      if (niverEsteAno.isBefore(hojeZerado)) {
+        niverEsteAno = DateTime(hoje.year + 1, c.aniversario!.month, c.aniversario!.day);
+      }
+      final diff = niverEsteAno.difference(hojeZerado).inDays;
+      return diff >= 0 && diff <= 15;
+    }).toList();
+
+    // CÁLCULO 2: Clientes Inativas há mais de 25 dias
+    final inativas = <Map<String, dynamic>>[];
+    for (final c in clientes) {
+      final agendamentosCliente = todosAgendamentos.where((a) =>
+        a.clienteId == c.id && a.status != AgendamentoStatus.cancelado
+      ).toList();
+
+      if (agendamentosCliente.isNotEmpty) {
+        agendamentosCliente.sort((a, b) => b.data.compareTo(a.data));
+        final ultimoAgendamento = agendamentosCliente.first;
+        final diasSemVir = hojeZerado.difference(DateTime(ultimoAgendamento.data.year, ultimoAgendamento.data.month, ultimoAgendamento.data.day)).inDays;
+
+        if (diasSemVir > 25) {
+          inativas.add({
+            'cliente': c,
+            'dias': diasSemVir,
+            'ultimaData': ultimoAgendamento.data,
+          });
+        }
+      }
+    }
+
+    final totalNotificacoes = aniversariantesProximos.length + inativas.length;
 
     final receitaHoje = todosAgendamentos.where((a) =>
         a.clienteId != 'BLOQUEIO' &&
@@ -80,6 +114,20 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
+          // NOVO: Sino de Notificações Inteligente com Contador
+          Badge(
+            isLabelVisible: totalNotificacoes > 0,
+            label: Text('$totalNotificacoes'),
+            child: IconButton(
+              tooltip: 'Notificações & Lembretes',
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: () => _mostrarCentralNotificacoes(
+                context,
+                aniversariantesProximos,
+                inativas,
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'Agenda Inteligente',
             icon: const Icon(Icons.auto_graph),
@@ -95,8 +143,6 @@ class DashboardScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (m) {
-          final aniversariantes = aniversariantesAsync.value ?? [];
-
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -131,28 +177,18 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.attach_money,
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
+                  // CARD ATUALIZADO: Focado em Retenção de Clientes Inativas
                   _CardMetrica(
-                    titulo: 'Aniversariante do mês',
-                    valor: aniversariantes.isEmpty
-                        ? 'Nenhum'
-                        : aniversariantes.length == 1
-                            ? aniversariantes.first.nome
-                            : '${aniversariantes.length} clientes',
-                    icone: Icons.cake_outlined,
-                    onTap: aniversariantes.isEmpty
-                        ? null
-                        : () => _mostrarAniversariantes(
-                              context,
-                              // Correção do nome da propriedade: usando .aniversario
-                              aniversariantes.map((c) {
-                                if (c.aniversario != null) {
-                                  final dia = c.aniversario!.day.toString().padLeft(2, '0');
-                                  final mes = c.aniversario!.month.toString().padLeft(2, '0');
-                                  return '${c.nome} (Dia $dia/$mes)';
-                                }
-                                return c.nome;
-                              }).toList(),
-                            ),
+                    titulo: 'Clientes Inativas (>25d)',
+                    valor: inativas.isEmpty
+                        ? 'Nenhuma'
+                        : '${inativas.length} cliente(s)',
+                    icone: Icons.person_off_outlined,
+                    onTap: () => _mostrarCentralNotificacoes(
+                      context,
+                      aniversariantesProximos,
+                      inativas,
+                    ),
                   ),
                 ],
               ),
@@ -198,19 +234,21 @@ class DashboardScreen extends ConsumerWidget {
     );
   }
 
-  void _mostrarAniversariantes(BuildContext context, List<String> nomes) {
-    showDialog<void>(
+  // NOVO: Central de Notificações (Sino de Lembretes)
+  void _mostrarCentralNotificacoes(
+    BuildContext context,
+    List<Cliente> aniversariantes,
+    List<Map<String, dynamic>> inativas,
+  ) {
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Aniversariantes do mês'),
-        content: SizedBox(
-          width: 320,
-          child: ListView(
-            shrinkWrap: true,
-            children: nomes.map((n) => ListTile(dense: true, title: Text(n))).toList(),
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Fechar'))],
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _ModalCentralNotificacoes(
+        aniversariantes: aniversariantes,
+        inativas: inativas,
       ),
     );
   }
@@ -223,6 +261,123 @@ class DashboardScreen extends ConsumerWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) => _ModalDetalhesReceita(agendamentos: agendamentos),
+    );
+  }
+}
+
+class _ModalCentralNotificacoes extends StatelessWidget {
+  const _ModalCentralNotificacoes({
+    required this.aniversariantes,
+    required this.inativas,
+  });
+
+  final List<Cliente> aniversariantes;
+  final List<Map<String, dynamic>> inativas;
+
+  @override
+  Widget build(BuildContext context) {
+    final hoje = DateTime.now();
+
+    return DefaultTabController(
+      length: 2,
+      child: SafeArea(
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Central de Lembretes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TabBar(
+                labelColor: Theme.of(context).colorScheme.primary,
+                unselectedLabelColor: Colors.grey,
+                indicatorColor: Theme.of(context).colorScheme.primary,
+                tabs: [
+                  Tab(text: ' Aniversários (${aniversariantes.length})'),
+                  Tab(text: ' Inativas (${inativas.length})'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    // TAB 1: ANIVERSARIANTES (PRÓXIMOS 15 DIAS)
+                    aniversariantes.isEmpty
+                        ? const Center(child: Text('Nenhum aniversário nos próximos 15 dias.'))
+                        : ListView.separated(
+                            itemCount: aniversariantes.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final cliente = aniversariantes[index];
+                              final dia = cliente.aniversario?.day.toString().padLeft(2, '0');
+                              final mes = cliente.aniversario?.month.toString().padLeft(2, '0');
+
+                              return ListTile(
+                                leading: const CircleAvatar(
+                                  backgroundColor: Colors.purple,
+                                  child: Icon(Icons.cake, color: Colors.white, size: 20),
+                                ),
+                                title: Text(cliente.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text('Aniversário em: $dia/$mes'),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.chat, color: Colors.green),
+                                  tooltip: 'Enviar Parabéns no WhatsApp',
+                                  onPressed: () {
+                                    WhatsAppService.abrirConversa(
+                                      telefone: cliente.telefone,
+                                      mensagem: 'Olá ${cliente.nome}! 🎉 Vi que seu aniversário está chegando ($dia/$mes) e passei para te desejar um feliz dia e oferecer um horário especial!',
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+
+                    // TAB 2: CLIENTES INATIVAS (> 25 DIAS)
+                    inativas.isEmpty
+                        ? const Center(child: Text('Nenhuma cliente inativa encontrada.'))
+                        : ListView.separated(
+                            itemCount: inativas.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final item = inativas[index];
+                              final cliente = item['cliente'] as Cliente;
+                              final dias = item['dias'] as int;
+
+                              return ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Colors.orange.shade100,
+                                  child: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 20),
+                                ),
+                                title: Text(cliente.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text('Sem agendar há $dias dias'),
+                                trailing: IconButton(
+                                  icon: const Icon(Icons.chat, color: Colors.green),
+                                  tooltip: 'Convidar no WhatsApp',
+                                  onPressed: () {
+                                    WhatsAppService.abrirConversa(
+                                      telefone: cliente.telefone,
+                                      mensagem: 'Olá ${cliente.nome}! 💅 Sentimos sua falta aqui no estúdio. Que tal garantirmos seu próximo horário para deixar suas unhas impecáveis?',
+                                    );
+                                  },
+                                ),
+                              );
+                            },
+                          ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
