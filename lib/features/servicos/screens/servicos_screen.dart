@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../controllers/servico_controller.dart';
-import '../models/servico.dart'; // Importação do modelo adicionada para manipular o valor
+import '../models/servico.dart';
 
 class ServicosScreen extends ConsumerWidget {
   const ServicosScreen({super.key});
@@ -19,12 +19,16 @@ class ServicosScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Serviços'),
         actions: [
-          // NOVO: Botão de Reajuste em Lote aparece apenas quando os dados estão carregados
+          // CORREÇÃO: Transformado em um botão preenchido e visível
           estado.maybeWhen(
-            data: (lista) => IconButton(
-              icon: const Icon(Icons.price_change),
-              tooltip: 'Reajuste em Lote',
-              onPressed: () => _mostrarReajusteLote(context, ref, lista),
+            data: (lista) => Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: FilledButton.icon(
+                icon: const Icon(Icons.price_change, size: 18),
+                label: const Text('Reajuste'),
+                tooltip: 'Reajuste em Lote',
+                onPressed: () => _mostrarReajusteLote(context, ref, lista),
+              ),
             ),
             orElse: () => const SizedBox.shrink(),
           ),
@@ -96,7 +100,6 @@ class ServicosScreen extends ConsumerWidget {
     }
   }
 
-  // NOVO: Função que invoca o Modal de Reajuste
   void _mostrarReajusteLote(BuildContext context, WidgetRef ref, List<Servico> servicos) {
     if (servicos.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -111,7 +114,6 @@ class ServicosScreen extends ConsumerWidget {
   }
 }
 
-// NOVO: Widget do Modal que cuida da lógica do reajuste
 class _ModalReajusteLote extends StatefulWidget {
   const _ModalReajusteLote({required this.servicos, required this.ref});
   final List<Servico> servicos;
@@ -129,7 +131,6 @@ class _ModalReajusteLoteState extends State<_ModalReajusteLote> {
   @override
   void initState() {
     super.initState();
-    // Por padrão, todos os serviços vêm selecionados
     _selecionados = widget.servicos.map((s) => s.id).toSet();
   }
 
@@ -164,12 +165,8 @@ class _ModalReajusteLoteState extends State<_ModalReajusteLote> {
       
       for (final servico in widget.servicos) {
         if (_selecionados.contains(servico.id)) {
-          // Calcula o novo valor baseado na porcentagem (ex: 10% = valor * 1.10)
           final novoValor = servico.valor * (1 + (porcentagem / 100));
-          
-          // Arredonda para 2 casas decimais
           final valorArredondado = double.parse(novoValor.toStringAsFixed(2));
-          
           final atualizado = servico.copyWith(valor: valorArredondado);
           await notifier.salvar(atualizado);
         }
