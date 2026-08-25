@@ -39,6 +39,8 @@ class DashboardScreen extends ConsumerWidget {
     final todosAgendamentos = todosAgendamentosAsync.value ?? [];
 
     final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
+    
+    // LEMBRETE 1: Aniversariantes nos próximos 15 dias
     final aniversariantesProximos = clientes.where((c) {
       if (c.aniversario == null) return false;
       var niverEsteAno = DateTime(hoje.year, c.aniversario!.month, c.aniversario!.day);
@@ -49,6 +51,7 @@ class DashboardScreen extends ConsumerWidget {
       return diff >= 0 && diff <= 15;
     }).toList();
 
+    // LEMBRETE 2: Clientes Inativas há mais de 25 dias
     final inativas = <Map<String, dynamic>>[];
     for (final c in clientes) {
       final agendamentosCliente = todosAgendamentos.where((a) =>
@@ -112,20 +115,42 @@ class DashboardScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          // CORREÇÃO 1: Badge posicionado no 'icon' do IconButton para renderização perfeita
-          IconButton(
-            tooltip: 'Notificações & Lembretes',
-            icon: Badge(
-              isLabelVisible: totalNotificacoes > 0,
-              label: Text('$totalNotificacoes'),
-              child: const Icon(Icons.notifications_outlined),
-            ),
-            onPressed: () => _mostrarCentralNotificacoes(
-              context,
-              aniversariantesProximos,
-              inativas,
-              abaInicial: 0,
-            ),
+          // ESTRUTURA WEB-SAFE: Ícone do Sino + Indicador Vermelho Garantido
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                tooltip: 'Central de Lembretes',
+                icon: const Icon(Icons.notifications_outlined, size: 24),
+                onPressed: () => _mostrarCentralNotificacoes(
+                  context,
+                  aniversariantesProximos,
+                  inativas,
+                ),
+              ),
+              if (totalNotificacoes > 0)
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                    child: Text(
+                      '$totalNotificacoes',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
           ),
           IconButton(
             tooltip: 'Agenda Inteligente',
@@ -142,6 +167,10 @@ class DashboardScreen extends ConsumerWidget {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (m) {
+          final ticketMedioHoje = m.totalAgendamentosHoje > 0
+              ? receitaHoje / m.totalAgendamentosHoje
+              : 0.0;
+
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -176,19 +205,11 @@ class DashboardScreen extends ConsumerWidget {
                     icone: Icons.attach_money,
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
-                  // CORREÇÃO 2: Passa 'abaInicial: 1' para direcionar à aba de Inativas ao clicar
+                  // NOVO CARD RELEVANTE: Ticket Médio do Dia
                   _CardMetrica(
-                    titulo: 'Clientes Inativas (>25d)',
-                    valor: inativas.isEmpty
-                        ? 'Nenhuma'
-                        : '${inativas.length} cliente(s)',
-                    icone: Icons.person_off_outlined,
-                    onTap: () => _mostrarCentralNotificacoes(
-                      context,
-                      aniversariantesProximos,
-                      inativas,
-                      abaInicial: 1,
-                    ),
+                    titulo: 'Ticket Médio (Hoje)',
+                    valor: formatarMoeda(ticketMedioHoje),
+                    icone: Icons.analytics_outlined,
                   ),
                 ],
               ),
@@ -237,9 +258,8 @@ class DashboardScreen extends ConsumerWidget {
   void _mostrarCentralNotificacoes(
     BuildContext context,
     List<Cliente> aniversariantes,
-    List<Map<String, dynamic>> inativas, {
-    int abaInicial = 0,
-  }) {
+    List<Map<String, dynamic>> inativas,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -249,7 +269,6 @@ class DashboardScreen extends ConsumerWidget {
       builder: (context) => _ModalCentralNotificacoes(
         aniversariantes: aniversariantes,
         inativas: inativas,
-        abaInicial: abaInicial,
       ),
     );
   }
@@ -270,18 +289,15 @@ class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({
     required this.aniversariantes,
     required this.inativas,
-    this.abaInicial = 0,
   });
 
   final List<Cliente> aniversariantes;
   final List<Map<String, dynamic>> inativas;
-  final int abaInicial;
 
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
-      initialIndex: abaInicial,
       child: SafeArea(
         child: Container(
           height: MediaQuery.of(context).size.height * 0.75,
