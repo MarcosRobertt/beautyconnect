@@ -233,6 +233,68 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return false; 
   }
 
+  void _abrirModalCancelamento(BuildContext context) {
+    final motivoController = TextEditingController();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancelar Agendamento?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('O agendamento será registrado como cancelado no histórico.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: motivoController,
+              decoration: const InputDecoration(
+                labelText: 'Motivo (opcional)',
+                hintText: 'Ex: Cliente não confirmou / Imprevisto',
+              ),
+              textCapitalization: TextCapitalization.sentences,
+              maxLines: 2,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Voltar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              final motivo = motivoController.text.trim();
+
+              final obsAtual = _observacaoController.text.trim();
+              final novaObs = motivo.isNotEmpty
+                  ? (obsAtual.isEmpty ? '[Cancelado: $motivo]' : '$obsAtual | [Cancelado: $motivo]')
+                  : obsAtual;
+
+              final cancelado = _original!.copyWith(
+                status: AgendamentoStatus.cancelado,
+                observacao: novaObs,
+                updatedAt: DateTime.now(),
+              );
+
+              final erro = await ref
+                  .read(agendamentoControllerProvider.notifier)
+                  .salvar(cancelado, novo: false);
+
+              if (erro == null && mounted) {
+                context.pop();
+              } else if (mounted && erro != null) {
+                setState(() => _erro = erro);
+              }
+            },
+            child: const Text('Confirmar Cancelamento'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _salvar() async {
     setState(() => _erro = null);
     if (!_formKey.currentState!.validate()) return;
@@ -390,7 +452,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca))
                 .toList();
                 
-        // LÓGICA DE ALERTA DE ANIVERSÁRIO (Sem alterar mais nada)
         Widget? alertaAniversario;
         if (_clienteId != null) {
           try {
@@ -536,29 +597,33 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       appBar: AppBar(
         title: Text(_editando ? 'Editar Horário' : 'Novo Horário'),
         actions: [
-          if (_editando && !_isBloqueio && _original != null && _clienteId != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8.0),
-              child: IconButton(
-                icon: const Icon(Icons.chat, color: Colors.green),
-                tooltip: 'Enviar Confirmação pelo WhatsApp',
-                onPressed: () {
-                  final clientes = clientesAsync.value ?? [];
-                  try {
-                    final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
-                    WhatsAppService.enviarConfirmacao(
-                      telefone: clienteAtual.telefone,
-                      nomeCliente: clienteAtual.nome,
-                      agendamento: _original!,
-                    );
-                  } catch (_) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Erro ao localizar telefone da cliente.')),
-                    );
-                  }
-                },
-              ),
+          if (_editando && !_isBloqueio && _original != null && _clienteId != null) ...[
+            IconButton(
+              icon: const Icon(Icons.chat, color: Colors.green),
+              tooltip: 'Enviar Confirmação pelo WhatsApp',
+              onPressed: () {
+                final clientes = clientesAsync.value ?? [];
+                try {
+                  final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
+                  WhatsAppService.enviarConfirmacao(
+                    telefone: clienteAtual.telefone,
+                    nomeCliente: clienteAtual.nome,
+                    agendamento: _original!,
+                  );
+                } catch (_) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Erro ao localizar telefone da cliente.')),
+                  );
+                }
+              },
             ),
+            IconButton(
+              icon: const Icon(Icons.cancel_outlined, color: Colors.red),
+              tooltip: 'Cancelar Agendamento',
+              onPressed: () => _abrirModalCancelamento(context),
+            ),
+            const SizedBox(width: 8),
+          ],
         ],
       ),
       body: Center(
