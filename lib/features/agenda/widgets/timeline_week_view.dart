@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../models/agendamento.dart';
 
-class TimelineWeekView extends StatelessWidget {
+class TimelineWeekView extends StatefulWidget {
   const TimelineWeekView({
     super.key,
     required this.agendamentos,
@@ -15,8 +15,15 @@ class TimelineWeekView extends StatelessWidget {
   final DateTime dataReferencia;
   final Function(DateTime) onIrParaDia;
 
+  @override
+  State<TimelineWeekView> createState() => _TimelineWeekViewState();
+}
+
+class _TimelineWeekViewState extends State<TimelineWeekView> {
   static const double _pixelsPorMinuto = 1.5;
   static const double _larguraHorarios = 45.0;
+  
+  bool _mostrarCancelados = false; // Controle do Modo Fantasma
 
   int _horaParaMinutos(String hhmm) {
     final partes = hhmm.split(':');
@@ -44,21 +51,33 @@ class TimelineWeekView extends StatelessWidget {
       case AgendamentoStatus.concluido:
         return Colors.grey.shade100;
       case AgendamentoStatus.cancelado:
-        return Colors.red.shade50;
+        return Colors.red.withOpacity(0.15); // Cor Modo Fantasma
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final int diasParaDomingo = dataReferencia.weekday == 7 ? 0 : dataReferencia.weekday;
-    final DateTime domingo = dataReferencia.subtract(Duration(days: diasParaDomingo));
+    final int diasParaDomingo = widget.dataReferencia.weekday == 7 ? 0 : widget.dataReferencia.weekday;
+    final DateTime domingo = widget.dataReferencia.subtract(Duration(days: diasParaDomingo));
     final List<DateTime> diasSemana = List.generate(7, (index) => domingo.add(Duration(days: index)));
+
+    final agendamentosSemana = widget.agendamentos.where((a) {
+      return a.data.isAfter(domingo.subtract(const Duration(days: 1))) &&
+             a.data.isBefore(domingo.add(const Duration(days: 7)));
+    }).toList();
+
+    final canceladosSemana = agendamentosSemana.where((a) => a.status == AgendamentoStatus.cancelado).toList();
+    
+    // Filtra o que será exibido na grade
+    final agendamentosVisiveis = agendamentosSemana.where((a) => 
+      a.status != AgendamentoStatus.cancelado || _mostrarCancelados
+    ).toList();
 
     int horaMinima = 8;
     int horaMaxima = 19;
 
-    if (agendamentos.isNotEmpty) {
-      for (final a in agendamentos) {
+    if (agendamentosVisiveis.isNotEmpty) {
+      for (final a in agendamentosVisiveis) {
         final horaInicioInt = int.parse(a.horaInicio.split(':')[0]);
         final horaFimInt = int.parse(a.horaFim.split(':')[0]);
 
@@ -71,6 +90,35 @@ class TimelineWeekView extends StatelessWidget {
 
     return Column(
       children: [
+        if (canceladosSemana.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.red.shade200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.cancel_outlined, color: Colors.red, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${canceladosSemana.length} cancelamentos nesta semana',
+                    style: TextStyle(color: Colors.red.shade800, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Text('Ver na grade', style: TextStyle(color: Colors.red.shade800, fontSize: 10)),
+                Switch(
+                  value: _mostrarCancelados,
+                  onChanged: (v) => setState(() => _mostrarCancelados = v),
+                  activeColor: Colors.red,
+                ),
+              ],
+            ),
+          ),
+          
         Row(
           children: [
             const SizedBox(width: _larguraHorarios),
@@ -82,12 +130,12 @@ class TimelineWeekView extends StatelessWidget {
               return Expanded(
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
-                  onTap: () => onIrParaDia(dia),
+                  onTap: () => widget.onIrParaDia(dia),
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       border: Border(left: BorderSide(color: Colors.grey.shade300, width: 0.5)),
-                      color: ehHoje ? Colors.purple.shade50 : null,
+                      color: ehHoje ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4) : null,
                     ),
                     child: Column(
                       children: [
@@ -95,7 +143,7 @@ class TimelineWeekView extends StatelessWidget {
                           DateFormat('E', 'pt_BR').format(dia).toUpperCase().replaceAll('.', ''),
                           style: TextStyle(
                             fontSize: 10,
-                            color: ehHoje ? Colors.purple : Colors.grey.shade700,
+                            color: ehHoje ? Theme.of(context).colorScheme.primary : Colors.grey.shade700,
                             fontWeight: ehHoje ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
@@ -104,7 +152,7 @@ class TimelineWeekView extends StatelessWidget {
                           '${dia.day}',
                           style: TextStyle(
                             fontSize: 14,
-                            color: ehHoje ? Colors.purple : Colors.black87,
+                            color: ehHoje ? Theme.of(context).colorScheme.primary : Colors.black87,
                             fontWeight: ehHoje ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
@@ -141,7 +189,7 @@ class TimelineWeekView extends StatelessWidget {
                   ),
                 ),
                 ...diasSemana.map((dia) {
-                  final agendamentosDoDia = agendamentos.where((a) =>
+                  final agendamentosDoDia = agendamentosVisiveis.where((a) =>
                       a.data.year == dia.year &&
                       a.data.month == dia.month &&
                       a.data.day == dia.day).toList();
@@ -149,7 +197,7 @@ class TimelineWeekView extends StatelessWidget {
                   return Expanded(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
-                      onTapUp: (_) => onIrParaDia(dia),
+                      onTapUp: (_) => widget.onIrParaDia(dia),
                       child: Container(
                         decoration: BoxDecoration(
                           border: Border(left: BorderSide(color: Colors.grey.shade300, width: 0.5)),
@@ -175,6 +223,7 @@ class TimelineWeekView extends StatelessWidget {
                               final topPx = _calcularTop(a.horaInicio, horaMinima);
                               final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
                               final cor = _obterCorStatus(a.status);
+                              final isCancelado = a.status == AgendamentoStatus.cancelado;
 
                               return Positioned(
                                 top: topPx,
@@ -183,17 +232,24 @@ class TimelineWeekView extends StatelessWidget {
                                 height: heightPx > 20 ? heightPx : 20,
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap: () => onIrParaDia(dia),
+                                  onTap: () => widget.onIrParaDia(dia),
                                   child: Container(
                                     decoration: BoxDecoration(
                                       color: cor,
                                       borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(color: Colors.black12, width: 0.5),
+                                      border: Border.all(
+                                        color: isCancelado ? Colors.red.withOpacity(0.5) : Colors.black12, 
+                                        width: isCancelado ? 1.0 : 0.5,
+                                      ),
                                     ),
                                     padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
                                     child: Text(
                                       a.servico,
-                                      style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: Colors.black87),
+                                      style: TextStyle(
+                                        fontSize: 8, 
+                                        fontWeight: FontWeight.w600, 
+                                        color: isCancelado ? Colors.red.shade800 : Colors.black87,
+                                      ),
                                       maxLines: heightPx < 30 ? 1 : 3,
                                       overflow: TextOverflow.ellipsis,
                                     ),
