@@ -7,6 +7,7 @@ import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
+import 'cliente_form_screen.dart';
 import 'historico_cliente_screen.dart';
 
 class ClientesScreen extends ConsumerStatefulWidget {
@@ -40,6 +41,15 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       context,
       MaterialPageRoute(
         builder: (context) => HistoricoClienteScreen(clienteId: clienteId),
+      ),
+    );
+  }
+
+  void _editarCliente(BuildContext context, String clienteId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ClienteFormScreen(clienteId: clienteId),
       ),
     );
   }
@@ -198,7 +208,17 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(cliente.telefone),
-            trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
+                  tooltip: 'Editar Cadastro',
+                  onPressed: () => _editarCliente(context, cliente.id),
+                ),
+                const Icon(Icons.chevron_right, color: Colors.grey),
+              ],
+            ),
             onTap: () => _abrirHistorico(context, cliente.id),
           ),
         );
@@ -279,7 +299,17 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text('$visitas visita(s) · R\$ ${gasto.toStringAsFixed(2).replaceAll('.', ',')}'),
-                        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
+                              tooltip: 'Editar Cadastro',
+                              onPressed: () => _editarCliente(context, cliente.id),
+                            ),
+                            const Icon(Icons.chevron_right, color: Colors.grey),
+                          ],
+                        ),
                         onTap: () => _abrirHistorico(context, cliente.id),
                       ),
                     );
