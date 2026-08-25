@@ -18,7 +18,9 @@ class CalendarMonthView extends StatefulWidget {
 }
 
 class _CalendarMonthViewState extends State<CalendarMonthView> {
-  bool _visaoContador = true; // Inicia na Visão Contador
+  // CORREÇÃO: Adicionado 'static' para preservar a escolha na memória do aplicativo
+  // mesmo quando o calendário for redesenhado ao trocar o mês.
+  static bool _visaoContador = true; 
   static const int _metaDiaria = 10; // 100% = 10 atendimentos
 
   List<Agendamento> _agendamentosDoDia(DateTime dia) {
