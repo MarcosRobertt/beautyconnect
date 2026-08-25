@@ -42,6 +42,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   bool _carregando = true;
   String? _erro;
 
+  // --- VARIÁVEIS DE REPETIÇÃO DE AGENDA ---
+  String _tipoRepeticao = 'nenhum'; 
+  int _ocorrencias = 2; 
+
   bool get _editando => widget.agendamentoId != null;
 
   @override
@@ -95,7 +99,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   String _formatarHora(TimeOfDay hora) =>
       '${hora.hour.toString().padLeft(2, '0')}:${hora.minute.toString().padLeft(2, '0')}';
 
-  // FORMATADOR ESTILO GOOGLE AGENDA PARA PT-BR
   String _formatarDataGoogle(DateTime data) {
     final meses = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
     final dias = ['Seg.', 'Ter.', 'Qua.', 'Qui.', 'Sex.', 'Sáb.', 'Dom.'];
@@ -141,7 +144,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       confirmText: 'OK',
       helpText: 'Selecione o horário',
       builder: (context, child) {
-        // FORÇA O RELÓGIO A TRABALHAR NO MODO 24 HORAS (EVITA O AM/PM INGLÊS)
         return MediaQuery(
           data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
           child: child!,
@@ -204,7 +206,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return resultado ?? false;
   }
 
-  Future<bool> _verificarConflitoDeHorario() async {
+  // NOVA LÓGICA DE VERIFICAÇÃO PARA ACEITAR MÚLTIPLAS DATAS
+  Future<bool> _verificarConflitoDeHorarioParaData(DateTime dataAlvo) async {
     final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
     final minNovoInicio = _horaInicio.hour * 60 + _horaInicio.minute;
     final minNovoFim = _horaFim.hour * 60 + _horaFim.minute;
@@ -214,9 +217,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           agendamento.status == AgendamentoStatus.cancelado) {
         continue;
       }
-      if (agendamento.data.year == _data.year &&
-          agendamento.data.month == _data.month &&
-          agendamento.data.day == _data.day) {
+      if (agendamento.data.year == dataAlvo.year &&
+          agendamento.data.month == dataAlvo.month &&
+          agendamento.data.day == dataAlvo.day) {
         
         final horaExistenteInicio = _parseHora(agendamento.horaInicio);
         final horaExistenteFim = _parseHora(agendamento.horaFim);
@@ -237,12 +240,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     
     if (!_horaFimDepoisDoInicio) {
       setState(() => _erro = 'A hora de fim deve ser depois da hora de início.');
-      return;
-    }
-
-    final temConflito = await _verificarConflitoDeHorario();
-    if (temConflito) {
-      setState(() => _erro = '⚠️ Já existe compromisso neste horário!');
       return;
     }
 
@@ -294,45 +291,77 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       servicoIdFinal = _servicoId;
     }
 
+    // Geração das datas recorrentes
+    List<DateTime> datasParaSalvar = [];
+    if (_editando || _tipoRepeticao == 'nenhum') {
+      datasParaSalvar.add(_data);
+    } else {
+      DateTime dataAtual = _data;
+      for (int i = 0; i < _ocorrencias; i++) {
+        datasParaSalvar.add(dataAtual);
+        if (_tipoRepeticao == 'semanal') {
+          dataAtual = dataAtual.add(const Duration(days: 7));
+        } else if (_tipoRepeticao == 'quinzenal') {
+          dataAtual = dataAtual.add(const Duration(days: 15));
+        } else if (_tipoRepeticao == 'mensal') {
+          dataAtual = DateTime(dataAtual.year, dataAtual.month + 1, dataAtual.day);
+        }
+      }
+    }
+
+    // Verifica conflito para TODAS as datas geradas
+    for (final d in datasParaSalvar) {
+      final conflito = await _verificarConflitoDeHorarioParaData(d);
+      if (conflito) {
+        final diaConflito = _formatarDataGoogle(d);
+        setState(() => _erro = '⚠️ Conflito de horário detectado no dia: $diaConflito. Modifique a data/hora ou cancele a repetição.');
+        return;
+      }
+    }
+
     final duracaoCalculada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
 
-    final agendamento = _editando
-        ? _original!.copyWith(
-            clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId,
-            data: _data,
-            horaInicio: _formatarHora(_horaInicio),
-            horaFim: _formatarHora(_horaFim),
-            duracaoMinutos: duracaoCalculada,
-            servico: nomeServico,
-            servicoId: servicoIdFinal,
-            valor: valor,
-            observacao: _observacaoController.text.trim(),
-            status: _isBloqueio ? AgendamentoStatus.concluido : _original!.status, 
-          )
-        : Agendamento(
-            id: const Uuid().v4(),
-            clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId!,
-            data: _data,
-            horaInicio: _formatarHora(_horaInicio),
-            horaFim: _formatarHora(_horaFim),
-            duracaoMinutos: duracaoCalculada,
-            servico: nomeServico,
-            servicoId: servicoIdFinal,
-            valor: valor,
-            status: _isBloqueio ? AgendamentoStatus.concluido : AgendamentoStatus.agendado,
-            observacao: _observacaoController.text.trim(),
-            createdAt: DateTime.now(),
-            updatedAt: DateTime.now(),
-          );
+    // Salva todas as ocorrências
+    for (final d in datasParaSalvar) {
+      final agendamento = _editando
+          ? _original!.copyWith(
+              clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId,
+              data: d,
+              horaInicio: _formatarHora(_horaInicio),
+              horaFim: _formatarHora(_horaFim),
+              duracaoMinutos: duracaoCalculada,
+              servico: nomeServico,
+              servicoId: servicoIdFinal,
+              valor: valor,
+              observacao: _observacaoController.text.trim(),
+              status: _isBloqueio ? AgendamentoStatus.concluido : _original!.status, 
+            )
+          : Agendamento(
+              id: const Uuid().v4(), // Cria um novo UUID para cada repetição
+              clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId!,
+              data: d,
+              horaInicio: _formatarHora(_horaInicio),
+              horaFim: _formatarHora(_horaFim),
+              duracaoMinutos: duracaoCalculada,
+              servico: nomeServico,
+              servicoId: servicoIdFinal,
+              valor: valor,
+              status: _isBloqueio ? AgendamentoStatus.concluido : AgendamentoStatus.agendado,
+              observacao: _observacaoController.text.trim(),
+              createdAt: DateTime.now(),
+              updatedAt: DateTime.now(),
+            );
 
-    final erro = await ref
-        .read(agendamentoControllerProvider.notifier)
-        .salvar(agendamento, novo: !_editando);
+      final erro = await ref
+          .read(agendamentoControllerProvider.notifier)
+          .salvar(agendamento, novo: !_editando);
 
-    if (erro != null) {
-      setState(() => _erro = erro);
-      return;
+      if (erro != null) {
+        setState(() => _erro = erro);
+        return;
+      }
     }
+
     if (mounted) context.pop();
   }
 
@@ -567,7 +596,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                           onTap: _selecionarData,
                           child: InputDecorator(
                             decoration: const InputDecoration(labelText: 'Data'),
-                            child: Text(_formatarDataGoogle(_data)), // <-- TEXTO ESTILO GOOGLE APLICADO
+                            child: Text(_formatarDataGoogle(_data)),
                           ),
                         ),
                       ),
@@ -583,8 +612,49 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 12),
                   
+                  // LÓGICA DE REPETIÇÃO
+                  if (!_editando) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<String>(
+                            value: _tipoRepeticao,
+                            decoration: const InputDecoration(
+                              labelText: 'Repetir evento?',
+                              prefixIcon: Icon(Icons.event_repeat, color: Colors.grey),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'nenhum', child: Text('Não repetir')),
+                              DropdownMenuItem(value: 'semanal', child: Text('Toda semana')),
+                              DropdownMenuItem(value: 'quinzenal', child: Text('A cada 15 dias')),
+                              DropdownMenuItem(value: 'mensal', child: Text('Todo mês')),
+                            ],
+                            onChanged: (v) => setState(() => _tipoRepeticao = v!),
+                          ),
+                        ),
+                        if (_tipoRepeticao != 'nenhum') ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 1,
+                            child: DropdownButtonFormField<int>(
+                              value: _ocorrencias,
+                              decoration: const InputDecoration(labelText: 'Quantas vezes?'),
+                              items: List.generate(11, (i) => i + 2) // 2 a 12 vezes
+                                  .map((v) => DropdownMenuItem(value: v, child: Text('$v vezes')))
+                                  .toList(),
+                              onChanged: (v) => setState(() => _ocorrencias = v!),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                  // FIM REPETIÇÃO
+
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
