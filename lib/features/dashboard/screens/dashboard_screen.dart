@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/storage/whatsapp_service.dart';
 import '../../../shared/widgets/status_chip.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
@@ -269,15 +269,6 @@ class _ModalCentralNotificacoes extends StatelessWidget {
   final List<Cliente> aniversariantes;
   final List<Map<String, dynamic>> inativas;
 
-  Future<void> _abrirWhatsApp(String telefone, String mensagem) async {
-    final limpo = telefone.replaceAll(RegExp(r'\D'), '');
-    final comDdi = limpo.startsWith('55') ? limpo : '55$limpo';
-    final uri = Uri.parse('https://wa.me/$comDdi?text=${Uri.encodeComponent(mensagem)}');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
@@ -331,8 +322,25 @@ class _ModalCentralNotificacoes extends StatelessWidget {
                                   icon: const Icon(Icons.chat, color: Colors.green),
                                   tooltip: 'Enviar Parabéns no WhatsApp',
                                   onPressed: () {
-                                    final mensagem = 'Olá ${cliente.nome}! 🎉 Vi que seu aniversário está chegando ($dia/$mes) e passei para te desejar um feliz dia e oferecer um horário especial!';
-                                    _abrirWhatsApp(cliente.telefone, mensagem);
+                                    final agendamentoNiver = Agendamento(
+                                      id: 'niver',
+                                      clienteId: cliente.id,
+                                      data: DateTime.now(),
+                                      horaInicio: '🎉',
+                                      horaFim: '🎂',
+                                      duracaoMinutos: 0,
+                                      servico: 'Especial Aniversário',
+                                      valor: 0.0,
+                                      status: AgendamentoStatus.agendado,
+                                      observacao: 'Feliz Aniversário!',
+                                      createdAt: DateTime.now(),
+                                      updatedAt: DateTime.now(),
+                                    );
+                                    WhatsAppService.enviarConfirmacao(
+                                      telefone: cliente.telefone,
+                                      nomeCliente: cliente.nome,
+                                      agendamento: agendamentoNiver,
+                                    );
                                   },
                                 ),
                               );
@@ -360,8 +368,25 @@ class _ModalCentralNotificacoes extends StatelessWidget {
                                   icon: const Icon(Icons.chat, color: Colors.green),
                                   tooltip: 'Convidar no WhatsApp',
                                   onPressed: () {
-                                    final mensagem = 'Olá ${cliente.nome}! 💅 Sentimos sua falta aqui no estúdio. Que tal garantirmos seu próximo horário para deixar suas unhas impecáveis?';
-                                    _abrirWhatsApp(cliente.telefone, mensagem);
+                                    final agendamentoRetorno = Agendamento(
+                                      id: 'retorno',
+                                      clienteId: cliente.id,
+                                      data: DateTime.now(),
+                                      horaInicio: '💅',
+                                      horaFim: '✨',
+                                      duracaoMinutos: 0,
+                                      servico: 'Retorno / Manutenção',
+                                      valor: 0.0,
+                                      status: AgendamentoStatus.agendado,
+                                      observacao: 'Sentimos sua falta!',
+                                      createdAt: DateTime.now(),
+                                      updatedAt: DateTime.now(),
+                                    );
+                                    WhatsAppService.enviarConfirmacao(
+                                      telefone: cliente.telefone,
+                                      nomeCliente: cliente.nome,
+                                      agendamento: agendamentoRetorno,
+                                    );
                                   },
                                 ),
                               );
