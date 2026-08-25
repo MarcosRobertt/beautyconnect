@@ -35,38 +35,56 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     final servicos = ref.read(servicoControllerProvider).value ?? [];
 
     final concluidos = agendamentos.where((a) => a.status == AgendamentoStatus.concluido).toList();
-    final faturamentoTotal = concluidos.fold(0.0, (sum, a) => sum + a.valor);
-    final ticketMedio = concluidos.isEmpty ? 0.0 : faturamentoTotal / concluidos.length;
     
-    final ativos = clientes.where((c) {
-      final agsCliente = concluidos.where((a) => a.clienteId == c.id);
-      if (agsCliente.isEmpty) return false;
-      final ultima = agsCliente.map((a) => a.data).reduce((a, b) => a.isAfter(b) ? a : b);
-      return DateTime.now().difference(ultima).inDays <= 30;
-    }).length;
+    // --- LÓGICA DE DATAS PARA COMPARAÇÃO ---
+    final hoje = DateTime.now();
+    final inicioSemanaAtual = hoje.subtract(Duration(days: hoje.weekday - 1));
+    final inicioSemanaPassada = inicioSemanaAtual.subtract(const Duration(days: 7));
+    
+    // Filtrando por períodos
+    final agendamentosSemanaAtual = concluidos.where((a) => a.data.isAfter(inicioSemanaAtual) || a.data.isAtSameMomentAs(inicioSemanaAtual)).toList();
+    final agendamentosSemanaPassada = concluidos.where((a) => a.data.isAfter(inicioSemanaPassada) && a.data.isBefore(inicioSemanaAtual)).toList();
+    final agendamentosMes = concluidos.where((a) => a.data.year == hoje.year && a.data.month == hoje.month).toList();
 
+    // Cálculos Financeiros
+    double calcFaturamento(List<Agendamento> lista) => lista.fold(0.0, (sum, a) => sum + a.valor);
+    double calcTM(List<Agendamento> lista, double fat) => lista.isEmpty ? 0.0 : fat / lista.length;
+
+    final fatSemanaAtual = calcFaturamento(agendamentosSemanaAtual);
+    final tmSemanaAtual = calcTM(agendamentosSemanaAtual, fatSemanaAtual);
+
+    final fatSemanaPassada = calcFaturamento(agendamentosSemanaPassada);
+    final tmSemanaPassada = calcTM(agendamentosSemanaPassada, fatSemanaPassada);
+
+    final fatMes = calcFaturamento(agendamentosMes);
+    final tmMes = calcTM(agendamentosMes, fatMes);
+
+    // Prompt configurado para NÃO ser um chat, e sim um relatório direto
     final contextoIA = '''
-    ATUALIZAÇÃO DE MÉTRICAS DO STUDIO:
-    - Total de Clientes Cadastrados: ${clientes.length} (Ativos: $ativos)
-    - Agendamentos Concluídos: ${concluidos.length}
-    - Faturamento Total: R\$ ${faturamentoTotal.toStringAsFixed(2)}
-    - Ticket Médio (TM): R\$ ${ticketMedio.toStringAsFixed(2)}
-    - Serviços Oferecidos: ${servicos.length}
+    ATUE COMO UM CONSULTOR DE NEGÓCIOS DE UM STUDIO DE BELEZA.
+    Gere um relatório de análise de desempenho direto ao ponto. Não faça perguntas ao final.
     
-    DIRETRIZES DE ANÁLISE:
-    Analise os dados e sugira:
-    1. Estratégias práticas para aumentar o Ticket Médio (combos de serviços).
-    2. Mensagens para reativar os clientes inativos.
-    3. Ações para preencher horários ociosos na agenda.
+    DADOS FINANCEIROS:
+    - Faturamento Semana Atual: R\$ ${fatSemanaAtual.toStringAsFixed(2)} | TM: R\$ ${tmSemanaAtual.toStringAsFixed(2)}
+    - Faturamento Semana Passada: R\$ ${fatSemanaPassada.toStringAsFixed(2)} | TM: R\$ ${tmSemanaPassada.toStringAsFixed(2)}
+    - Faturamento Mês Atual: R\$ ${fatMes.toStringAsFixed(2)} | TM: R\$ ${tmMes.toStringAsFixed(2)}
+    - Total de Clientes na base: ${clientes.length}
+    - Total de Agendamentos no mês: ${agendamentosMes.length}
+
+    O QUE O SEU RELATÓRIO DEVE CONTER NECESSARIAMENTE:
+    1. Comparativo de Ticket Médio (TM) e faturamento da semana atual contra a semana passada (informe se melhorou ou piorou).
+    2. Análise geral do mês atual (como está o ritmo de atendimentos).
+    3. 3 sugestões estratégicas e curtas para melhorar os procedimentos e o agendamento da próxima semana.
+    Formate a resposta com títulos, tópicos e sem saudações genéricas.
     ''';
 
-    // A CORREÇÃO ESTÁ AQUI: Roteando para a tela de Consultoria em vez da Agenda Inteligente
     context.push('/consultoria-ia', extra: contextoIA);
   }
 
   Future<void> _exportarBackup() async {
     setState(() => _processando = true);
     try {
+      // (Mantive toda a sua lógica de backup intacta)
       final clientes = ref.read(clienteControllerProvider).value ?? [];
       final agendamentos = ref.read(todosAgendamentosProvider).value ?? [];
       final servicos = ref.read(servicoControllerProvider).value ?? [];
@@ -159,9 +177,9 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                 const SizedBox(height: 8),
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.auto_awesome, color: Colors.deepPurple),
-                    title: const Text('Consultoria Inteligente (IA)'),
-                    subtitle: const Text('Analisa TM, Retenção e sugere melhorias para o Studio'),
+                    leading: const Icon(Icons.analytics, color: Colors.deepPurple), // Ícone alterado para combinar com relatório
+                    title: const Text('Relatório Gerencial (IA)'), // Título alterado
+                    subtitle: const Text('Gera análise automática de TM e faturamento do Studio'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _abrirIA, 
                   ),
