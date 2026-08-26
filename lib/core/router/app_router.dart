@@ -97,7 +97,7 @@ final appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) {
         final contextoMetricas = state.extra as String?;
-        return AnaliseIaScreen(contextoMetricas: contextoMetricas); // NOME DA CLASSE CORRETO AQUI
+       return const AnaliseIaScreen(); // NOME DA CLASSE CORRETO AQUI
       },
     ),
   ],
