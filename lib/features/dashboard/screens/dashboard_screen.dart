@@ -37,7 +37,6 @@ String gerarDicaEstrategica(Cliente? cliente, Agendamento agendamento) {
     return 'Dica IA: Foco em custo-benefício. Sugira pacotes ou combos mensais de pé e mão para garantir a recorrência.';
   }
   
-  // Dica genérica baseada em observação ou padrão
   if (cliente.observacoes.isNotEmpty) {
     return 'Dica IA: Revise as observações da cliente. Use detalhes de conversas anteriores para criar conexão e oferecer um serviço complementar ao "${agendamento.servico}".';
   }
@@ -235,114 +234,168 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              
-              // SEÇÃO PLANO DE VOO (LISTA ESTRATÉGICA)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Plano de Voo Estratégico', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
-                      ButtonSegment(value: 'Amanhã', label: Text('Amanhã', style: TextStyle(fontSize: 11))),
-                    ],
-                    selected: {_filtroPlanoVoo},
-                    onSelectionChanged: (set) => setState(() => _filtroPlanoVoo = set.first),
-                    style: SegmentedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              
-              if (agendaFiltro.isEmpty)
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(child: Text('Nenhum agendamento para $_filtroPlanoVoo.')),
-                  ),
-                )
-              else
-                ...agendaFiltro.map((a) {
-                  final isBloqueio = a.clienteId == "BLOQUEIO";
-                  final cliente = isBloqueio ? null : clientesPorId[a.clienteId];
-                  final nomeCliente = isBloqueio ? "Compromisso Pessoal" : (cliente?.nome ?? "Cliente removido");
-                  final profissao = cliente?.profissao?.isNotEmpty == true ? cliente!.profissao! : 'Profissão não informada';
-                  
-                  if (isBloqueio) {
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: ListTile(
-                        leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
-                        title: Text(nomeCliente, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                        subtitle: Text(a.servico),
-                        trailing: StatusChip(status: a.status),
-                      ),
-                    );
-                  }
 
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.purple.shade100, width: 1)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+              // 1. LISTA ORIGINAL: AGENDA DE HOJE
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
+                          Text('Agenda de hoje', style: Theme.of(context).textTheme.titleMedium),
+                          TextButton(
+                            onPressed: () => context.go(AppRoutes.agenda),
+                            child: const Text('Ver completa'),
+                          ),
+                        ],
+                      ),
+                      if (m.agendaHoje.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Center(child: Text('Nenhum agendamento para hoje.')),
+                        )
+                      else
+                        ...m.agendaHoje.map((a) {
+                          final nomeCliente = clientesPorId[a.clienteId]?.nome ?? (a.clienteId == "BLOQUEIO" ? "Compromisso Pessoal" : "Cliente removido");
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
+                            title: Text('$nomeCliente — ${a.servico}'),
+                            trailing: StatusChip(status: a.status),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // 2. PLANO DE VOO (DENTRO DO CARD EXPANSÍVEL)
+              Card(
+                clipBehavior: Clip.antiAlias,
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: ExpansionTile(
+                  title: const Text('Plano de Voo Estratégico', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Dicas da IA e Checklist de Vendas'),
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.purple.shade50,
+                    child: const Icon(Icons.psychology, color: Colors.purple),
+                  ),
+                  childrenPadding: const EdgeInsets.all(16),
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        SegmentedButton<String>(
+                          segments: const [
+                            ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
+                            ButtonSegment(value: 'Amanhã', label: Text('Amanhã', style: TextStyle(fontSize: 11))),
+                          ],
+                          selected: {_filtroPlanoVoo},
+                          onSelectionChanged: (set) => setState(() => _filtroPlanoVoo = set.first),
+                          style: SegmentedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    if (agendaFiltro.isEmpty)
+                      const Center(child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 20),
+                        child: Text('Nenhum agendamento para este dia.'),
+                      ))
+                    else
+                      ...agendaFiltro.map((a) {
+                        final isBloqueio = a.clienteId == "BLOQUEIO";
+                        final cliente = isBloqueio ? null : clientesPorId[a.clienteId];
+                        final nomeCliente = isBloqueio ? "Compromisso Pessoal" : (cliente?.nome ?? "Cliente removido");
+                        final profissao = cliente?.profissao?.isNotEmpty == true ? cliente!.profissao! : 'Profissão não informada';
+                        
+                        if (isBloqueio) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: ListTile(
+                              tileColor: Colors.grey.shade50,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                              leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
+                              title: Text(nomeCliente, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                              subtitle: Text(a.servico),
+                              trailing: StatusChip(status: a.status),
+                            ),
+                          );
+                        }
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.purple.shade100, width: 1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(6)),
-                                child: Text(a.horaInicio, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(6)),
+                                    child: Text(a.horaInicio, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(nomeCliente, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                        Text('$profissao • ${a.servico}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                      ],
+                                    ),
+                                  ),
+                                  StatusChip(status: a.status),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
+                              const SizedBox(height: 12),
+                              // DICA IA
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
+                                child: Row(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(nomeCliente, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                    Text('$profissao • ${a.servico}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                                    const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        gerarDicaEstrategica(cliente, a),
+                                        style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                              StatusChip(status: a.status),
+                              const SizedBox(height: 12),
+                              // CHECKLIST DE ATENDIMENTO
+                              Text('Checklist Padrão Ouro:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
+                              const SizedBox(height: 4),
+                              const _ChecklistItem(texto: 'Chamar pelo nome e consultar restrições/observações.'),
+                              const _ChecklistItem(texto: 'Oferecer um serviço complementar focado na necessidade dela.'),
+                              const _ChecklistItem(texto: 'Agendar o retorno antes dela sair da cadeira.'),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          // DICA IA
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    gerarDicaEstrategica(cliente, a),
-                                    style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          // CHECKLIST DE ATENDIMENTO
-                          Text('Checklist Padrão Ouro:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
-                          const SizedBox(height: 4),
-                          _ChecklistItem(texto: 'Chamar pelo nome e consultar restrições/observações.'),
-                          _ChecklistItem(texto: 'Oferecer um serviço complementar focado na necessidade dela.'),
-                          _ChecklistItem(texto: 'Agendar o retorno antes dela sair da cadeira.'),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
+                        );
+                      }),
+                  ],
+                ),
+              ),
                 
               const SizedBox(height: 60),
             ],
@@ -416,7 +469,6 @@ class _CardMetricaInteligente extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Regra da Inteligência (Cores)
     Color corBadge = Colors.grey;
     IconData iconeSeta = Icons.remove;
     String txtEvolucao = 'Sem base';
@@ -455,7 +507,6 @@ class _CardMetricaInteligente extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Icon(icone, color: Theme.of(context).colorScheme.primary, size: 20),
-                  // BADGE DE INTELIGÊNCIA
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                     decoration: BoxDecoration(color: corBadge.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: corBadge.withOpacity(0.3))),
@@ -486,8 +537,6 @@ class _CardMetricaInteligente extends StatelessWidget {
   }
 }
 
-// OS DOIS MODAIS (_ModalCentralNotificacoes e _ModalDetalhesReceita)
-// MANTÊM EXATAMENTE O MESMO CÓDIGO DA SUA VERSÃO ORIGINAL PARA NÃO QUEBRAR NADA
 
 class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({
