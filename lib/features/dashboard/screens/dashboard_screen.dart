@@ -53,6 +53,8 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _filtroPlanoVoo = 'Hoje';
+  String _periodoFaturamento = 'Hoje';
+  String _periodoTM = 'Hoje';
 
   @override
   Widget build(BuildContext context) {
@@ -99,30 +101,63 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
     final totalNotificacoes = aniversariantesProximos.length + inativas.length;
 
-    // CÁLCULOS COMPARATIVOS DA IA
-    final inicioSemanaAtual = hoje.subtract(Duration(days: hoje.weekday % 7));
+    // CÁLCULOS COMPARATIVOS DOS PERÍODOS
+    final ontemZerado = hojeZerado.subtract(const Duration(days: 1));
+    final inicioSemanaAtual = hojeZerado.subtract(Duration(days: hojeZerado.weekday - 1));
     final inicioSemanaAnterior = inicioSemanaAtual.subtract(const Duration(days: 7));
+    final fimSemanaAnterior = inicioSemanaAtual.subtract(const Duration(seconds: 1));
+    final inicioMesAtual = DateTime(hoje.year, hoje.month, 1);
+    final inicioMesAnterior = DateTime(hoje.year, hoje.month - 1, 1);
+    final fimMesAnterior = DateTime(hoje.year, hoje.month, 0, 23, 59, 59);
     
-    double receitaSemanaAtual = 0;
-    double receitaSemanaAnterior = 0;
-    int atendimentosSemanaAtual = 0;
-    int atendimentosSemanaAnterior = 0;
+    double fatHoje = 0, fatOntem = 0;
+    double fatSemana = 0, fatSemanaAnt = 0;
+    double fatMes = 0, fatMesAnt = 0;
+    
+    int qtdHoje = 0, qtdOntem = 0;
+    int qtdSemana = 0, qtdSemanaAnt = 0;
+    int qtdMes = 0, qtdMesAnt = 0;
 
     for (final a in todosAgendamentos) {
       if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
+      final d = a.data;
+      final val = a.valor;
       
-      if (a.data.isAfter(inicioSemanaAtual.subtract(const Duration(seconds: 1)))) {
-        receitaSemanaAtual += a.valor;
-        atendimentosSemanaAtual++;
-      } else if (a.data.isAfter(inicioSemanaAnterior.subtract(const Duration(seconds: 1))) && 
-                 a.data.isBefore(inicioSemanaAtual)) {
-        receitaSemanaAnterior += a.valor;
-        atendimentosSemanaAnterior++;
+      // Hoje vs Ontem
+      if (d.year == hoje.year && d.month == hoje.month && d.day == hoje.day) {
+        fatHoje += val; qtdHoje++;
+      } else if (d.year == ontemZerado.year && d.month == ontemZerado.month && d.day == ontemZerado.day) {
+        fatOntem += val; qtdOntem++;
+      }
+
+      // Semana vs Semana Passada
+      if (!d.isBefore(inicioSemanaAtual)) {
+        fatSemana += val; qtdSemana++;
+      } else if (!d.isBefore(inicioSemanaAnterior) && !d.isAfter(fimSemanaAnterior)) {
+        fatSemanaAnt += val; qtdSemanaAnt++;
+      }
+
+      // Mês vs Mês Passado
+      if (!d.isBefore(inicioMesAtual)) {
+        fatMes += val; qtdMes++;
+      } else if (!d.isBefore(inicioMesAnterior) && !d.isAfter(fimMesAnterior)) {
+        fatMesAnt += val; qtdMesAnt++;
       }
     }
 
-    final ticketMedioAtual = atendimentosSemanaAtual > 0 ? receitaSemanaAtual / atendimentosSemanaAtual : 0.0;
-    final ticketMedioAnterior = atendimentosSemanaAnterior > 0 ? receitaSemanaAnterior / atendimentosSemanaAnterior : 0.0;
+    // Calculando Ticket Médio
+    final tmHoje = qtdHoje > 0 ? fatHoje / qtdHoje : 0.0;
+    final tmOntem = qtdOntem > 0 ? fatOntem / qtdOntem : 0.0;
+    final tmSemana = qtdSemana > 0 ? fatSemana / qtdSemana : 0.0;
+    final tmSemanaAnt = qtdSemanaAnt > 0 ? fatSemanaAnt / qtdSemanaAnt : 0.0;
+    final tmMes = qtdMes > 0 ? fatMes / qtdMes : 0.0;
+    final tmMesAnt = qtdMesAnt > 0 ? fatMesAnt / qtdMesAnt : 0.0;
+
+    // Resoluções de acordo com os filtros escolhidos
+    final valFatAtual = _periodoFaturamento == 'Hoje' ? fatHoje : (_periodoFaturamento == 'Semana' ? fatSemana : fatMes);
+    final valFatAnt = _periodoFaturamento == 'Hoje' ? fatOntem : (_periodoFaturamento == 'Semana' ? fatSemanaAnt : fatMesAnt);
+    final valTMAtual = _periodoTM == 'Hoje' ? tmHoje : (_periodoTM == 'Semana' ? tmSemana : tmMes);
+    final valTMAnt = _periodoTM == 'Hoje' ? tmOntem : (_periodoTM == 'Semana' ? tmSemanaAnt : tmMesAnt);
 
     return Scaffold(
       appBar: AppBar(
@@ -205,7 +240,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Text('Painel Estratégico de Desempenho.', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 20),
               
-              // GRID DE MÉTRICAS COMPARATIVAS
+              // GRID DE MÉTRICAS (Agora com os 4 Cards Restaurados)
               GridView.count(
                 crossAxisCount: larguraTela > 800 ? 4 : (larguraTela < 360 ? 1 : 2),
                 shrinkWrap: true,
@@ -214,22 +249,38 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 crossAxisSpacing: 12,
                 childAspectRatio: larguraTela < 360 ? 2.5 : 1.4,
                 children: [
+                  _CardMetricaOriginal(
+                    titulo: 'Atendimentos hoje',
+                    valor: '${m.totalAgendamentosHoje}',
+                    icone: Icons.calendar_today,
+                  ),
+                  _CardMetricaOriginal(
+                    titulo: 'Próximo atendimento',
+                    valor: m.proximo != null
+                        ? '${m.proximo!.horaInicio} · ${clientesPorId[m.proximo!.clienteId]?.nome ?? "—"}'
+                        : 'Nenhum',
+                    icone: Icons.schedule,
+                  ),
                   _CardMetricaInteligente(
-                    titulo: 'Faturamento (Semana)',
-                    valor: formatarMoeda(receitaSemanaAtual),
+                    titulo: 'Faturamento',
+                    valor: formatarMoeda(valFatAtual),
                     icone: Icons.account_balance_wallet,
-                    valorAnterior: receitaSemanaAnterior,
-                    valorAtual: receitaSemanaAtual,
+                    valorAnterior: valFatAnt,
+                    valorAtual: valFatAtual,
                     ehMoeda: true,
+                    periodoSelecionado: _periodoFaturamento,
+                    onPeriodoChanged: (val) => setState(() => _periodoFaturamento = val!),
                     onTap: () => _mostrarDetalhesReceita(context, todosAgendamentos),
                   ),
                   _CardMetricaInteligente(
-                    titulo: 'Ticket Médio (Semana)',
-                    valor: formatarMoeda(ticketMedioAtual),
+                    titulo: 'Ticket Médio',
+                    valor: formatarMoeda(valTMAtual),
                     icone: Icons.monetization_on,
-                    valorAnterior: ticketMedioAnterior,
-                    valorAtual: ticketMedioAtual,
+                    valorAnterior: valTMAnt,
+                    valorAtual: valTMAtual,
                     ehMoeda: true,
+                    periodoSelecionado: _periodoTM,
+                    onPeriodoChanged: (val) => setState(() => _periodoTM = val!),
                   ),
                 ],
               ),
@@ -448,6 +499,51 @@ class _ChecklistItem extends StatelessWidget {
   }
 }
 
+// CARD ORIGINAL (RESTAURADO PARA OS 2 PRIMEIROS CARDS DO GRID)
+class _CardMetricaOriginal extends StatelessWidget {
+  const _CardMetricaOriginal({required this.titulo, required this.valor, required this.icone, this.onTap});
+  final String titulo;
+  final String valor;
+  final IconData icone;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Icon(icone, color: Theme.of(context).colorScheme.primary, size: 20),
+                  if (onTap != null)
+                    const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(titulo, style: Theme.of(context).textTheme.bodySmall, maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text(
+                valor,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// CARD COM FILTRO E IA (USADO PARA FATURAMENTO E TM)
 class _CardMetricaInteligente extends StatelessWidget {
   const _CardMetricaInteligente({
     required this.titulo,
@@ -456,6 +552,8 @@ class _CardMetricaInteligente extends StatelessWidget {
     required this.valorAnterior,
     required this.valorAtual,
     this.ehMoeda = false,
+    this.periodoSelecionado,
+    this.onPeriodoChanged,
     this.onTap,
   });
   
@@ -465,6 +563,8 @@ class _CardMetricaInteligente extends StatelessWidget {
   final double valorAnterior;
   final double valorAtual;
   final bool ehMoeda;
+  final String? periodoSelecionado;
+  final ValueChanged<String?>? onPeriodoChanged;
   final VoidCallback? onTap;
 
   @override
@@ -507,28 +607,58 @@ class _CardMetricaInteligente extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Icon(icone, color: Theme.of(context).colorScheme.primary, size: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    decoration: BoxDecoration(color: corBadge.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: corBadge.withOpacity(0.3))),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(iconeSeta, size: 10, color: corBadge),
-                        const SizedBox(width: 2),
-                        Text(txtEvolucao, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: corBadge)),
-                      ],
+                  if (periodoSelecionado != null)
+                    SizedBox(
+                      height: 20,
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isDense: true,
+                          value: periodoSelecionado,
+                          icon: const Icon(Icons.keyboard_arrow_down, size: 14, color: Colors.grey),
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade700, fontWeight: FontWeight.bold),
+                          items: ['Hoje', 'Semana', 'Mês'].map((String value) {
+                            return DropdownMenuItem<String>(
+                              value: value,
+                              child: Text(value),
+                            );
+                          }).toList(),
+                          onChanged: onPeriodoChanged,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(titulo, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+              const SizedBox(height: 2),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Text(
+                      valor,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Text(titulo, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-              Text(
-                valor,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800, fontSize: 16),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+              const SizedBox(height: 4),
+              // BADGE OCULTO SE NÃO TIVER COMPARAÇÃO (EX: SE O DIA NÃO TEVE MOVIMENTO)
+              if (valorAnterior > 0 || valorAtual > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  decoration: BoxDecoration(color: corBadge.withOpacity(0.1), borderRadius: BorderRadius.circular(4), border: Border.all(color: corBadge.withOpacity(0.3))),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(iconeSeta, size: 10, color: corBadge),
+                      const SizedBox(width: 2),
+                      Text(txtEvolucao, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: corBadge)),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -536,7 +666,6 @@ class _CardMetricaInteligente extends StatelessWidget {
     );
   }
 }
-
 
 class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({
