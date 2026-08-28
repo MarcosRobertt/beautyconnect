@@ -7,8 +7,6 @@ import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
-import 'cliente_form_screen.dart';
-import 'historico_cliente_screen.dart';
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -17,16 +15,14 @@ class ClientesScreen extends ConsumerStatefulWidget {
   ConsumerState<ClientesScreen> createState() => _ClientesScreenState();
 }
 
-class _ClientesScreenState extends ConsumerState<ClientesScreen>
-    with SingleTickerProviderStateMixin {
+class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final _buscaController = TextEditingController();
-  String _filtroTopClientes = 'gasto';
+  final TextEditingController _buscaController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
@@ -36,40 +32,20 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
     super.dispose();
   }
 
-  void _abrirHistorico(BuildContext context, String clienteId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => HistoricoClienteScreen(clienteId: clienteId),
-      ),
-    );
-  }
-
-  void _editarCliente(BuildContext context, String clienteId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ClienteFormScreen(clienteId: clienteId),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final clientesAsync = ref.watch(clienteControllerProvider);
-    final agendamentosAsync = ref.watch(todosAgendamentosProvider);
+    final estadoAgendaAsync = ref.watch(agendamentoControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Clientes'),
         bottom: TabBar(
           controller: _tabController,
-          isScrollable: true,
           tabs: const [
-            Tab(text: 'Ativos'),
+            Tab(text: 'Todos'),
             Tab(text: 'Recorrência'),
             Tab(text: 'Inativos'),
-            Tab(text: 'Top Clientes'),
           ],
         ),
       ),
@@ -80,50 +56,61 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
       body: clientesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
-        data: (clientes) {
-          final agendamentos = agendamentosAsync.value ?? [];
-          final textoBusca = _buscaController.text.trim().toLowerCase();
+        data: (todosClientes) {
+          // Extrai a lista global de agendamentos para calcular o status em tempo real
+          final agendamentos = estadoAgendaAsync.value?.lista ?? [];
+          
+          final hoje = DateTime.now();
+          final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
 
-          final filtrados = clientes.where((c) {
-            if (textoBusca.isEmpty) return true;
-            return c.nome.toLowerCase().contains(textoBusca) ||
-                c.telefone.contains(textoBusca);
-          }).toList();
+          final clientesComAgendamentoAtivo = <String>{};
+          final ultimaDataPorCliente = <String, DateTime>{};
 
-          return Column(
+          for (final ag in agendamentos) {
+            if (ag.clienteId == 'BLOQUEIO') continue;
+
+            final dataAg = DateTime(ag.data.year, ag.data.month, ag.data.day);
+
+            // TRAVA DA ELIZA: Se tem agendamento ativo para hoje ou futuro, marca como ATIVA
+            if ((ag.status == AgendamentoStatus.agendado || ag.status == AgendamentoStatus.confirmado) &&
+                (dataAg.isAfter(hojeZerado) || dataAg.isAtSameMomentAs(hojeZerado))) {
+              clientesComAgendamentoAtivo.add(ag.clienteId);
+            }
+
+            // Armazena a última data de atendimento concluído
+            if (ag.status == AgendamentoStatus.concluido) {
+              final dataAtualGuardada = ultimaDataPorCliente[ag.clienteId];
+              if (dataAtualGuardada == null || ag.data.isAfter(dataAtualGuardada)) {
+                ultimaDataPorCliente[ag.clienteId] = ag.data;
+              }
+            }
+          }
+
+          final recorrencia = <Cliente>[];
+          final inativos = <Cliente>[];
+
+          for (final cliente in todosClientes) {
+            // Se tem agendamento ativo hoje ou no futuro, NÃO entra em Recorrência nem em Inativos
+            if (clientesComAgendamentoAtivo.contains(cliente.id)) {
+              continue;
+            }
+
+            final ultimaData = ultimaDataPorCliente[cliente.id] ?? cliente.createdAt;
+            final diasSemAgendar = hojeZerado.difference(DateTime(ultimaData.year, ultimaData.month, ultimaData.day)).inDays;
+
+            if (diasSemAgendar >= 15 && diasSemAgendar < 30) {
+              recorrencia.add(cliente);
+            } else if (diasSemAgendar >= 30) {
+              inativos.add(cliente);
+            }
+          }
+
+          return TabBarView(
+            controller: _tabController,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextField(
-                  controller: _buscaController,
-                  decoration: InputDecoration(
-                    labelText: 'Buscar cliente',
-                    hintText: 'Nome ou telefone...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: textoBusca.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _buscaController.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _construirListaAtivos(filtrados, agendamentos),
-                    _construirListaRecorrencia(filtrados, agendamentos),
-                    _construirListaInativos(filtrados, agendamentos),
-                    _construirListaTopClientes(filtrados, agendamentos),
-                  ],
-                ),
-              ),
+              _construirAbaCliente(todosClientes, null),
+              _construirAbaCliente(recorrencia, 'clientes que não agendaram em até 15 dias'),
+              _construirAbaCliente(inativos, 'clientes que não agendaram em 30 dias ou mais'),
             ],
           );
         },
@@ -131,192 +118,71 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen>
     );
   }
 
-  Widget _construirListaAtivos(
-      List<Cliente> clientes, List<Agendamento> agendamentos) {
-    final hoje = DateTime.now();
-    final ativos = clientes.where((c) {
-      final agsCliente = agendamentos.where((a) =>
-          a.clienteId == c.id && a.status != AgendamentoStatus.cancelado);
-      if (agsCliente.isEmpty) return true;
-      final ultimaData = agsCliente
-          .map((a) => a.data)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
-      return hoje.difference(ultimaData).inDays <= 30;
-    }).toList();
+  Widget _construirAbaCliente(List<Cliente> listaClientes, String? textoSubtitulo) {
+    final textoBusca = _buscaController.text.trim().toLowerCase();
+    final filtrados = textoBusca.isEmpty
+        ? listaClientes
+        : listaClientes.where((c) =>
+            c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca)
+          ).toList();
 
-    return _construirListaPadrao(ativos);
-  }
-
-  Widget _construirListaRecorrencia(
-      List<Cliente> clientes, List<Agendamento> agendamentos) {
-    final hoje = DateTime.now();
-    final recorrentes = clientes.where((c) {
-      final agsCliente = agendamentos.where((a) =>
-          a.clienteId == c.id && a.status != AgendamentoStatus.cancelado);
-      if (agsCliente.isEmpty) return false;
-      final ultimaData = agsCliente
-          .map((a) => a.data)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
-      return hoje.difference(ultimaData).inDays <= 15;
-    }).toList();
-
-    return _construirListaPadrao(recorrentes);
-  }
-
-  Widget _construirListaInativos(
-      List<Cliente> clientes, List<Agendamento> agendamentos) {
-    final hoje = DateTime.now();
-    final inativos = clientes.where((c) {
-      final agsCliente = agendamentos.where((a) =>
-          a.clienteId == c.id && a.status != AgendamentoStatus.cancelado);
-      if (agsCliente.isEmpty) return false;
-      final ultimaData = agsCliente
-          .map((a) => a.data)
-          .reduce((a, b) => a.isAfter(b) ? a : b);
-      return hoje.difference(ultimaData).inDays > 30;
-    }).toList();
-
-    return _construirListaPadrao(inativos);
-  }
-
-  Widget _construirListaPadrao(List<Cliente> lista) {
-    if (lista.isEmpty) {
-      return const Center(child: Text('Nenhum cliente nesta categoria.'));
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: lista.length,
-      itemBuilder: (context, i) {
-        final cliente = lista[i];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: CircleAvatar(
-              backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-              child: Text(
-                cliente.nome.isNotEmpty ? cliente.nome[0].toUpperCase() : '?',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                ),
-              ),
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // SUBTÍTULO INDICATIVO SOLICITADO
+          if (textoSubtitulo != null) ...[
+            Text(
+              textoSubtitulo,
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple.shade700),
             ),
-            title: Text(
-              cliente.nome,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+            const SizedBox(height: 8),
+          ],
+
+          TextField(
+            controller: _buscaController,
+            decoration: const InputDecoration(
+              hintText: 'Buscar cliente por nome ou telefone...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
             ),
-            subtitle: Text(cliente.telefone),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
-                  tooltip: 'Editar Cadastro',
-                  onPressed: () => _editarCliente(context, cliente.id),
-                ),
-                const Icon(Icons.chevron_right, color: Colors.grey),
-              ],
-            ),
-            onTap: () => _abrirHistorico(context, cliente.id),
+            onChanged: (_) => setState(() {}),
           ),
-        );
-      },
-    );
-  }
+          const SizedBox(height: 12),
 
-  Widget _construirListaTopClientes(
-      List<Cliente> clientes, List<Agendamento> agendamentos) {
-    final ranking = clientes.map((c) {
-      final ags = agendamentos.where((a) =>
-          a.clienteId == c.id && a.status == AgendamentoStatus.concluido);
-      final totalGasto = ags.fold(0.0, (sum, a) => sum + a.valor);
-      final totalVisitas = ags.length;
-      return {
-        'cliente': c,
-        'gasto': totalGasto,
-        'visitas': totalVisitas,
-      };
-    }).toList();
-
-    if (_filtroTopClientes == 'gasto') {
-      ranking.sort((a, b) => (b['gasto'] as double).compareTo(a['gasto'] as double));
-    } else {
-      ranking.sort((a, b) => (b['visitas'] as int).compareTo(a['visitas'] as int));
-    }
-
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(
-                value: 'gasto',
-                label: Text('Mais Gastam', style: TextStyle(fontSize: 12)),
-                icon: Icon(Icons.attach_money, size: 16),
-              ),
-              ButtonSegment(
-                value: 'visitas',
-                label: Text('Mais Frequentam', style: TextStyle(fontSize: 12)),
-                icon: Icon(Icons.repeat, size: 16),
-              ),
-            ],
-            selected: {_filtroTopClientes},
-            onSelectionChanged: (set) => setState(() => _filtroTopClientes = set.first),
-          ),
-        ),
-        Expanded(
-          child: ranking.isEmpty
-              ? const Center(child: Text('Nenhum cliente registrado.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  itemCount: ranking.length,
-                  itemBuilder: (context, i) {
-                    final item = ranking[i];
-                    final cliente = item['cliente'] as Cliente;
-                    final gasto = item['gasto'] as double;
-                    final visitas = item['visitas'] as int;
-
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        leading: CircleAvatar(
-                          backgroundColor: i < 3 ? Colors.amber.shade100 : Colors.grey.shade200,
-                          child: Text(
-                            '#${i + 1}',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
-                              color: i < 3 ? Colors.amber.shade900 : Colors.black87,
-                            ),
-                          ),
-                        ),
-                        title: Text(
-                          cliente.nome,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        subtitle: Text('$visitas visita(s) · R\$ ${gasto.toStringAsFixed(2).replaceAll('.', ',')}'),
+          Expanded(
+            child: filtrados.isEmpty
+                ? const Center(child: Text('Nenhuma cliente encontrada.', style: TextStyle(color: Colors.grey)))
+                : ListView.separated(
+                    itemCount: filtrados.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final cliente = filtrados[index];
+                      return ListTile(
+                        title: Text(cliente.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text(cliente.telefone),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
-                              tooltip: 'Editar Cadastro',
-                              onPressed: () => _editarCliente(context, cliente.id),
+                              icon: const Icon(Icons.history, color: Colors.purple),
+                              tooltip: 'Histórico',
+                              onPressed: () => context.push('${AppRoutes.clienteHistorico}/${cliente.id}'),
                             ),
-                            const Icon(Icons.chevron_right, color: Colors.grey),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Colors.grey),
+                              tooltip: 'Editar',
+                              onPressed: () => context.push('${AppRoutes.clienteEditar}/${cliente.id}'),
+                            ),
                           ],
                         ),
-                        onTap: () => _abrirHistorico(context, cliente.id),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }
