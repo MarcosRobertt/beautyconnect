@@ -33,8 +33,11 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
   bool _isBloqueio = false; 
   String? _clienteId;
-  String? _servicoId;
+  
+  // --- NOVO: Suporte a múltiplos serviços ---
+  List<String> _servicosIdsSelecionados = [];
   String _servicoNomeOriginal = ''; 
+  
   DateTime _data = DateTime.now();
   TimeOfDay _horaInicio = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _horaFim = const TimeOfDay(hour: 10, minute: 0);
@@ -78,7 +81,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           _motivoBloqueioController.text = ag.servico;
         } else {
           _clienteId = ag.clienteId;
-          _servicoId = ag.servicoId;
+          // Se for uma edição, preenche a lista com o ID original para manter a integridade
+          if (ag.servicoId != null) {
+            _servicosIdsSelecionados = [ag.servicoId!];
+          }
           _servicoNomeOriginal = ag.servico;
           _valorController.text = ag.valor.toString();
         }
@@ -112,14 +118,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
   bool get _horaFimDepoisDoInicio =>
       (_horaFim.hour * 60 + _horaFim.minute) > (_horaInicio.hour * 60 + _horaInicio.minute);
-
-  void _selecionarServico(Servico servico) {
-    setState(() {
-      _servicoId = servico.id;
-      _valorController.text = servico.valor.toString();
-      _horaFim = _somarMinutos(_horaInicio, servico.duracaoMin);
-    });
-  }
 
   Future<void> _selecionarData() async {
     final selecionada = await showDatePicker(
@@ -156,12 +154,15 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           _horaInicio = selecionada;
           if (_isBloqueio) {
             _horaFim = _somarMinutos(_horaInicio, 60); 
-          } else if (_servicoId != null) {
+          } else if (_servicosIdsSelecionados.isNotEmpty) {
             final servicos = ref.read(servicoControllerProvider).value ?? [];
-            try {
-              final servicoEscolhido = servicos.firstWhere((s) => s.id == _servicoId);
-              _horaFim = _somarMinutos(_horaInicio, servicoEscolhido.duracaoMin);
-            } catch (_) {}
+            int totalMin = 0;
+            for (var id in _servicosIdsSelecionados) {
+              try {
+                totalMin += servicos.firstWhere((s) => s.id == id).duracaoMin;
+              } catch (_) {}
+            }
+            _horaFim = _somarMinutos(_horaInicio, totalMin);
           }
         } else {
           _horaFim = selecionada;
@@ -187,7 +188,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       builder: (context) => AlertDialog(
         title: const Text('⚠️ Atenção'),
         content: Text(
-          'O serviço "$nomeServico" possui duração prevista de $duracaoServico minutos.\n\n'
+          'O combo "$nomeServico" possui duração prevista de $duracaoServico minutos.\n\n'
           'O horário selecionado ocupa $duracaoSelecionada minutos.\n\n'
           'Deseja continuar mesmo assim?',
         ),
@@ -319,37 +320,38 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         setState(() => _erro = 'Selecione um cliente.');
         return;
       }
-      if (_servicoId == null) {
-        setState(() => _erro = 'Selecione um serviço.');
+      if (_servicosIdsSelecionados.isEmpty) {
+        setState(() => _erro = 'Selecione pelo menos um serviço.');
         return;
       }
       
       final servicos = ref.read(servicoControllerProvider).value ?? [];
-      Servico? servicoEscolhido;
-      for (final s in servicos) {
-        if (s.id == _servicoId) {
-          servicoEscolhido = s;
-          break;
-        }
+      List<String> nomesCombinados = [];
+      int duracaoTotal = 0;
+
+      for (var id in _servicosIdsSelecionados) {
+        try {
+          final s = servicos.firstWhere((x) => x.id == id);
+          nomesCombinados.add(s.nome);
+          duracaoTotal += s.duracaoMin;
+        } catch (_) {}
       }
 
-      if (servicoEscolhido != null) {
-        final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
-        final duracaoServico = servicoEscolhido.duracaoMin;
-        if (duracaoSelecionada != duracaoServico) {
-          final continuar = await _mostrarAlertaDuracao(
-            context,
-            servicoEscolhido.nome,
-            duracaoServico,
-            duracaoSelecionada,
-          );
-          if (!continuar) return;
-        }
+      nomeServico = nomesCombinados.isNotEmpty ? nomesCombinados.join(' + ') : _servicoNomeOriginal;
+      
+      final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
+      if (duracaoSelecionada != duracaoTotal && duracaoTotal > 0) {
+        final continuar = await _mostrarAlertaDuracao(
+          context,
+          nomeServico,
+          duracaoTotal,
+          duracaoSelecionada,
+        );
+        if (!continuar) return;
       }
 
-      nomeServico = servicoEscolhido?.nome ?? _servicoNomeOriginal;
       valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
-      servicoIdFinal = _servicoId;
+      servicoIdFinal = _servicosIdsSelecionados.first; // Guarda o principal p/ histórico base
     }
 
     List<DateTime> datasParaSalvar = [];
@@ -656,30 +658,46 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                         if (servicos.isEmpty) {
                           return const Text('Cadastre ao menos um serviço.');
                         }
-                        final servicoAindaExiste = _servicoId != null && servicos.any((s) => s.id == _servicoId);
+                        
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            DropdownButtonFormField<String>(
-                              value: servicoAindaExiste ? _servicoId : null,
-                              decoration: const InputDecoration(labelText: 'Serviço'),
-                              items: servicos
-                                  .map((Servico s) => DropdownMenuItem(
-                                        value: s.id,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            CircleAvatar(backgroundColor: Color(s.corValor), radius: 6),
-                                            const SizedBox(width: 8),
-                                            Text('${s.nome} · ${s.duracaoMin}min'),
-                                          ],
-                                        ),
-                                      ))
-                                  .toList(),
-                              onChanged: (v) {
-                                final s = servicos.firstWhere((s) => s.id == v);
-                                _selecionarServico(s);
-                              },
+                            const Text('Serviços (Selecione um ou mais)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8.0,
+                              runSpacing: 8.0,
+                              children: servicos.map((s) {
+                                final isSelecionado = _servicosIdsSelecionados.contains(s.id);
+                                return FilterChip(
+                                  label: Text('${s.nome} (${s.duracaoMin}m)'),
+                                  selected: isSelecionado,
+                                  selectedColor: Colors.purple.shade50,
+                                  checkmarkColor: Colors.purple,
+                                  onSelected: (selecionou) {
+                                    setState(() {
+                                      if (selecionou) {
+                                        _servicosIdsSelecionados.add(s.id);
+                                      } else {
+                                        _servicosIdsSelecionados.remove(s.id);
+                                      }
+                                      
+                                      // Soma tudo automático ao clicar!
+                                      double totalValor = 0;
+                                      int totalMin = 0;
+                                      for (var id in _servicosIdsSelecionados) {
+                                        try {
+                                          final srv = servicos.firstWhere((x) => x.id == id);
+                                          totalValor += srv.valor;
+                                          totalMin += srv.duracaoMin;
+                                        } catch (_) {}
+                                      }
+                                      _valorController.text = totalValor.toStringAsFixed(2).replaceAll('.', ',');
+                                      _horaFim = _somarMinutos(_horaInicio, totalMin);
+                                    });
+                                  },
+                                );
+                              }).toList(),
                             ),
                           ],
                         );
