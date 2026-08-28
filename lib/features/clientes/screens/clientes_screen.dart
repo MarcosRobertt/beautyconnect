@@ -9,11 +9,16 @@ import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
 
-// --- CLASSE DE AGREGAÇÃO PARA ALTA PERFORMANCE ---
+// Provedor que garante a leitura de TODOS os agendamentos do banco
+final _todosAgendamentosGeralProvider = FutureProvider.autoDispose<List<Agendamento>>((ref) async {
+  ref.watch(agendamentoControllerProvider); 
+  return await ref.read(agendamentoControllerProvider.notifier).todos();
+});
+
 class ClienteAgregado {
   final Cliente cliente;
-  final int totalVisitas; // Agora calculado por DIAS ÚNICOS
-  final double faturamentoTotal; // Nova métrica de valor
+  final int totalVisitas; 
+  final double faturamentoTotal; 
   final DateTime? ultimaVisita;
   final bool temAgendamentoAtivoFuturo;
   final int diasSemAgendar;
@@ -39,8 +44,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   late TabController _tabController;
   final TextEditingController _buscaController = TextEditingController();
   
-  // Controle do filtro da aba "Top Clientes"
-  String _filtroTop = 'faturamento'; // Pode ser 'faturamento' ou 'frequencia'
+  String _filtroTop = 'faturamento'; 
 
   @override
   void initState() {
@@ -58,7 +62,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   @override
   Widget build(BuildContext context) {
     final clientesAsync = ref.watch(clienteControllerProvider);
-    final estadoAgendaAsync = ref.watch(agendamentoControllerProvider);
+    final agendamentosAsync = ref.watch(_todosAgendamentosGeralProvider);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
     return Scaffold(
@@ -83,77 +87,79 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
         data: (todosClientes) {
-          final agendamentos = estadoAgendaAsync.value?.lista ?? [];
-          final hoje = DateTime.now();
-          final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
+          
+          return agendamentosAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (e, _) => Center(child: Text('Erro ao carregar histórico: $e')),
+            data: (agendamentos) {
+              final hoje = DateTime.now();
+              final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
 
-          // 1. Processamento de Histórico e Métricas Financeiras
-          List<ClienteAgregado> agregados = todosClientes.map((cliente) {
-            Set<DateTime> diasUnicosDeVisita = {}; // Garante que 2 serviços no mesmo dia valem por 1 visita
-            double faturamento = 0.0;
-            DateTime? ultimaConcluida;
-            bool temFuturo = false;
+              List<ClienteAgregado> agregados = todosClientes.map((cliente) {
+                int visitasConcluidas = 0;
+                double faturamento = 0.0;
+                DateTime? ultimaConcluida;
+                bool temFuturo = false;
 
-            for (final ag in agendamentos) {
-              if (ag.clienteId != cliente.id) continue;
+                for (final ag in agendamentos) {
+                  if (ag.clienteId != cliente.id) continue;
 
-              final dataAgZerada = DateTime(ag.data.year, ag.data.month, ag.data.day);
+                  final dataAgZerada = DateTime(ag.data.year, ag.data.month, ag.data.day);
 
-              // Validação da Eliza: Tem agendamento ativo para hoje ou futuro?
-              if ((ag.status == AgendamentoStatus.agendado || ag.status == AgendamentoStatus.confirmado) &&
-                  (dataAgZerada.isAfter(hojeZerado) || dataAgZerada.isAtSameMomentAs(hojeZerado))) {
-                temFuturo = true;
-              }
+                  if ((ag.status == AgendamentoStatus.agendado || ag.status == AgendamentoStatus.confirmado) &&
+                      (dataAgZerada.isAfter(hojeZerado) || dataAgZerada.isAtSameMomentAs(hojeZerado))) {
+                    temFuturo = true;
+                  }
 
-              // Conta visitas concluídas por dia único e soma faturamento
-              if (ag.status == AgendamentoStatus.concluido) {
-                diasUnicosDeVisita.add(dataAgZerada);
-                faturamento += ag.valor;
-                
-                if (ultimaConcluida == null || ag.data.isAfter(ultimaConcluida)) {
-                  ultimaConcluida = ag.data;
+                  if (ag.status == AgendamentoStatus.concluido) {
+                    visitasConcluidas++;
+                    faturamento += ag.valor;
+                    
+                    if (ultimaConcluida == null || ag.data.isAfter(ultimaConcluida)) {
+                      ultimaConcluida = ag.data;
+                    }
+                  }
                 }
+
+                final dataReferencia = ultimaConcluida ?? cliente.createdAt;
+                final refZerada = DateTime(dataReferencia.year, dataReferencia.month, dataReferencia.day);
+                final diasSemAgendar = hojeZerado.difference(refZerada).inDays;
+
+                return ClienteAgregado(
+                  cliente: cliente,
+                  totalVisitas: visitasConcluidas,
+                  faturamentoTotal: faturamento,
+                  ultimaVisita: ultimaConcluida,
+                  temAgendamentoAtivoFuturo: temFuturo,
+                  diasSemAgendar: diasSemAgendar,
+                );
+              }).toList();
+
+              final topClientes = List<ClienteAgregado>.from(agregados.where((c) => c.totalVisitas > 0));
+              if (_filtroTop == 'faturamento') {
+                topClientes.sort((a, b) => b.faturamentoTotal.compareTo(a.faturamentoTotal));
+              } else {
+                topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
               }
-            }
 
-            final dataReferencia = ultimaConcluida ?? cliente.createdAt;
-            final refZerada = DateTime(dataReferencia.year, dataReferencia.month, dataReferencia.day);
-            final diasSemAgendar = hojeZerado.difference(refZerada).inDays;
+              final recorrencia = agregados.where((c) => 
+                !c.temAgendamentoAtivoFuturo && c.diasSemAgendar >= 15 && c.diasSemAgendar < 30
+              ).toList();
 
-            return ClienteAgregado(
-              cliente: cliente,
-              totalVisitas: diasUnicosDeVisita.length,
-              faturamentoTotal: faturamento,
-              ultimaVisita: ultimaConcluida,
-              temAgendamentoAtivoFuturo: temFuturo,
-              diasSemAgendar: diasSemAgendar,
-            );
-          }).toList();
+              final inativos = agregados.where((c) => 
+                !c.temAgendamentoAtivoFuturo && c.diasSemAgendar >= 30
+              ).toList();
 
-          // 2. Distribuição das Listas (Regras de Negócio)
-          final topClientes = List<ClienteAgregado>.from(agregados.where((c) => c.totalVisitas > 0));
-          if (_filtroTop == 'faturamento') {
-            topClientes.sort((a, b) => b.faturamentoTotal.compareTo(a.faturamentoTotal));
-          } else {
-            topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
-          }
-
-          final recorrencia = agregados.where((c) => 
-            !c.temAgendamentoAtivoFuturo && c.diasSemAgendar >= 15 && c.diasSemAgendar < 30
-          ).toList();
-
-          final inativos = agregados.where((c) => 
-            !c.temAgendamentoAtivoFuturo && c.diasSemAgendar >= 30
-          ).toList();
-
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _construirAbaCliente(agregados, null, moeda),
-              _construirAbaTopClientes(topClientes, moeda), // Aba especial com botão de filtro
-              _construirAbaCliente(recorrencia, 'Clientes que não agendaram em até 15 dias', moeda),
-              _construirAbaCliente(inativos, 'Clientes que não agendaram em 30 dias ou mais', moeda),
-            ],
+              return TabBarView(
+                controller: _tabController,
+                children: [
+                  _construirAbaCliente(agregados, null, moeda),
+                  _construirAbaTopClientes(topClientes, moeda),
+                  _construirAbaCliente(recorrencia, 'Clientes que não agendaram em até 15 dias', moeda),
+                  _construirAbaCliente(inativos, 'Clientes que não agendaram em 30 dias ou mais', moeda),
+                ],
+              );
+            },
           );
         },
       ),
@@ -166,7 +172,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // BOTÃO DE SELEÇÃO: Faturamento vs Visitas
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'faturamento', label: Text('Maior Gasto (R\$)', style: TextStyle(fontSize: 12))),
@@ -243,7 +248,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               const SizedBox(height: 4),
               Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13)),
               const SizedBox(height: 2),
-              // CARD MODERNO MOSTRANDO AS DUAS MÉTRICAS SIMULTANEAMENTE
               Text(
                 '🔄 Visitas: ${agregado.totalVisitas} • 💰 Gasto: ${moeda.format(agregado.faturamentoTotal)}\n📅 Última visita: $dataFormatada', 
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500)
