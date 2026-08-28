@@ -37,7 +37,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   // --- ESTRUTURA HÍBRIDA: COMANDA DINÂMICA ---
   final List<String> _servicosIdsSelecionados = [];
   String _servicoNomeOriginal = ''; 
-  List<String> _ultimosServicosIds = []; // Guarda os IDs dos 5 serviços mais usados
+  List<String> _ultimosServicosIds = []; 
   
   DateTime _data = DateTime.now();
   TimeOfDay _horaInicio = const TimeOfDay(hour: 9, minute: 0);
@@ -68,7 +68,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   Future<void> _carregar() async {
     final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
     
-    // LÓGICA DA IA: Descobrir os 5 últimos serviços mais usados
     final agendamentosOrdenados = List<Agendamento>.from(todosAgendamentos)
       ..sort((a, b) => b.data.compareTo(a.data));
     final idsUnicos = <String>{};
@@ -80,7 +79,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     }
     _ultimosServicosIds = idsUnicos.toList();
 
-    // Lógica original de Edição
     if (_editando) {
       Agendamento? ag;
       for (final a in todosAgendamentos) {
@@ -801,12 +799,12 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // 1. SERVIÇO PRINCIPAL (AGORA COM BUSCA/DIGITAÇÃO)
+                            // 1. SERVIÇO PRINCIPAL COM BUSCA (DropdownMenu nativo)
                             DropdownMenu<String>(
                               expandedInsets: EdgeInsets.zero,
                               initialSelection: _servicosIdsSelecionados.isNotEmpty ? _servicosIdsSelecionados.first : null,
                               label: const Text('Serviço Principal'),
-                              enableFilter: true, // Habilita a busca ao digitar!
+                              enableFilter: true,
                               dropdownMenuEntries: servicos.map((s) => DropdownMenuEntry(
                                 value: s.id,
                                 label: '${s.nome} · ${s.duracaoMin}m',
@@ -826,12 +824,12 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            // 2. Lista de Serviços Extras Escolhidos
+                            // 2. Lista de Serviços Extras Escolhidos (CORREÇÃO APLICADA NA LINHA ABAIXO)
                             if (_servicosIdsSelecionados.length > 1) ...[
                               const Text('Serviços Adicionais:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                               const SizedBox(height: 8),
                               ..._servicosIdsSelecionados.skip(1).map((id) {
-                                final s = servicos.firstWhere((x) => x.id == id, orElse: () => Servico(id: id, nome: 'Desconhecido', valor: 0, duracaoMin: 0, corValor: 0));
+                                final s = servicos.firstWhere((x) => x.id == id, orElse: () => Servico(id: id, nome: 'Desconhecido', valor: 0, duracaoMin: 0, corValor: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()));
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
