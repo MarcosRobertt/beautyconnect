@@ -34,9 +34,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   bool _isBloqueio = false; 
   String? _clienteId;
   
-  // --- NOVO: Suporte a múltiplos serviços ---
-  List<String> _servicosIdsSelecionados = [];
+  // --- ESTRUTURA HÍBRIDA: COMANDA DINÂMICA ---
+  final List<String> _servicosIdsSelecionados = [];
   String _servicoNomeOriginal = ''; 
+  List<String> _ultimosServicosIds = []; // Guarda os IDs dos 5 serviços mais usados
   
   DateTime _data = DateTime.now();
   TimeOfDay _horaInicio = const TimeOfDay(hour: 9, minute: 0);
@@ -65,10 +66,24 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   }
 
   Future<void> _carregar() async {
+    final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
+    
+    // LÓGICA DA IA: Descobrir os 5 últimos serviços mais usados
+    final agendamentosOrdenados = List<Agendamento>.from(todosAgendamentos)
+      ..sort((a, b) => b.data.compareTo(a.data));
+    final idsUnicos = <String>{};
+    for (final ag in agendamentosOrdenados) {
+      if (ag.servicoId != null && ag.clienteId != 'BLOQUEIO') {
+        idsUnicos.add(ag.servicoId!);
+        if (idsUnicos.length >= 5) break;
+      }
+    }
+    _ultimosServicosIds = idsUnicos.toList();
+
+    // Lógica original de Edição
     if (_editando) {
-      final todos = await ref.read(agendamentoControllerProvider.notifier).todos();
       Agendamento? ag;
-      for (final a in todos) {
+      for (final a in todosAgendamentos) {
         if (a.id == widget.agendamentoId) {
           ag = a;
           break;
@@ -81,9 +96,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           _motivoBloqueioController.text = ag.servico;
         } else {
           _clienteId = ag.clienteId;
-          // Se for uma edição, preenche a lista com o ID original para manter a integridade
           if (ag.servicoId != null) {
-            _servicosIdsSelecionados = [ag.servicoId!];
+            _servicosIdsSelecionados.add(ag.servicoId!);
           }
           _servicoNomeOriginal = ag.servico;
           _valorController.text = ag.valor.toString();
@@ -95,6 +109,21 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       }
     }
     setState(() => _carregando = false);
+  }
+
+  void _recalcularTotais() {
+    final servicos = ref.read(servicoControllerProvider).value ?? [];
+    double totalValor = 0;
+    int totalMin = 0;
+    for (var id in _servicosIdsSelecionados) {
+      try {
+        final s = servicos.firstWhere((x) => x.id == id);
+        totalValor += s.valor;
+        totalMin += s.duracaoMin;
+      } catch (_) {}
+    }
+    _valorController.text = totalValor.toStringAsFixed(2).replaceAll('.', ',');
+    _horaFim = _somarMinutos(_horaInicio, totalMin);
   }
 
   TimeOfDay _parseHora(String hhmm) {
@@ -188,7 +217,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       builder: (context) => AlertDialog(
         title: const Text('⚠️ Atenção'),
         content: Text(
-          'O combo "$nomeServico" possui duração prevista de $duracaoServico minutos.\n\n'
+          'A comanda "$nomeServico" possui duração prevista de $duracaoServico minutos.\n\n'
           'O horário selecionado ocupa $duracaoSelecionada minutos.\n\n'
           'Deseja continuar mesmo assim?',
         ),
@@ -321,7 +350,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         return;
       }
       if (_servicosIdsSelecionados.isEmpty) {
-        setState(() => _erro = 'Selecione pelo menos um serviço.');
+        setState(() => _erro = 'Selecione um serviço.');
         return;
       }
       
@@ -351,7 +380,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       }
 
       valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
-      servicoIdFinal = _servicosIdsSelecionados.first; // Guarda o principal p/ histórico base
+      servicoIdFinal = _servicosIdsSelecionados.first; 
     }
 
     List<DateTime> datasParaSalvar = [];
@@ -423,6 +452,118 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     }
 
     if (mounted) context.pop();
+  }
+
+  void _abrirModalAdicionarServico(List<Servico> todosServicos) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        String textoBusca = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final ultimos5Servicos = todosServicos
+                .where((s) => _ultimosServicosIds.contains(s.id) && !_servicosIdsSelecionados.contains(s.id))
+                .toList();
+            
+            if (ultimos5Servicos.isEmpty && _ultimosServicosIds.isEmpty) {
+              ultimos5Servicos.addAll(todosServicos.where((s) => !_servicosIdsSelecionados.contains(s.id)).take(5));
+            }
+
+            final buscaAtiva = textoBusca.trim().isNotEmpty;
+            final resultadosBusca = buscaAtiva 
+              ? todosServicos.where((s) => 
+                  s.nome.toLowerCase().contains(textoBusca.toLowerCase()) && 
+                  !_servicosIdsSelecionados.contains(s.id)
+                ).toList()
+              : <Servico>[];
+
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                top: 20, left: 20, right: 20
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Adicionar Serviço', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                    ],
+                  ),
+                  TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Buscar serviço por nome...',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (val) => setModalState(() => textoBusca = val),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  if (!buscaAtiva) ...[
+                    if (ultimos5Servicos.isNotEmpty) ...[
+                      const Text('⭐ Últimos 5 Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: ultimos5Servicos.map((s) => ActionChip(
+                          label: Text(s.nome, style: TextStyle(color: Colors.purple.shade900)),
+                          backgroundColor: Colors.purple.shade50,
+                          side: BorderSide(color: Colors.purple.shade200),
+                          onPressed: () {
+                            setState(() {
+                              _servicosIdsSelecionados.add(s.id);
+                              _recalcularTotais();
+                            });
+                            Navigator.pop(context);
+                          },
+                        )).toList(),
+                      ),
+                    ]
+                  ] else ...[
+                    if (resultadosBusca.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Text('Nenhum serviço correspondente encontrado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                      )
+                    else
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 250),
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: resultadosBusca.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (ctx, i) {
+                            final s = resultadosBusca[i];
+                            return ListTile(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(s.nome, style: const TextStyle(fontWeight: FontWeight.w600)),
+                              subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
+                              onTap: () {
+                                setState(() {
+                                  _servicosIdsSelecionados.add(s.id);
+                                  _recalcularTotais();
+                                });
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                  ]
+                ],
+              ),
+            );
+          }
+        );
+      }
+    );
   }
 
   @override
@@ -655,49 +796,75 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       loading: () => const LinearProgressIndicator(),
                       error: (e, _) => Text('Erro ao carregar serviços: $e'),
                       data: (servicos) {
-                        if (servicos.isEmpty) {
-                          return const Text('Cadastre ao menos um serviço.');
-                        }
+                        if (servicos.isEmpty) return const Text('Cadastre ao menos um serviço.');
                         
                         return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            const Text('Serviços (Selecione um ou mais)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8.0,
-                              runSpacing: 8.0,
-                              children: servicos.map((s) {
-                                final isSelecionado = _servicosIdsSelecionados.contains(s.id);
-                                return FilterChip(
-                                  label: Text('${s.nome} (${s.duracaoMin}m)'),
-                                  selected: isSelecionado,
-                                  selectedColor: Colors.purple.shade50,
-                                  checkmarkColor: Colors.purple,
-                                  onSelected: (selecionou) {
-                                    setState(() {
-                                      if (selecionou) {
-                                        _servicosIdsSelecionados.add(s.id);
-                                      } else {
-                                        _servicosIdsSelecionados.remove(s.id);
-                                      }
-                                      
-                                      // Soma tudo automático ao clicar!
-                                      double totalValor = 0;
-                                      int totalMin = 0;
-                                      for (var id in _servicosIdsSelecionados) {
-                                        try {
-                                          final srv = servicos.firstWhere((x) => x.id == id);
-                                          totalValor += srv.valor;
-                                          totalMin += srv.duracaoMin;
-                                        } catch (_) {}
-                                      }
-                                      _valorController.text = totalValor.toStringAsFixed(2).replaceAll('.', ',');
-                                      _horaFim = _somarMinutos(_horaInicio, totalMin);
-                                    });
-                                  },
+                            // 1. SERVIÇO PRINCIPAL (AGORA COM BUSCA/DIGITAÇÃO)
+                            DropdownMenu<String>(
+                              expandedInsets: EdgeInsets.zero,
+                              initialSelection: _servicosIdsSelecionados.isNotEmpty ? _servicosIdsSelecionados.first : null,
+                              label: const Text('Serviço Principal'),
+                              enableFilter: true, // Habilita a busca ao digitar!
+                              dropdownMenuEntries: servicos.map((s) => DropdownMenuEntry(
+                                value: s.id,
+                                label: '${s.nome} · ${s.duracaoMin}m',
+                              )).toList(),
+                              onSelected: (v) {
+                                if (v != null) {
+                                  setState(() {
+                                    if (_servicosIdsSelecionados.isEmpty) {
+                                      _servicosIdsSelecionados.add(v);
+                                    } else {
+                                      _servicosIdsSelecionados[0] = v;
+                                    }
+                                    _recalcularTotais();
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 12),
+
+                            // 2. Lista de Serviços Extras Escolhidos
+                            if (_servicosIdsSelecionados.length > 1) ...[
+                              const Text('Serviços Adicionais:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              const SizedBox(height: 8),
+                              ..._servicosIdsSelecionados.skip(1).map((id) {
+                                final s = servicos.firstWhere((x) => x.id == id, orElse: () => Servico(id: id, nome: 'Desconhecido', valor: 0, duracaoMin: 0, corValor: 0));
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.grey.shade300)
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('${s.nome} (+R\$ ${s.valor.toStringAsFixed(0)})', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                      InkWell(
+                                        onTap: () {
+                                          setState(() {
+                                            _servicosIdsSelecionados.remove(id);
+                                            _recalcularTotais();
+                                          });
+                                        },
+                                        child: const Icon(Icons.close, size: 18, color: Colors.grey),
+                                      )
+                                    ],
+                                  )
                                 );
                               }).toList(),
+                              const SizedBox(height: 4),
+                            ],
+
+                            // 3. Botão para acionar Modal
+                            OutlinedButton.icon(
+                              onPressed: () => _abrirModalAdicionarServico(servicos),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Adicionar serviço'),
                             ),
                           ],
                         );
