@@ -232,6 +232,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             agendaFiltro.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
           }
 
+          // CÁLCULO CIRÚRGICO: Contar apenas os atendimentos reais de hoje (ignorando BLOQUEIO)
+          final totalAtendimentosReaisHoje = m.agendaHoje.where((a) => a.clienteId != 'BLOQUEIO').length;
+
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
@@ -251,7 +254,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   _CardMetricaOriginal(
                     titulo: 'Atendimentos hoje',
-                    valor: '${m.totalAgendamentosHoje}',
+                    valor: '$totalAtendimentosReaisHoje', // ← VALOR CORRIGIDO AQUI
                     icone: Icons.calendar_today,
                   ),
                   _CardMetricaOriginal(
