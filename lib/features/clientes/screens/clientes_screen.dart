@@ -1,12 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
+
+// --- CLASSE DE AGREGAÇÃO PARA ALTA PERFORMANCE ---
+// Junta os dados da cliente com seu histórico processado para exibição rápida
+class ClienteAgregado {
+  final Cliente cliente;
+  final int totalVisitas;
+  final DateTime? ultimaVisita;
+  final bool temAgendamentoAtivoFuturo;
+  final int diasSemAgendar;
+
+  ClienteAgregado({
+    required this.cliente,
+    required this.totalVisitas,
+    this.ultimaVisita,
+    required this.temAgendamentoAtivoFuturo,
+    required this.diasSemAgendar,
+  });
+}
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -16,13 +35,14 @@ class ClientesScreen extends ConsumerStatefulWidget {
 }
 
 class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTickerProviderStateMixin {
+  // RESTAURADO: 4 Abas (Todos, Top Clientes, Recorrência, Inativos)
   late TabController _tabController;
   final TextEditingController _buscaController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -42,8 +62,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         title: const Text('Clientes'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true, // Permite rolar as abas horizontalmente se a tela for pequena
           tabs: const [
             Tab(text: 'Todos'),
+            Tab(text: 'Top Clientes'),
             Tab(text: 'Recorrência'),
             Tab(text: 'Inativos'),
           ],
@@ -57,60 +79,69 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
         data: (todosClientes) {
-          // Extrai a lista global de agendamentos para calcular o status em tempo real
           final agendamentos = estadoAgendaAsync.value?.lista ?? [];
-          
           final hoje = DateTime.now();
           final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
 
-          final clientesComAgendamentoAtivo = <String>{};
-          final ultimaDataPorCliente = <String, DateTime>{};
+          // 1. Processamento de Histórico (Restauração da Visibilidade)
+          List<ClienteAgregado> agregados = todosClientes.map((cliente) {
+            int concluidos = 0;
+            DateTime? ultimaConcluida;
+            bool temFuturo = false;
 
-          for (final ag in agendamentos) {
-            if (ag.clienteId == 'BLOQUEIO') continue;
+            for (final ag in agendamentos) {
+              if (ag.clienteId != cliente.id) continue;
 
-            final dataAg = DateTime(ag.data.year, ag.data.month, ag.data.day);
+              final dataAgZerada = DateTime(ag.data.year, ag.data.month, ag.data.day);
 
-            // TRAVA DA ELIZA: Se tem agendamento ativo para hoje ou futuro, marca como ATIVA
-            if ((ag.status == AgendamentoStatus.agendado || ag.status == AgendamentoStatus.confirmado) &&
-                (dataAg.isAfter(hojeZerado) || dataAg.isAtSameMomentAs(hojeZerado))) {
-              clientesComAgendamentoAtivo.add(ag.clienteId);
-            }
+              // Validação da Eliza: Tem agendamento ativo para hoje ou futuro?
+              if ((ag.status == AgendamentoStatus.agendado || ag.status == AgendamentoStatus.confirmado) &&
+                  (dataAgZerada.isAfter(hojeZerado) || dataAgZerada.isAtSameMomentAs(hojeZerado))) {
+                temFuturo = true;
+              }
 
-            // Armazena a última data de atendimento concluído
-            if (ag.status == AgendamentoStatus.concluido) {
-              final dataAtualGuardada = ultimaDataPorCliente[ag.clienteId];
-              if (dataAtualGuardada == null || ag.data.isAfter(dataAtualGuardada)) {
-                ultimaDataPorCliente[ag.clienteId] = ag.data;
+              // Conta visitas concluídas e descobre a última
+              if (ag.status == AgendamentoStatus.concluido) {
+                concluidos++;
+                if (ultimaConcluida == null || ag.data.isAfter(ultimaConcluida)) {
+                  ultimaConcluida = ag.data;
+                }
               }
             }
-          }
 
-          final recorrencia = <Cliente>[];
-          final inativos = <Cliente>[];
+            // Cálculo exato de dias inativos
+            final dataReferencia = ultimaConcluida ?? cliente.createdAt;
+            final refZerada = DateTime(dataReferencia.year, dataReferencia.month, dataReferencia.day);
+            final diasSemAgendar = hojeZerado.difference(refZerada).inDays;
 
-          for (final cliente in todosClientes) {
-            // Se tem agendamento ativo hoje ou no futuro, NÃO entra em Recorrência nem em Inativos
-            if (clientesComAgendamentoAtivo.contains(cliente.id)) {
-              continue;
-            }
+            return ClienteAgregado(
+              cliente: cliente,
+              totalVisitas: concluidos,
+              ultimaVisita: ultimaConcluida,
+              temAgendamentoAtivoFuturo: temFuturo,
+              diasSemAgendar: diasSemAgendar,
+            );
+          }).toList();
 
-            final ultimaData = ultimaDataPorCliente[cliente.id] ?? cliente.createdAt;
-            final diasSemAgendar = hojeZerado.difference(DateTime(ultimaData.year, ultimaData.month, ultimaData.day)).inDays;
+          // 2. Distribuição das Listas (Regras de Negócio)
+          final topClientes = List<ClienteAgregado>.from(agregados)
+            ..sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas)); // Maior número de visitas no topo
 
-            if (diasSemAgendar >= 15 && diasSemAgendar < 30) {
-              recorrencia.add(cliente);
-            } else if (diasSemAgendar >= 30) {
-              inativos.add(cliente);
-            }
-          }
+          final recorrencia = agregados.where((c) => 
+            !c.temAgendamentoAtivoFuturo && c.diasSemAgendar >= 15 && c.diasSemAgendar < 30
+          ).toList();
+
+          final inativos = agregados.where((c) => 
+            !c.temAgendamentoAtivoFuturo && c.diasSemAgendar >= 30
+          ).toList();
 
           return TabBarView(
             controller: _tabController,
             children: [
-              _construirAbaCliente(todosClientes, null),
-              _construirAbaCliente(recorrencia, 'clientes que não agendaram em até 15 dias'),
-              _construirAbaCliente(inativos, 'clientes que não agendaram em 30 dias ou mais'),
+              _construirAbaCliente(agregados, null),
+              _construirAbaCliente(topClientes.where((c) => c.totalVisitas > 0).toList(), 'Ranking dos clientes com mais atendimentos concluídos'),
+              _construirAbaCliente(recorrencia, 'Clientes que não agendaram em até 15 dias'),
+              _construirAbaCliente(inativos, 'Clientes que não agendaram em 30 dias ou mais'),
             ],
           );
         },
@@ -118,12 +149,14 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  Widget _construirAbaCliente(List<Cliente> listaClientes, String? textoSubtitulo) {
+  Widget _construirAbaCliente(List<ClienteAgregado> listaAgregada, String? textoSubtitulo) {
     final textoBusca = _buscaController.text.trim().toLowerCase();
+    
     final filtrados = textoBusca.isEmpty
-        ? listaClientes
-        : listaClientes.where((c) =>
-            c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca)
+        ? listaAgregada
+        : listaAgregada.where((a) =>
+            a.cliente.nome.toLowerCase().contains(textoBusca) || 
+            a.cliente.telefone.contains(textoBusca)
           ).toList();
 
     return Padding(
@@ -131,7 +164,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // SUBTÍTULO INDICATIVO SOLICITADO
           if (textoSubtitulo != null) ...[
             Text(
               textoSubtitulo,
@@ -158,21 +190,41 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                     itemCount: filtrados.length,
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (context, index) {
-                      final cliente = filtrados[index];
+                      final agregado = filtrados[index];
+                      final cliente = agregado.cliente;
+                      
+                      // RESTAURAÇÃO: Formatação do Resumo Histórico
+                      final dataFormatada = agregado.ultimaVisita != null 
+                          ? DateFormat('dd/MM/yyyy').format(agregado.ultimaVisita!) 
+                          : 'Nenhum atendimento';
+
                       return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                         title: Text(cliente.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(cliente.telefone),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13)),
+                            const SizedBox(height: 2),
+                            // EXIBIÇÃO DO HISTÓRICO DIRETAMENTE NO CARD DA LISTA
+                            Text(
+                              '📅 Última visita: $dataFormatada • 🔄 Visitas: ${agregado.totalVisitas}', 
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500)
+                            ),
+                          ],
+                        ),
                         trailing: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.history, color: Colors.purple),
-                              tooltip: 'Histórico',
+                              tooltip: 'Ver Histórico Completo',
                               onPressed: () => context.push('${AppRoutes.clienteHistorico}/${cliente.id}'),
                             ),
                             IconButton(
                               icon: const Icon(Icons.edit_outlined, color: Colors.grey),
-                              tooltip: 'Editar',
+                              tooltip: 'Editar Cliente',
                               onPressed: () => context.push('${AppRoutes.clienteEditar}/${cliente.id}'),
                             ),
                           ],
