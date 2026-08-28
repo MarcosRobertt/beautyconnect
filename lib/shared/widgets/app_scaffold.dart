@@ -13,7 +13,7 @@ class AppScaffold extends StatelessWidget {
     (icon: Icons.people_outline, selectedIcon: Icons.people, label: 'Clientes'),
     (icon: Icons.spa_outlined, selectedIcon: Icons.spa, label: 'Serviços'),
     (icon: Icons.calendar_today_outlined, selectedIcon: Icons.calendar_today, label: 'Agenda'),
-    (icon: Icons.settings_outlined, selectedIcon: Icons.settings, label: 'Configurações'),
+    (icon: Icons.grid_view_outlined, selectedIcon: Icons.grid_view_rounded, label: 'Menu'),
   ];
 
   @override
