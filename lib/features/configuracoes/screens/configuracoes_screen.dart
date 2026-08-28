@@ -84,7 +84,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   Future<void> _exportarBackup() async {
     setState(() => _processando = true);
     try {
-      // (Mantive toda a sua lógica de backup intacta)
       final clientes = ref.read(clienteControllerProvider).value ?? [];
       final agendamentos = ref.read(todosAgendamentosProvider).value ?? [];
       final servicos = ref.read(servicoControllerProvider).value ?? [];
@@ -156,7 +155,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Configurações'),
+        title: const Text('Menu'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -177,8 +176,8 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
                 const SizedBox(height: 8),
                 Card(
                   child: ListTile(
-                    leading: const Icon(Icons.analytics, color: Colors.deepPurple), // Ícone alterado para combinar com relatório
-                    title: const Text('Relatório Gerencial (IA)'), // Título alterado
+                    leading: const Icon(Icons.analytics, color: Colors.deepPurple),
+                    title: const Text('Relatório Gerencial (IA)'),
                     subtitle: const Text('Gera análise automática de TM e faturamento do Studio'),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: _abrirIA, 
