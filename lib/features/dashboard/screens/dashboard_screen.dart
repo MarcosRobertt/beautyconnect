@@ -21,7 +21,7 @@ String formatarData(DateTime data) {
   return '${diasSemana[data.weekday - 1]}, ${data.day} de ${meses[data.month - 1]}';
 }
 
-// MOTOR DE INTELIGÊNCIA: Gera dicas baseadas na profissão
+// MOTOR DE INTELIGÊNCIA: Preservado, mas inativo visualmente para uso futuro.
 String gerarDicaEstrategica(Cliente? cliente, Agendamento agendamento) {
   if (cliente == null || cliente.id == 'BLOQUEIO') return 'Dica IA: Confirme o horário com antecedência para evitar buracos na agenda.';
   
@@ -220,7 +220,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (m) {
-          // Filtragem da lista do "Plano de Voo"
+          // Filtragem da lista do "Plano de Voo" (mantida a lógica de cálculo por segurança, mas visual oculto)
           List<Agendamento> agendaFiltro = [];
           if (_filtroPlanoVoo == 'Hoje') {
             agendaFiltro = m.agendaHoje;
@@ -243,7 +243,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Text('Painel Estratégico de Desempenho.', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 20),
               
-              // GRID DE MÉTRICAS (Agora com os 4 Cards Restaurados)
+              // GRID DE MÉTRICAS
               GridView.count(
                 crossAxisCount: larguraTela > 800 ? 4 : (larguraTela < 360 ? 1 : 2),
                 shrinkWrap: true,
@@ -254,7 +254,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   _CardMetricaOriginal(
                     titulo: 'Atendimentos hoje',
-                    valor: '$totalAtendimentosReaisHoje', // ← VALOR CORRIGIDO AQUI
+                    valor: '$totalAtendimentosReaisHoje',
                     icone: Icons.calendar_today,
                   ),
                   _CardMetricaOriginal(
@@ -324,130 +324,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         }),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              // 2. PLANO DE VOO (DENTRO DO CARD EXPANSÍVEL)
-              Card(
-                clipBehavior: Clip.antiAlias,
-                elevation: 2,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                child: ExpansionTile(
-                  title: const Text('Plano de Voo Estratégico', style: TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: const Text('Dicas da IA e Checklist de Vendas'),
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.purple.shade50,
-                    child: const Icon(Icons.psychology, color: Colors.purple),
-                  ),
-                  childrenPadding: const EdgeInsets.all(16),
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(value: 'Hoje', label: Text('Hoje', style: TextStyle(fontSize: 11))),
-                            ButtonSegment(value: 'Amanhã', label: Text('Amanhã', style: TextStyle(fontSize: 11))),
-                          ],
-                          selected: {_filtroPlanoVoo},
-                          onSelectionChanged: (set) => setState(() => _filtroPlanoVoo = set.first),
-                          style: SegmentedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    
-                    if (agendaFiltro.isEmpty)
-                      const Center(child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Text('Nenhum agendamento para este dia.'),
-                      ))
-                    else
-                      ...agendaFiltro.map((a) {
-                        final isBloqueio = a.clienteId == "BLOQUEIO";
-                        final cliente = isBloqueio ? null : clientesPorId[a.clienteId];
-                        final nomeCliente = isBloqueio ? "Compromisso Pessoal" : (cliente?.nome ?? "Cliente removido");
-                        final profissao = cliente?.profissao?.isNotEmpty == true ? cliente!.profissao! : 'Profissão não informada';
-                        
-                        if (isBloqueio) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: ListTile(
-                              tileColor: Colors.grey.shade50,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                              leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
-                              title: Text(nomeCliente, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
-                              subtitle: Text(a.servico),
-                              trailing: StatusChip(status: a.status),
-                            ),
-                          );
-                        }
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.purple.shade100, width: 1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(6)),
-                                    child: Text(a.horaInicio, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade800)),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(nomeCliente, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                        Text('$profissao • ${a.servico}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                                      ],
-                                    ),
-                                  ),
-                                  StatusChip(status: a.status),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              // DICA IA
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.amber.shade200)),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Icon(Icons.tips_and_updates, color: Colors.amber, size: 18),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Text(
-                                        gerarDicaEstrategica(cliente, a),
-                                        style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-                              // CHECKLIST DE ATENDIMENTO
-                              Text('Checklist Padrão Ouro:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
-                              const SizedBox(height: 4),
-                              const _ChecklistItem(texto: 'Chamar pelo nome e consultar restrições/observações.'),
-                              const _ChecklistItem(texto: 'Oferecer um serviço complementar focado na necessidade dela.'),
-                              const _ChecklistItem(texto: 'Agendar o retorno antes dela sair da cadeira.'),
-                            ],
-                          ),
-                        );
-                      }),
-                  ],
                 ),
               ),
                 
