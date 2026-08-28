@@ -799,7 +799,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            // 1. SERVIÇO PRINCIPAL COM BUSCA (DropdownMenu nativo)
                             DropdownMenu<String>(
                               expandedInsets: EdgeInsets.zero,
                               initialSelection: _servicosIdsSelecionados.isNotEmpty ? _servicosIdsSelecionados.first : null,
@@ -824,12 +823,11 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             ),
                             const SizedBox(height: 12),
 
-                            // 2. Lista de Serviços Extras Escolhidos (CORREÇÃO APLICADA NA LINHA ABAIXO)
                             if (_servicosIdsSelecionados.length > 1) ...[
                               const Text('Serviços Adicionais:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                               const SizedBox(height: 8),
                               ..._servicosIdsSelecionados.skip(1).map((id) {
-                                final s = servicos.firstWhere((x) => x.id == id, orElse: () => Servico(id: id, nome: 'Desconhecido', valor: 0, duracaoMin: 0, corValor: 0, createdAt: DateTime.now(), updatedAt: DateTime.now()));
+                                final s = servicos.firstWhere((x) => x.id == id, orElse: () => Servico(id: id, nome: 'Desconhecido', valor: 0, duracaoMin: 0, corValor: 0, createdAt: DateTime.now()));
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -858,7 +856,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                               const SizedBox(height: 4),
                             ],
 
-                            // 3. Botão para acionar Modal
                             OutlinedButton.icon(
                               onPressed: () => _abrirModalAdicionarServico(servicos),
                               icon: const Icon(Icons.add, size: 18),
