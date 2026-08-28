@@ -10,7 +10,7 @@ import '../controllers/cliente_controller.dart';
 
 // Provedor que busca TODO o histórico do banco de dados sempre que houver alteração
 final _todosAgendamentosHistoricoProvider = FutureProvider.autoDispose<List<Agendamento>>((ref) async {
-  ref.watch(agendamentoControllerProvider); // Assiste mudanças para re-disparar
+  ref.watch(agendamentoControllerProvider); 
   return await ref.read(agendamentoControllerProvider.notifier).todos();
 });
 
@@ -18,6 +18,34 @@ class HistoricoClienteScreen extends ConsumerWidget {
   const HistoricoClienteScreen({super.key, required this.clienteId});
 
   final String clienteId;
+
+  // --- Helpers para a Etiqueta Dinâmica de Status ---
+  String _obterTextoStatus(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado: return 'Agendado';
+      case AgendamentoStatus.confirmado: return 'Confirmado';
+      case AgendamentoStatus.concluido: return 'Concluído';
+      case AgendamentoStatus.cancelado: return 'Cancelado';
+    }
+  }
+
+  Color _obterCorFundoStatus(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado: return Colors.blue.shade50;
+      case AgendamentoStatus.confirmado: return Colors.teal.shade50;
+      case AgendamentoStatus.concluido: return Colors.green.shade50;
+      case AgendamentoStatus.cancelado: return Colors.red.shade50;
+    }
+  }
+
+  Color _obterCorTextoStatus(AgendamentoStatus status) {
+    switch (status) {
+      case AgendamentoStatus.agendado: return Colors.blue.shade700;
+      case AgendamentoStatus.confirmado: return Colors.teal.shade800;
+      case AgendamentoStatus.concluido: return Colors.green.shade800;
+      case AgendamentoStatus.cancelado: return Colors.red;
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -173,18 +201,25 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                           Wrap(
                                             spacing: 4,
                                             children: [
+                                              // ETIQUETA DE REAGENDAMENTO
                                               if (qtdReagendado != null)
                                                 Container(
                                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                                   decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
                                                   child: Text('🔄 $qtdReagendado x', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
                                                 ),
-                                              if (isCancelado)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                  decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)),
-                                                  child: const Text('Cancelado', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red)),
+                                              // ETIQUETA DINÂMICA DE STATUS
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: _obterCorFundoStatus(ag.status), 
+                                                  borderRadius: BorderRadius.circular(4)
                                                 ),
+                                                child: Text(
+                                                  _obterTextoStatus(ag.status), 
+                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _obterCorTextoStatus(ag.status))
+                                                ),
+                                              ),
                                             ],
                                           ),
                                         ],
