@@ -156,7 +156,6 @@ class AgendaScreen extends ConsumerWidget {
         data: (estado) {
           final notifier = ref.read(agendamentoControllerProvider.notifier);
           
-          // Verifica se a data atual da visão é o dia de hoje
           final hoje = DateTime.now();
           final isHoje = estado.dataReferencia.year == hoje.year &&
                          estado.dataReferencia.month == hoje.month &&
@@ -174,7 +173,6 @@ class AgendaScreen extends ConsumerWidget {
                       child: Text(
                         _rotulo(estado),
                         textAlign: TextAlign.center,
-                        // DESTAQUE DE COR APLICADO AQUI:
                         style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           color: isHoje ? Theme.of(context).colorScheme.primary : null,
                           fontWeight: isHoje ? FontWeight.bold : null,
@@ -197,35 +195,33 @@ class AgendaScreen extends ConsumerWidget {
                 const SizedBox(height: 12),
                 Expanded(
                   child: estado.visao == VisaoAgenda.dia
-                      ? (estado.lista.isEmpty
-                          ? const Center(child: Text('Nenhum agendamento neste dia.'))
-                          : TimelineDayView(
-                              agendamentos: estado.lista,
-                              clientesPorId: clientesPorId,
-                              moeda: moeda,
-                              dataReferencia: estado.dataReferencia,
-                              onNovoAgendamento: (horaInicio) {
-                                final dataIso = estado.dataReferencia.toIso8601String().split('T').first;
-                                context.push(Uri(
-                                  path: AppRoutes.agendaNovo,
-                                  queryParameters: {'data': dataIso, 'hora': horaInicio},
-                                ).toString());
-                              },
-                              onEditar: (id) => context.push('${AppRoutes.agenda}/editar/$id'),
-                              onConfirmar: (id) => notifier.confirmar(id),
-                              onConcluir: (id) {
-                                final agendamento = estado.lista.firstWhere((a) => a.id == id);
-                                final nomeCliente = clientesPorId[agendamento.clienteId] ??
-                                    (agendamento.clienteId == 'BLOQUEIO'
-                                        ? 'Compromisso Pessoal'
-                                        : 'Cliente');
-                                _abrirModalComanda(context, ref, agendamento, nomeCliente);
-                              },
-                              onCancelar: (id) {
-                                final agendamento = estado.lista.firstWhere((a) => a.id == id);
-                                _abrirModalCancelamento(context, ref, agendamento);
-                              },
-                            ))
+                      ? TimelineDayView(
+                          agendamentos: estado.lista,
+                          clientesPorId: clientesPorId,
+                          moeda: moeda,
+                          dataReferencia: estado.dataReferencia,
+                          onNovoAgendamento: (horaInicio) {
+                            final dataIso = estado.dataReferencia.toIso8601String().split('T').first;
+                            context.push(Uri(
+                              path: AppRoutes.agendaNovo,
+                              queryParameters: {'data': dataIso, 'hora': horaInicio},
+                            ).toString());
+                          },
+                          onEditar: (id) => context.push('${AppRoutes.agenda}/editar/$id'),
+                          onConfirmar: (id) => notifier.confirmar(id),
+                          onConcluir: (id) {
+                            final agendamento = estado.lista.firstWhere((a) => a.id == id);
+                            final nomeCliente = clientesPorId[agendamento.clienteId] ??
+                                (agendamento.clienteId == 'BLOQUEIO'
+                                    ? 'Compromisso Pessoal'
+                                    : 'Cliente');
+                            _abrirModalComanda(context, ref, agendamento, nomeCliente);
+                          },
+                          onCancelar: (id) {
+                            final agendamento = estado.lista.firstWhere((a) => a.id == id);
+                            _abrirModalCancelamento(context, ref, agendamento);
+                          },
+                        )
                       : estado.visao == VisaoAgenda.semana
                           ? TimelineWeekView(
                               agendamentos: estado.lista,
@@ -367,8 +363,8 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onPressed: () {
-                      Navigator.pop(context); // Fecha a comanda
-                      widget.onCancelarAtendimento(); // Abre o modal de cancelar/reagendar
+                      Navigator.pop(context); 
+                      widget.onCancelarAtendimento(); 
                     },
                     child: const Text(
                       'Cancelar\nAtendimento',
