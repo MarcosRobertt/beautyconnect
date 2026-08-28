@@ -78,7 +78,9 @@ final appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) {
         final dataInicial = state.uri.queryParameters['data'];
-        return AgendamentoFormScreen(dataInicialIso: dataInicial);
+        // NOVO: Lê a hora passada pela URL quando clicar na grade!
+        final horaInicial = state.uri.queryParameters['hora']; 
+        return AgendamentoFormScreen(dataInicialIso: dataInicial, horaInicialStr: horaInicial);
       },
     ),
     GoRoute(
@@ -96,8 +98,7 @@ final appRouter = GoRouter(
       path: '/consultoria-ia',
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) {
-        final contextoMetricas = state.extra as String?;
-       return const AnaliseIaScreen(); // NOME DA CLASSE CORRETO AQUI
+        return const AnaliseIaScreen(); 
       },
     ),
   ],
