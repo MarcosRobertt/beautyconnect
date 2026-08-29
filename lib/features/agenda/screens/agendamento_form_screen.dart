@@ -461,19 +461,19 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         String textoBusca = '';
         return StatefulBuilder(
           builder: (context, setModalState) {
+            // Removido o filtro que ocultava servicos ja selecionados
             final ultimos5Servicos = todosServicos
-                .where((s) => _ultimosServicosIds.contains(s.id) && !_servicosIdsSelecionados.contains(s.id))
+                .where((s) => _ultimosServicosIds.contains(s.id))
                 .toList();
             
             if (ultimos5Servicos.isEmpty && _ultimosServicosIds.isEmpty) {
-              ultimos5Servicos.addAll(todosServicos.where((s) => !_servicosIdsSelecionados.contains(s.id)).take(5));
+              ultimos5Servicos.addAll(todosServicos.take(5));
             }
 
             final buscaAtiva = textoBusca.trim().isNotEmpty;
             final resultadosBusca = buscaAtiva 
               ? todosServicos.where((s) => 
-                  s.nome.toLowerCase().contains(textoBusca.toLowerCase()) && 
-                  !_servicosIdsSelecionados.contains(s.id)
+                  s.nome.toLowerCase().contains(textoBusca.toLowerCase())
                 ).toList()
               : <Servico>[];
 
@@ -826,7 +826,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             if (_servicosIdsSelecionados.length > 1) ...[
                               const Text('Serviços Adicionais:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                               const SizedBox(height: 8),
-                              ..._servicosIdsSelecionados.skip(1).map((id) {
+                              ...List.generate(_servicosIdsSelecionados.length - 1, (indexOffset) {
+                                final actualIndex = indexOffset + 1;
+                                final id = _servicosIdsSelecionados[actualIndex];
                                 final s = servicos.firstWhere((x) => x.id == id, orElse: () => Servico(id: id, nome: 'Desconhecido', valor: 0, duracaoMin: 0, corValor: 0, createdAt: DateTime.now()));
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 8),
@@ -843,16 +845,17 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                       InkWell(
                                         onTap: () {
                                           setState(() {
-                                            _servicosIdsSelecionados.remove(id);
+                                            // Remoção precisa pelo índice exato para suportar itens duplicados
+                                            _servicosIdsSelecionados.removeAt(actualIndex);
                                             _recalcularTotais();
                                           });
                                         },
                                         child: const Icon(Icons.close, size: 18, color: Colors.grey),
                                       )
                                     ],
-                                  )
+                                  ),
                                 );
-                              }).toList(),
+                              }),
                               const SizedBox(height: 4),
                             ],
 
