@@ -148,7 +148,9 @@ class TimelineDayView extends ConsumerWidget {
       }
     }
 
-    final alturaTotal = ((horaMaxima - horaMinima) * 60) * _pixelsPorMinuto;
+    // CORREÇÃO: Adicionando +1 para cobrir totalmente o último bloco (até às 19h no caso de max 18h)
+    final int horasVisiveis = (horaMaxima - horaMinima) + 1;
+    final alturaTotal = (horasVisiveis * 60) * _pixelsPorMinuto;
     
     // VERIFICADOR DO DIA ATUAL PARA A LINHA DO TEMPO
     final agora = DateTime.now();
@@ -203,7 +205,8 @@ class TimelineDayView extends ConsumerWidget {
                       color: Colors.transparent,
                       child: Column(
                         children: [
-                          for (int i = 0; i < (horaMaxima - horaMinima) * 2; i++)
+                          // CORREÇÃO: Acompanhando a variável de total de horas
+                          for (int i = 0; i < horasVisiveis * 2; i++)
                             Container(
                               height: 30 * _pixelsPorMinuto,
                               decoration: BoxDecoration(
@@ -321,7 +324,7 @@ class TimelineDayView extends ConsumerWidget {
                           final minutosAtual = tempoAtual.hour * 60 + tempoAtual.minute;
                           
                           // Só renderiza se estiver dentro da grade visível
-                          if (minutosAtual < horaMinima * 60 || minutosAtual > horaMaxima * 60) {
+                          if (minutosAtual < horaMinima * 60 || minutosAtual > (horaMaxima + 1) * 60) {
                             return const SizedBox.shrink();
                           }
                           
