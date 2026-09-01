@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
 
@@ -90,7 +92,7 @@ class AgendaInteligenteScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDiaRow(DateTime dia, List<String> slots) {
+  Widget _buildDiaRow(BuildContext context, DateTime dia, List<String> slots) {
     final diasStr = ['Seg', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Dom'];
     final rotulo = '${diasStr[dia.weekday - 1]} (${dia.day.toString().padLeft(2,'0')}/${dia.month.toString().padLeft(2,'0')})';
 
@@ -110,19 +112,37 @@ class AgendaInteligenteScreen extends ConsumerWidget {
           if (slots.first == 'LOTADO')
             const Text('Agenda totalmente lotada! 🔥', style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic))
           else if (slots.first == 'LIVRE')
-            const Text('Agenda 100% Livre (09h às 18h) ✨', style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600))
+            InkWell(
+              onTap: () {
+                final dataIso = dia.toIso8601String().split('T').first;
+                context.push(Uri(
+                  path: AppRoutes.agendaNovo,
+                  queryParameters: {'data': dataIso, 'hora': '09:00'},
+                ).toString());
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                child: Text('Agenda 100% Livre (09h às 18h) ✨', style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600, decoration: TextDecoration.underline)),
+              ),
+            )
           else
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: slots.map((s) => Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.purple.shade200),
-                ),
-                child: Text(s, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.purple.shade900)),
+              children: slots.map((s) => ActionChip(
+                label: Text(s, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.purple.shade900)),
+                backgroundColor: Colors.purple.shade50,
+                side: BorderSide(color: Colors.purple.shade200),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                onPressed: () {
+                  final dataIso = dia.toIso8601String().split('T').first;
+                  context.push(Uri(
+                    path: AppRoutes.agendaNovo,
+                    queryParameters: {'data': dataIso, 'hora': s},
+                  ).toString());
+                },
               )).toList(),
             ),
         ],
@@ -183,7 +203,7 @@ class AgendaInteligenteScreen extends ConsumerWidget {
               if (diasSemanaAtual.isEmpty)
                 const Text('Semana atual finalizada.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey))
               else
-                ...diasSemanaAtual.map((dia) => _buildDiaRow(dia, _calcularHorariosLivres(dia, agendamentos))),
+                ...diasSemanaAtual.map((dia) => _buildDiaRow(context, dia, _calcularHorariosLivres(dia, agendamentos))),
               
               const Divider(height: 32),
 
@@ -196,7 +216,7 @@ class AgendaInteligenteScreen extends ConsumerWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              ...diasProximaSemana.map((dia) => _buildDiaRow(dia, _calcularHorariosLivres(dia, agendamentos))),
+              ...diasProximaSemana.map((dia) => _buildDiaRow(context, dia, _calcularHorariosLivres(dia, agendamentos))),
             ],
           );
         },
