@@ -220,6 +220,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (m) {
+          // Filtragem da lista do "Plano de Voo"
+          List<Agendamento> agendaFiltro = [];
+          if (_filtroPlanoVoo == 'Hoje') {
+            agendaFiltro = m.agendaHoje;
+          } else if (_filtroPlanoVoo == 'Amanhã') {
+            final amanha = DateTime(hoje.year, hoje.month, hoje.day + 1);
+            agendaFiltro = todosAgendamentos.where((a) =>
+              a.data.year == amanha.year && a.data.month == amanha.month && a.data.day == amanha.day
+            ).toList();
+            agendaFiltro.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
+          }
+
           // CÁLCULO CIRÚRGICO: Contar apenas os atendimentos reais de hoje (ignorando BLOQUEIO)
           final totalAtendimentosReaisHoje = m.agendaHoje.where((a) => a.clienteId != 'BLOQUEIO').length;
 
