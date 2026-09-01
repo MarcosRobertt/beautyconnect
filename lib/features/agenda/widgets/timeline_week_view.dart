@@ -3,6 +3,55 @@ import 'package:intl/intl.dart';
 
 import '../models/agendamento.dart';
 
+// --- CLASSE AUXILIAR DE FERIADOS (PRIVADA) ---
+class _FeriadosHelper {
+  static DateTime _calcularPascoa(int year) {
+    final a = year % 19;
+    final b = year ~/ 100;
+    final c = year % 100;
+    final d = b ~/ 4;
+    final e = b % 4;
+    final f = (b + 8) ~/ 25;
+    final g = (b - f + 1) ~/ 3;
+    final h = (19 * a + b - d - g + 15) % 30;
+    final i = c ~/ 4;
+    final k = c % 4;
+    final l = (32 + 2 * e + 2 * i - h - k) % 7;
+    final m = (a + 11 * h + 22 * l) ~/ 451;
+    final month = (h + l - 7 * m + 114) ~/ 31;
+    final day = ((h + l - 7 * m + 114) % 31) + 1;
+    return DateTime(year, month, day);
+  }
+
+  static String? verificarFeriado(DateTime data) {
+    final d = data.day;
+    final m = data.month;
+    final y = data.year;
+
+    if (d == 1 && m == 1) return 'Confraternização Universal';
+    if (d == 21 && m == 4) return 'Tiradentes';
+    if (d == 1 && m == 5) return 'Dia do Trabalhador';
+    if (d == 9 && m == 7) return 'Rev. Constitucionalista (SP)';
+    if (d == 7 && m == 9) return 'Independência do Brasil';
+    if (d == 12 && m == 10) return 'Nossa Sra. Aparecida';
+    if (d == 2 && m == 11) return 'Finados';
+    if (d == 15 && m == 11) return 'Proclamação da República';
+    if (d == 20 && m == 11) return 'Consciência Negra';
+    if (d == 25 && m == 12) return 'Natal';
+
+    final pascoa = _calcularPascoa(y);
+    final carnaval = pascoa.subtract(const Duration(days: 47));
+    final sextaSanta = pascoa.subtract(const Duration(days: 2));
+    final corpusChristi = pascoa.add(const Duration(days: 60));
+
+    if (d == carnaval.day && m == carnaval.month) return 'Carnaval';
+    if (d == sextaSanta.day && m == sextaSanta.month) return 'Paixão de Cristo';
+    if (d == corpusChristi.day && m == corpusChristi.month) return 'Corpus Christi';
+
+    return null;
+  }
+}
+
 class TimelineWeekView extends StatefulWidget {
   const TimelineWeekView({
     super.key,
@@ -120,12 +169,15 @@ class _TimelineWeekViewState extends State<TimelineWeekView> {
           ),
           
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(width: _larguraHorarios),
+            SizedBox(width: _larguraHorarios),
             ...diasSemana.map((dia) {
               final ehHoje = dia.year == DateTime.now().year &&
                   dia.month == DateTime.now().month &&
                   dia.day == DateTime.now().day;
+              
+              final nomeFeriado = _FeriadosHelper.verificarFeriado(dia);
                   
               return Expanded(
                 child: GestureDetector(
@@ -138,6 +190,7 @@ class _TimelineWeekViewState extends State<TimelineWeekView> {
                       color: ehHoje ? Theme.of(context).colorScheme.primaryContainer.withOpacity(0.4) : null,
                     ),
                     child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           DateFormat('E', 'pt_BR').format(dia).toUpperCase().replaceAll('.', ''),
@@ -156,6 +209,29 @@ class _TimelineWeekViewState extends State<TimelineWeekView> {
                             fontWeight: ehHoje ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
+                        if (nomeFeriado != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4, left: 2, right: 2),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.orange.shade300, width: 0.5),
+                              ),
+                              child: Text(
+                                nomeFeriado,
+                                style: TextStyle(
+                                  fontSize: 7,
+                                  color: Colors.orange.shade900,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),
