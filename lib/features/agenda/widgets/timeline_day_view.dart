@@ -6,6 +6,57 @@ import '../../../core/services/storage/whatsapp_service.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../models/agendamento.dart';
 
+// --- CLASSE AUXILIAR DE FERIADOS (BRASIL + SP) ---
+class FeriadosHelper {
+  static DateTime _calcularPascoa(int year) {
+    final a = year % 19;
+    final b = year ~/ 100;
+    final c = year % 100;
+    final d = b ~/ 4;
+    final e = b % 4;
+    final f = (b + 8) ~/ 25;
+    final g = (b - f + 1) ~/ 3;
+    final h = (19 * a + b - d - g + 15) % 30;
+    final i = c ~/ 4;
+    final k = c % 4;
+    final l = (32 + 2 * e + 2 * i - h - k) % 7;
+    final m = (a + 11 * h + 22 * l) ~/ 451;
+    final month = (h + l - 7 * m + 114) ~/ 31;
+    final day = ((h + l - 7 * m + 114) % 31) + 1;
+    return DateTime(year, month, day);
+  }
+
+  static String? verificarFeriado(DateTime data) {
+    final d = data.day;
+    final m = data.month;
+    final y = data.year;
+
+    // Fixos Nacionais e SP
+    if (d == 1 && m == 1) return 'Confraternização Universal';
+    if (d == 21 && m == 4) return 'Tiradentes';
+    if (d == 1 && m == 5) return 'Dia do Trabalhador';
+    if (d == 9 && m == 7) return 'Rev. Constitucionalista (SP)';
+    if (d == 7 && m == 9) return 'Independência do Brasil';
+    if (d == 12 && m == 10) return 'Nossa Sra. Aparecida';
+    if (d == 2 && m == 11) return 'Finados';
+    if (d == 15 && m == 11) return 'Proclamação da República';
+    if (d == 20 && m == 11) return 'Consciência Negra';
+    if (d == 25 && m == 12) return 'Natal';
+
+    // Móveis
+    final pascoa = _calcularPascoa(y);
+    final carnaval = pascoa.subtract(const Duration(days: 47));
+    final sextaSanta = pascoa.subtract(const Duration(days: 2));
+    final corpusChristi = pascoa.add(const Duration(days: 60));
+
+    if (d == carnaval.day && m == carnaval.month) return 'Carnaval';
+    if (d == sextaSanta.day && m == sextaSanta.month) return 'Paixão de Cristo';
+    if (d == corpusChristi.day && m == corpusChristi.month) return 'Corpus Christi';
+
+    return null;
+  }
+}
+
 class TimelineDayView extends ConsumerWidget {
   const TimelineDayView({
     super.key,
@@ -59,7 +110,7 @@ class TimelineDayView extends ConsumerWidget {
       case AgendamentoStatus.concluido:
         return Colors.grey.shade400;
       case AgendamentoStatus.cancelado:
-        return Colors.red.shade300; // Nunca será renderizado aqui, mas mantido por segurança
+        return Colors.red.shade300;
     }
   }
 
@@ -132,7 +183,6 @@ class TimelineDayView extends ConsumerWidget {
       orElse: () => <String, String>{},
     );
 
-    // FILTRO LIMPO: Oculta cancelados da visão diária para não sobrepor
     final agendamentosAtivos = agendamentos.where((a) => a.status != AgendamentoStatus.cancelado).toList();
 
     int horaMinima = 9;
@@ -148,217 +198,247 @@ class TimelineDayView extends ConsumerWidget {
       }
     }
 
-    // CORREÇÃO: Adicionando +1 para cobrir totalmente o último bloco (até às 19h no caso de max 18h)
     final int horasVisiveis = (horaMaxima - horaMinima) + 1;
     final alturaTotal = (horasVisiveis * 60) * _pixelsPorMinuto;
     
-    // VERIFICADOR DO DIA ATUAL PARA A LINHA DO TEMPO
     final agora = DateTime.now();
     final isHoje = dataReferencia.year == agora.year && 
                    dataReferencia.month == agora.month && 
                    dataReferencia.day == agora.day;
 
+    final nomeFeriado = FeriadosHelper.verificarFeriado(dataReferencia);
+
     return SingleChildScrollView(
       key: const PageStorageKey('agenda_scroll_dia_global'), 
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: _larguraHorarios,
-            child: Column(
-              children: [
-                for (int h = horaMinima; h <= horaMaxima; h++)
-                  for (int m = 0; m < 60; m += 30)
-                    SizedBox(
-                      height: 30 * _pixelsPorMinuto,
-                      child: Align(
-                        alignment: Alignment.topLeft,
-                        child: Text(
-                          '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
-                          style: Theme.of(context).textTheme.labelSmall,
-                        ),
-                      ),
+          // INJEÇÃO DO ALERTA DE FERIADO
+          if (nomeFeriado != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.park, color: Colors.orange.shade800),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('FERIADO: $nomeFeriado', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                        const SizedBox(height: 2),
+                        Text('A grade está aberta. Cuidado ao agendar.', style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
+                      ],
                     ),
-              ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              key: const PageStorageKey('agenda_scroll_dia_interno'), 
-              scrollDirection: Axis.vertical,
-              child: GestureDetector(
-                onTapUp: (details) {
-                  final yRelativa = details.localPosition.dy;
-                  final minutosDesdeInicio = (yRelativa / _pixelsPorMinuto).toInt();
-                  final minutosAbsolutos = (horaMinima * 60) + minutosDesdeInicio;
-                  final horas = minutosAbsolutos ~/ 60;
-                  final minutos = minutosAbsolutos % 60;
-                  final minutosArredondados = (minutos ~/ 30) * 30;
-                  final horaClicada = '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
-                  onNovoAgendamento(horaClicada);
-                },
-                child: Stack(
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      height: alturaTotal,
-                      color: Colors.transparent,
-                      child: Column(
-                        children: [
-                          // CORREÇÃO: Acompanhando a variável de total de horas
-                          for (int i = 0; i < horasVisiveis * 2; i++)
-                            Container(
-                              height: 30 * _pixelsPorMinuto,
-                              decoration: BoxDecoration(
-                                border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    ...agendamentosAtivos.map((a) {
-                      final topPx = _calcularTop(a.horaInicio, horaMinima);
-                      final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
-                      
-                      final isBloqueio = a.clienteId == 'BLOQUEIO';
-                      final nomeCliente = isBloqueio ? 'Compromisso Pessoal' : (clientesPorId[a.clienteId] ?? 'Cliente removido');
-                      final telefoneCliente = telefonesPorId[a.clienteId] ?? '';
-                      final cor = _obterCorStatus(a.status);
 
-                      return Positioned(
-                        top: topPx,
-                        left: 8,
-                        right: 8,
-                        height: heightPx > 40 ? heightPx : 40,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => onEditar(a.id),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: cor,
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: Colors.grey.shade400, width: 1), 
-                            ),
-                            padding: const EdgeInsets.all(6),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    _buildStatusBadge(a.status, isBloqueio),
-                                    const Spacer(),
-                                    if (!isBloqueio) ...[
-                                      GestureDetector(
-                                        behavior: HitTestBehavior.opaque,
-                                        onTap: () {
-                                          WhatsAppService.enviarConfirmacao(
-                                            telefone: telefoneCliente,
-                                            nomeCliente: nomeCliente,
-                                            agendamento: a,
-                                          );
-                                        },
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                          child: Icon(Icons.chat_bubble_outline, size: 24, color: Colors.green.shade900), 
-                                        ),
-                                      ),
-                                      if (a.status == AgendamentoStatus.agendado)
-                                        GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () => onConfirmar(a.id),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            child: Icon(Icons.verified_outlined, size: 24, color: Colors.grey.shade900),
-                                          ),
-                                        ),
-                                      if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
-                                        GestureDetector(
-                                          behavior: HitTestBehavior.opaque,
-                                          onTap: () => onConcluir(a.id),
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                            child: Icon(Icons.check_circle_outline, size: 24, color: Colors.grey.shade900),
-                                          ),
-                                        ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Flexible(
-                                  child: Text(
-                                    '${a.horaInicio}–${a.horaFim}',
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 11, color: Colors.black87),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Flexible(
-                                  child: Text(
-                                    a.servico,
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: isBloqueio ? FontWeight.bold : FontWeight.w600, color: Colors.black87),
-                                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (!isBloqueio)
-                                  Flexible(
-                                    child: Text(
-                                      nomeCliente,
-                                      style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, color: Colors.black87),
-                                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                              ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: _larguraHorarios,
+                child: Column(
+                  children: [
+                    for (int h = horaMinima; h <= horaMaxima; h++)
+                      for (int m = 0; m < 60; m += 30)
+                        SizedBox(
+                          height: 30 * _pixelsPorMinuto,
+                          child: Align(
+                            alignment: Alignment.topLeft,
+                            child: Text(
+                              '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+                              style: Theme.of(context).textTheme.labelSmall,
                             ),
                           ),
                         ),
-                      );
-                    }).toList(),
-
-                    // LINHA DO TEMPO REAL SE FOR HOJE
-                    if (isHoje)
-                      StreamBuilder(
-                        stream: Stream.periodic(const Duration(minutes: 1)),
-                        builder: (context, snapshot) {
-                          final tempoAtual = DateTime.now();
-                          final minutosAtual = tempoAtual.hour * 60 + tempoAtual.minute;
-                          
-                          // Só renderiza se estiver dentro da grade visível
-                          if (minutosAtual < horaMinima * 60 || minutosAtual > (horaMaxima + 1) * 60) {
-                            return const SizedBox.shrink();
-                          }
-                          
-                          final topPxAtual = (minutosAtual - (horaMinima * 60)) * _pixelsPorMinuto;
-                          
-                          return Positioned(
-                            top: topPxAtual - 4, // Centraliza a bolinha
-                            left: 0,
-                            right: 0,
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.red,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Container(
-                                    height: 1.5,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      ),
                   ],
                 ),
               ),
-            ),
+              Expanded(
+                child: SingleChildScrollView(
+                  key: const PageStorageKey('agenda_scroll_dia_interno'), 
+                  scrollDirection: Axis.vertical,
+                  child: GestureDetector(
+                    onTapUp: (details) {
+                      final yRelativa = details.localPosition.dy;
+                      final minutosDesdeInicio = (yRelativa / _pixelsPorMinuto).toInt();
+                      final minutosAbsolutos = (horaMinima * 60) + minutosDesdeInicio;
+                      final horas = minutosAbsolutos ~/ 60;
+                      final minutos = minutosAbsolutos % 60;
+                      final minutosArredondados = (minutos ~/ 30) * 30;
+                      final horaClicada = '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
+                      onNovoAgendamento(horaClicada);
+                    },
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          height: alturaTotal,
+                          color: Colors.transparent,
+                          child: Column(
+                            children: [
+                              for (int i = 0; i < horasVisiveis * 2; i++)
+                                Container(
+                                  height: 30 * _pixelsPorMinuto,
+                                  decoration: BoxDecoration(
+                                    border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        ...agendamentosAtivos.map((a) {
+                          final topPx = _calcularTop(a.horaInicio, horaMinima);
+                          final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
+                          
+                          final isBloqueio = a.clienteId == 'BLOQUEIO';
+                          final nomeCliente = isBloqueio ? 'Compromisso Pessoal' : (clientesPorId[a.clienteId] ?? 'Cliente removido');
+                          final telefoneCliente = telefonesPorId[a.clienteId] ?? '';
+                          final cor = _obterCorStatus(a.status);
+
+                          return Positioned(
+                            top: topPx,
+                            left: 8,
+                            right: 8,
+                            height: heightPx > 40 ? heightPx : 40,
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => onEditar(a.id),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: cor,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.grey.shade400, width: 1), 
+                                ),
+                                padding: const EdgeInsets.all(6),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        _buildStatusBadge(a.status, isBloqueio),
+                                        const Spacer(),
+                                        if (!isBloqueio) ...[
+                                          GestureDetector(
+                                            behavior: HitTestBehavior.opaque,
+                                            onTap: () {
+                                              WhatsAppService.enviarConfirmacao(
+                                                telefone: telefoneCliente,
+                                                nomeCliente: nomeCliente,
+                                                agendamento: a,
+                                              );
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                              child: Icon(Icons.chat_bubble_outline, size: 24, color: Colors.green.shade900), 
+                                            ),
+                                          ),
+                                          if (a.status == AgendamentoStatus.agendado)
+                                            GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () => onConfirmar(a.id),
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                child: Icon(Icons.verified_outlined, size: 24, color: Colors.grey.shade900),
+                                              ),
+                                            ),
+                                          if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
+                                            GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () => onConcluir(a.id),
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                child: Icon(Icons.check_circle_outline, size: 24, color: Colors.grey.shade900),
+                                              ),
+                                            ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Flexible(
+                                      child: Text(
+                                        '${a.horaInicio}–${a.horaFim}',
+                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 11, color: Colors.black87),
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Flexible(
+                                      child: Text(
+                                        a.servico,
+                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: isBloqueio ? FontWeight.bold : FontWeight.w600, color: Colors.black87),
+                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (!isBloqueio)
+                                      Flexible(
+                                        child: Text(
+                                          nomeCliente,
+                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, color: Colors.black87),
+                                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+
+                        if (isHoje)
+                          StreamBuilder(
+                            stream: Stream.periodic(const Duration(minutes: 1)),
+                            builder: (context, snapshot) {
+                              final tempoAtual = DateTime.now();
+                              final minutosAtual = tempoAtual.hour * 60 + tempoAtual.minute;
+                              
+                              if (minutosAtual < horaMinima * 60 || minutosAtual > (horaMaxima + 1) * 60) {
+                                return const SizedBox.shrink();
+                              }
+                              
+                              final topPxAtual = (minutosAtual - (horaMinima * 60)) * _pixelsPorMinuto;
+                              
+                              return Positioned(
+                                top: topPxAtual - 4,
+                                left: 0,
+                                right: 0,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Container(
+                                        height: 1.5,
+                                        color: Colors.red,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
