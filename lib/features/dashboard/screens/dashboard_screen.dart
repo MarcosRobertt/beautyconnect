@@ -21,6 +21,16 @@ String formatarData(DateTime data) {
   return '${diasSemana[data.weekday - 1]}, ${data.day} de ${meses[data.month - 1]}';
 }
 
+String _formatarMesAno(DateTime data) {
+  final meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+  return '${meses[data.month - 1]} DE ${data.year}';
+}
+
+String _formatarDiaCurto(DateTime data) {
+  final diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+  return '${diasSemana[data.weekday - 1]}, ${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}';
+}
+
 // MOTOR DE INTELIGÊNCIA: Preservado, mas inativo visualmente para uso futuro.
 String gerarDicaEstrategica(Cliente? cliente, Agendamento agendamento) {
   if (cliente == null || cliente.id == 'BLOQUEIO') return 'Dica IA: Confirme o horário com antecedência para evitar buracos na agenda.';
@@ -159,6 +169,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final valTMAtual = _periodoTM == 'Hoje' ? tmHoje : (_periodoTM == 'Semana' ? tmSemana : tmMes);
     final valTMAnt = _periodoTM == 'Hoje' ? tmOntem : (_periodoTM == 'Semana' ? tmSemanaAnt : tmMesAnt);
 
+    // LÓGICA DAS COMANDAS PENDENTES (Dias Anteriores)
+    final comandasPendentes = todosAgendamentos.where((a) =>
+        a.clienteId != 'BLOQUEIO' &&
+        a.status == AgendamentoStatus.agendado &&
+        a.data.isBefore(hojeZerado)
+    ).toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -232,7 +249,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             agendaFiltro.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
           }
 
-          // CÁLCULO CIRÚRGICO: Contar apenas os atendimentos reais de hoje (ignorando BLOQUEIO)
           final totalAtendimentosReaisHoje = m.agendaHoje.where((a) => a.clienteId != 'BLOQUEIO').length;
 
           return ListView(
@@ -288,6 +304,41 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 24),
+
+              // NOVO MÓDULO: ALERTA DE COMANDAS PENDENTES
+              if (comandasPendentes.isNotEmpty) ...[
+                Card(
+                  color: Colors.orange.shade50,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.orange.shade300, width: 1.5),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    leading: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
+                    title: Text('${comandasPendentes.length} Comanda(s) pendente(s)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 14)),
+                    subtitle: Text('De dias anteriores. Feche para registrar o faturamento.', style: TextStyle(color: Colors.orange.shade800, fontSize: 12)),
+                    trailing: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.orange.shade800,
+                        foregroundColor: Colors.white,
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                          builder: (context) => const _ModalComandasPendentes(),
+                        );
+                      },
+                      child: const Text('VER'),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
 
               // 1. LISTA ORIGINAL: AGENDA DE HOJE
               Card(
@@ -354,6 +405,322 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => _ModalDetalhesReceita(agendamentos: agendamentos),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// NOVO MODAL: LISTAGEM DAS COMANDAS PENDENTES
+// -----------------------------------------------------------------------------
+class _ModalComandasPendentes extends ConsumerWidget {
+  const _ModalComandasPendentes();
+
+  void _abrirModalFechamento(
+    BuildContext context,
+    WidgetRef ref,
+    Agendamento agendamento,
+    String nomeCliente,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _ModalFecharComandaDashboard(
+        agendamento: agendamento,
+        nomeCliente: nomeCliente,
+        onConfirmar: (forma, valorFinal, houveAtraso) {
+          final obsAtual = agendamento.observacao;
+          final novaObs = houveAtraso && !obsAtual.contains('[Cliente Atrasou]')
+              ? (obsAtual.isEmpty ? '[Cliente Atrasou]' : '$obsAtual | [Cliente Atrasou]')
+              : obsAtual;
+
+          final atualizado = agendamento.copyWith(
+            status: AgendamentoStatus.concluido,
+            formaPagamento: forma,
+            valor: valorFinal,
+            observacao: novaObs,
+          );
+          ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+        },
+        onCancelarAtendimento: () {
+          final atualizado = agendamento.copyWith(
+            status: AgendamentoStatus.cancelado,
+            observacao: agendamento.observacao.isEmpty ? '[Cancelado pelo Dashboard]' : '${agendamento.observacao} | [Cancelado pelo Dashboard]',
+          );
+          ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
+    final clientesAsync = ref.watch(clienteControllerProvider);
+
+    final clientes = clientesAsync.value ?? [];
+    final clientesPorId = {for (final c in clientes) c.id: c};
+    final hoje = DateTime.now();
+    final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
+
+    final pendentes = (todosAgendamentosAsync.value ?? []).where((a) =>
+        a.clienteId != 'BLOQUEIO' &&
+        a.status == AgendamentoStatus.agendado &&
+        a.data.isBefore(hojeZerado)
+    ).toList();
+
+    pendentes.sort((a, b) {
+      int cmp = a.data.compareTo(b.data);
+      if (cmp == 0) return a.horaInicio.compareTo(b.horaInicio);
+      return cmp;
+    });
+
+    final mapMes = <String, Map<String, List<Agendamento>>>{};
+    for (var a in pendentes) {
+      final mesStr = _formatarMesAno(a.data);
+      final diaStr = _formatarDiaCurto(a.data);
+      mapMes.putIfAbsent(mesStr, () => {});
+      mapMes[mesStr]!.putIfAbsent(diaStr, () => []);
+      mapMes[mesStr]![diaStr]!.add(a);
+    }
+
+    return SafeArea(
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Resolva suas Pendências', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            const Text('Feche as comandas abaixo para que o valor seja contabilizado no seu faturamento mensal.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: pendentes.isEmpty
+                  ? const Center(child: Text('Tudo certo! Nenhuma comanda pendente.', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)))
+                  : ListView(
+                      children: mapMes.entries.map((mesEntry) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16, bottom: 8),
+                              child: Text('🗓️ ${mesEntry.key}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800, fontSize: 12)),
+                            ),
+                            ...mesEntry.value.entries.map((diaEntry) {
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
+                                      child: Text('📅 ${diaEntry.key}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    ),
+                                    ...diaEntry.value.map((a) {
+                                      final nomeCliente = clientesPorId[a.clienteId]?.nome ?? "Cliente não encontrado";
+                                      return ListTile(
+                                        title: Text('${a.horaInicio} · $nomeCliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                        subtitle: Text('${a.servico} — ${formatarMoeda(a.valor)}', style: const TextStyle(fontSize: 12)),
+                                        trailing: OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: Colors.purple,
+                                            side: const BorderSide(color: Colors.purple),
+                                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                                          ),
+                                          onPressed: () => _abrirModalFechamento(context, ref, a, nomeCliente),
+                                          child: const Text('FECHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                        );
+                      }).toList(),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// -----------------------------------------------------------------------------
+// COMPONENTES AUXILIARES (Modais e Cards)
+// -----------------------------------------------------------------------------
+
+class _ModalFecharComandaDashboard extends StatefulWidget {
+  const _ModalFecharComandaDashboard({
+    required this.agendamento,
+    required this.nomeCliente,
+    required this.onConfirmar,
+    required this.onCancelarAtendimento,
+  });
+
+  final Agendamento agendamento;
+  final String nomeCliente;
+  final void Function(FormaPagamento forma, double valorFinal, bool houveAtraso) onConfirmar;
+  final VoidCallback onCancelarAtendimento;
+
+  @override
+  State<_ModalFecharComandaDashboard> createState() => _ModalFecharComandaDashboardState();
+}
+
+class _ModalFecharComandaDashboardState extends State<_ModalFecharComandaDashboard> {
+  late double _valorFinal;
+  FormaPagamento _formaSelecionada = FormaPagamento.pix;
+  bool _houveAtraso = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _valorFinal = widget.agendamento.valor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: 20,
+        left: 20,
+        right: 20,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Fechar Comanda — ${widget.nomeCliente}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${widget.agendamento.servico} — R\$ ${_valorFinal.toStringAsFixed(2).replaceAll('.', ',')}',
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Forma de Pagamento:',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: FormaPagamento.values.map((forma) {
+                final selecionado = _formaSelecionada == forma;
+                return ChoiceChip(
+                  label: Text(forma.rotulo),
+                  selected: selecionado,
+                  selectedColor: Theme.of(context).colorScheme.primaryContainer,
+                  onSelected: (bool selected) {
+                    if (selected) {
+                      setState(() => _formaSelecionada = forma);
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            CheckboxListTile(
+              value: _houveAtraso,
+              contentPadding: EdgeInsets.zero,
+              title: const Text(
+                'Cliente chegou atrasada?',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+              subtitle: const Text(
+                'Registra o atraso no histórico para métricas futuras.',
+                style: TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              controlAffinity: ListTileControlAffinity.leading,
+              onChanged: (val) => setState(() => _houveAtraso = val ?? false),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  flex: 1,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context); 
+                      widget.onCancelarAtendimento(); 
+                    },
+                    child: const Text(
+                      'Cancelar\nAtendimento',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      widget.onConfirmar(_formaSelecionada, _valorFinal, _houveAtraso);
+                    },
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.check_circle_outline, size: 18),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _formaSelecionada == FormaPagamento.pendente
+                                ? 'Manter Aberta'
+                                : 'Confirmar Recebimento',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 12),
+                            maxLines: 2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
