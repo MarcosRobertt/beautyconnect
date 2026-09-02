@@ -48,7 +48,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // 🚀 FERRAMENTA SÊNIOR: Script de Migração (Roda uma única vez para salvar no banco)
+  // 🚀 SCRIPT DE SINCRONIZAÇÃO OTIMIZADO (Sem travamento e com lotes seguros de 400 itens)
   Future<void> _sincronizarBancoDeDadosAntigo() async {
     showDialog(
       context: context,
@@ -59,7 +59,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           children: [
             CircularProgressIndicator(color: Colors.purple),
             SizedBox(height: 16),
-            Text('Sincronizando clientes antigas...\nIsso atualizará o banco de dados e será feito apenas uma vez.', textAlign: TextAlign.center),
+            Text('Sincronizando clientes antigas...\nAguarde alguns instantes.', textAlign: TextAlign.center),
           ],
         ),
       ),
@@ -70,49 +70,79 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
       final todosAgendamentos = await repo.listarTodos();
       final clientes = ref.read(clienteControllerProvider).value ?? [];
       
-      final firestore = FirebaseFirestore.instance;
-      final batch = firestore.batch();
-      int atualizados = 0;
-      
-      for (var cliente in clientes) {
-        int visitas = 0;
-        double gasto = 0.0;
-        DateTime? ultima;
+      // 1. Agrupa agendamentos por cliente em memória de forma instantânea
+      final Map<String, List<Agendamento>> agendamentosPorCliente = {};
+      for (var ag in todosAgendamentos) {
+        if (ag.status == AgendamentoStatus.concluido) {
+          agendamentosPorCliente.putIfAbsent(ag.clienteId, () => []).add(ag);
+        }
+      }
 
-        for (var ag in todosAgendamentos) {
-          if (ag.clienteId == cliente.id && ag.status == AgendamentoStatus.concluido) {
-            visitas++;
+      final firestore = FirebaseFirestore.instance;
+      WriteBatch batch = firestore.batch();
+      int operacoesNoBatch = 0;
+      int totalAtualizados = 0;
+
+      for (var cliente in clientes) {
+        final listaAgendamentos = agendamentosPorCliente[cliente.id] ?? [];
+        
+        if (listaAgendamentos.isNotEmpty) {
+          int visitas = listaAgendamentos.length;
+          double gasto = 0.0;
+          DateTime? ultima;
+
+          for (var ag in listaAgendamentos) {
             gasto += ag.valor;
             if (ultima == null || ag.data.isAfter(ultima)) {
               ultima = ag.data;
             }
           }
-        }
 
-        if (visitas > 0) {
           final docRef = firestore.collection('clientes').doc(cliente.id);
           batch.update(docRef, {
             'totalVisitas': visitas,
             'totalGasto': gasto,
             'ultimaVisita': ultima != null ? Timestamp.fromDate(ultima) : null,
           });
-          atualizados++;
+
+          operacoesNoBatch++;
+          totalAtualizados++;
+
+          // 2. Trava de Segurança: Envia em lotes menores para não exceder o limite do Firebase
+          if (operacoesNoBatch >= 400) {
+            await batch.commit();
+            batch = firestore.batch();
+            operacoesNoBatch = 0;
+            await Future.delayed(const Duration(milliseconds: 50)); // Mantém a tela fluida
+          }
         }
       }
 
-      if (atualizados > 0) await batch.commit();
-      
-      if (mounted) Navigator.pop(context); // Fecha Dialog
+      // Envia os itens restantes do lote
+      if (operacoesNoBatch > 0) {
+        await batch.commit();
+      }
+
+      // 3. Recarrega a lista de clientes para exibir as métricas imediatamente
+      ref.invalidate(clienteControllerProvider);
+
+      if (mounted) Navigator.of(context, rootNavigator: true).pop(); // Fecha o carregamento
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sucesso! $atualizados clientes corrigidas no Firebase.'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Text('Sucesso! $totalAtualizados clientes sincronizadas.'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
-      if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-           SnackBar(content: Text('Erro ao sincronizar: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Erro ao sincronizar: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
@@ -120,7 +150,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 LÊ APENAS CLIENTES. ZERO AGENDAMENTOS CARREGADOS!
+    // 🚀 Carrega APENAS a lista de clientes. Sem chamadas pesadas de histórico!
     final clientesAsync = ref.watch(clienteControllerProvider);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
@@ -174,7 +204,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         data: (todosClientes) {
           final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
-          // 1. TOP CLIENTES (Usa direto o valor do banco, sem calcular nada)
+          // Top Clientes
           final topClientes = List<Cliente>.from(todosClientes.where((c) => c.totalVisitas > 0));
           if (_filtroTop == 'faturamento') {
             topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
@@ -182,7 +212,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
           }
 
-          // 2. RECORRÊNCIA E INATIVOS (Usa direto o valor do banco)
+          // Recorrência e Inativos
           final recorrencia = <Cliente>[];
           final inativos = <Cliente>[];
 
@@ -213,7 +243,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // ABA 1: TODOS (Com Filtros Locais Instantâneos)
+  // ABA 1: TODOS (Filtros Rápidos e Busca Local)
   // =========================================================================
   Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
     List<Cliente> filtradosPorChip = listaBase;
@@ -302,7 +332,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           const SizedBox(height: 12),
           Expanded(
             child: listaTop.isEmpty
-                ? const Center(child: Text('Use a opção "Sincronizar Banco" no menu.', style: TextStyle(color: Colors.grey)))
+                ? const Center(child: Text('Nenhuma cliente com histórico. Use "Sincronizar Banco Antigo".', style: TextStyle(color: Colors.grey)))
                 : _construirListView(listaTop, moeda),
           ),
         ],
@@ -322,7 +352,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
       if (_filtroInativos == '45') return dias >= 45;
       if (_filtroInativos == '90') return dias >= 90;
-      return true; // 'todos_inativos'
+      return true;
     }).toList();
 
     final textoBusca = _buscaController.text.trim().toLowerCase();
@@ -413,7 +443,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // WIDGET CONSTRUTOR DA LISTA
+  // WIDGET LISTVIEW REUTILIZÁVEL
   // =========================================================================
   Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool isInativo = false}) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -495,7 +525,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 }
 
 // =========================================================================
-// NOVO MODAL: IMPORTAÇÃO DA AGENDA DE CONTATOS
+// MODAL DE IMPORTAÇÃO DA AGENDA DE CONTATOS
 // =========================================================================
 class _ModalImportacaoContatos extends StatefulWidget {
   const _ModalImportacaoContatos();
