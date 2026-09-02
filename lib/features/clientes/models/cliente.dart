@@ -82,7 +82,6 @@ class Cliente {
       aniversario: map['aniversario'] != null ? (map['aniversario'] as Timestamp).toDate() : null,
       createdAt: map['createdAt'] != null ? (map['createdAt'] as Timestamp).toDate() : DateTime.now(),
       updatedAt: map['updatedAt'] != null ? (map['updatedAt'] as Timestamp).toDate() : DateTime.now(),
-      // Caso a cliente seja antiga e não tenha o campo no Firebase, assume 0
       totalVisitas: map['totalVisitas'] ?? 0,
       totalGasto: (map['totalGasto'] ?? 0.0).toDouble(),
       ultimaVisita: map['ultimaVisita'] != null ? (map['ultimaVisita'] as Timestamp).toDate() : null,
