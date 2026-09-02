@@ -4,8 +4,30 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../agenda/controllers/agendamento_controller.dart';
+import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
+
+// Provedor temporário para Fallback de Clientes Antigos que ainda estão com 0 no Firebase
+final _agendamentosFallbackProvider = FutureProvider.autoDispose<List<Agendamento>>((ref) async {
+  return await ref.read(agendamentoControllerProvider.notifier).todos();
+});
+
+// Classe auxiliar local para padronizar exibição (Unifica dados do Banco com o Fallback)
+class _ClienteExibicao {
+  final Cliente cliente;
+  final int totalVisitas;
+  final double totalGasto;
+  final DateTime? ultimaVisita;
+
+  _ClienteExibicao({
+    required this.cliente,
+    required this.totalVisitas,
+    required this.totalGasto,
+    this.ultimaVisita,
+  });
+}
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -17,9 +39,9 @@ class ClientesScreen extends ConsumerStatefulWidget {
 class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final TextEditingController _buscaController = TextEditingController();
-  
-  // Controles de Filtro
-  String _filtroTop = 'faturamento'; 
+
+  // Filtros de Estado
+  String _filtroTop = 'faturamento';
   String _filtroTodos = 'todos'; // 'todos' ou 'recentes'
   String _filtroInativos = 'todos_inativos'; // 'todos_inativos', '45', '90'
 
@@ -47,8 +69,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 LÊ APENAS OS CLIENTES! Muito mais rápido e sem sobrecarregar o Firebase.
     final clientesAsync = ref.watch(clienteControllerProvider);
+    final agendamentosAsync = ref.watch(_agendamentosFallbackProvider);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
     return Scaffold(
@@ -81,67 +103,104 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
         data: (todosClientes) {
-          final hoje = DateTime.now();
-          final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
-
-          // Top Clientes (Ordenado por Gasto ou Visitas)
-          final topClientes = List<Cliente>.from(todosClientes.where((c) => (c.totalVisitas /* Supondo que você adicionou no model */) > 0));
-          if (_filtroTop == 'faturamento') {
-            topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
-          } else {
-            topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
-          }
-
-          // Inativos e Recorrência (Baseado na última visita)
-          final recorrencia = <Cliente>[];
-          final inativos = <Cliente>[];
-
-          for (var c in todosClientes) {
-            final dataRef = c.ultimaVisita ?? c.createdAt;
-            final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
-            final dias = hojeZerado.difference(refZerada).inDays;
-
-            if (dias >= 15 && dias < 30) {
-              recorrencia.add(c);
-            } else if (dias >= 30) {
-              inativos.add(c);
-            }
-          }
-
-          return TabBarView(
-            controller: _tabController,
-            children: [
-              _construirAbaTodos(todosClientes, moeda),
-              _construirAbaTopClientes(topClientes, moeda),
-              _construirAbaListaSimples(recorrencia, 'Sem agendar entre 15 e 30 dias', moeda),
-              _construirAbaInativos(inativos, moeda),
-            ],
+          return agendamentosAsync.when(
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, __) => _construirTelaComBase(todosClientes, [], moeda),
+            data: (agendamentos) => _construirTelaComBase(todosClientes, agendamentos, moeda),
           );
         },
       ),
     );
   }
 
-  // =========================================================================
+  Widget _construirTelaComBase(List<Cliente> clientes, List<Agendamento> agendamentosFallback, NumberFormat moeda) {
+    final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+    // 🔄 LÓGICA DE FALLBACK: Unifica clientes antigos com o cálculo em memória se totalVisitas == 0
+    final List<_ClienteExibicao> listaExibicao = clientes.map((c) {
+      if (c.totalVisitas > 0 || c.totalGasto > 0 || c.ultimaVisita != null) {
+        return _ClienteExibicao(
+          cliente: c,
+          totalVisitas: c.totalVisitas,
+          totalGasto: c.totalGasto,
+          ultimaVisita: c.ultimaVisita,
+        );
+      }
+
+      // Cálculo em tempo de execução para dados legados
+      int visitas = 0;
+      double gasto = 0.0;
+      DateTime? ultima;
+
+      for (final ag in agendamentosFallback) {
+        if (ag.clienteId == c.id && ag.status == AgendamentoStatus.concluido) {
+          visitas++;
+          gasto += ag.valor;
+          if (ultima == null || ag.data.isAfter(ultima)) {
+            ultima = ag.data;
+          }
+        }
+      }
+
+      return _ClienteExibicao(
+        cliente: c,
+        totalVisitas: visitas,
+        totalGasto: gasto,
+        ultimaVisita: ultima,
+      );
+    }).toList();
+
+    // 1. TOP CLIENTES
+    final topClientes = List<_ClienteExibicao>.from(listaExibicao.where((c) => c.totalVisitas > 0));
+    if (_filtroTop == 'faturamento') {
+      topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
+    } else {
+      topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
+    }
+
+    // 2. RECORRÊNCIA E INATIVOS
+    final recorrencia = <_ClienteExibicao>[];
+    final inativos = <_ClienteExibicao>[];
+
+    for (var c in listaExibicao) {
+      final dataRef = c.ultimaVisita ?? c.cliente.createdAt;
+      final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
+      final dias = hojeZerado.difference(refZerada).inDays;
+
+      if (dias >= 15 && dias < 30) {
+        recorrencia.add(c);
+      } else if (dias >= 30) {
+        inativos.add(c);
+      }
+    }
+
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _construirAbaTodos(listaExibicao, moeda),
+        _construirAbaTopClientes(topClientes, moeda),
+        _construirAbaListaSimples(recorrencia, 'Clientes sem agendar entre 15 e 30 dias', moeda),
+        _construirAbaInativos(inativos, moeda),
+      ],
+    );
+  }
+
   // ABA 1: TODOS (Com Filtros Rápidos)
-  // =========================================================================
-  Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
-    // 1. Aplica Filtro Rápido (Chips)
-    List<Cliente> filtradosPorChip = listaBase;
+  Widget _construirAbaTodos(List<_ClienteExibicao> listaBase, NumberFormat moeda) {
+    List<_ClienteExibicao> filtradosPorChip = listaBase;
     if (_filtroTodos == 'recentes') {
       filtradosPorChip = listaBase.where((c) {
-        final diff = DateTime.now().difference(c.createdAt).inDays;
-        return diff <= 7; // Cadastradas nos últimos 7 dias
+        final diff = DateTime.now().difference(c.cliente.createdAt).inDays;
+        return diff <= 7;
       }).toList();
     }
 
-    // 2. Aplica Filtro de Busca (Texto)
     final textoBusca = _buscaController.text.trim().toLowerCase();
     final listaFinal = textoBusca.isEmpty
         ? filtradosPorChip
         : filtradosPorChip.where((c) =>
-            c.nome.toLowerCase().contains(textoBusca) || 
-            c.telefone.contains(textoBusca)
+            c.cliente.nome.toLowerCase().contains(textoBusca) ||
+            c.cliente.telefone.contains(textoBusca)
           ).toList();
 
     return Padding(
@@ -198,10 +257,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
   // ABA 2: TOP CLIENTES
-  // =========================================================================
-  Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda) {
+  Widget _construirAbaTopClientes(List<_ClienteExibicao> listaTop, NumberFormat moeda) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -216,35 +273,35 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             onSelectionChanged: (set) => setState(() => _filtroTop = set.first),
           ),
           const SizedBox(height: 12),
-          Expanded(child: _construirListView(listaTop, moeda)),
+          Expanded(
+            child: listaTop.isEmpty
+                ? const Center(child: Text('Nenhum atendimento concluído registrado.', style: TextStyle(color: Colors.grey)))
+                : _construirListView(listaTop, moeda),
+          ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // ABA 3: INATIVOS (Com Filtros de Tempo)
-  // =========================================================================
-  Widget _construirAbaInativos(List<Cliente> listaBase, NumberFormat moeda) {
+  // ABA 3: INATIVOS
+  Widget _construirAbaInativos(List<_ClienteExibicao> listaBase, NumberFormat moeda) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-    
-    // 1. Aplica Filtro Rápido (Chips)
-    List<Cliente> filtradosPorChip = listaBase.where((c) {
-      final ref = c.ultimaVisita ?? c.createdAt;
+
+    List<_ClienteExibicao> filtradosPorChip = listaBase.where((c) {
+      final ref = c.ultimaVisita ?? c.cliente.createdAt;
       final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
-      
+
       if (_filtroInativos == '45') return dias >= 45;
       if (_filtroInativos == '90') return dias >= 90;
-      return true; // 'todos_inativos'
+      return true;
     }).toList();
 
-    // 2. Aplica Filtro de Busca (Texto)
     final textoBusca = _buscaController.text.trim().toLowerCase();
     final listaFinal = textoBusca.isEmpty
         ? filtradosPorChip
         : filtradosPorChip.where((c) =>
-            c.nome.toLowerCase().contains(textoBusca) || 
-            c.telefone.contains(textoBusca)
+            c.cliente.nome.toLowerCase().contains(textoBusca) ||
+            c.cliente.telefone.contains(textoBusca)
           ).toList();
 
     return Padding(
@@ -306,10 +363,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // ABA AUXILIAR: LISTA SIMPLES (Recorrência)
-  // =========================================================================
-  Widget _construirAbaListaSimples(List<Cliente> listaBase, String subtitulo, NumberFormat moeda) {
+  // ABA RECORRÊNCIA SIMPLES
+  Widget _construirAbaListaSimples(List<_ClienteExibicao> listaBase, String subtitulo, NumberFormat moeda) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -323,26 +378,25 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // WIDGET CONSTRUTOR DA LISTA (REUTILIZÁVEL)
-  // =========================================================================
-  Widget _construirListView(List<Cliente> clientes, NumberFormat moeda, {bool isInativo = false}) {
+  // WIDGET LISTVIEW REUTILIZÁVEL (Sem Histórico Inline, botão isolado)
+  Widget _construirListView(List<_ClienteExibicao> lista, NumberFormat moeda, {bool isInativo = false}) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return ListView.separated(
-      itemCount: clientes.length,
+      itemCount: lista.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final cliente = clientes[index];
-        
-        final dataFormatada = cliente.ultimaVisita != null 
-            ? DateFormat('dd/MM/yyyy').format(cliente.ultimaVisita!) 
+        final item = lista[index];
+        final cliente = item.cliente;
+
+        final dataFormatada = item.ultimaVisita != null
+            ? DateFormat('dd/MM/yyyy').format(item.ultimaVisita!)
             : 'Nenhum atendimento';
 
         int dias = 0;
-        if (cliente.ultimaVisita != null) {
-           final ref = DateTime(cliente.ultimaVisita!.year, cliente.ultimaVisita!.month, cliente.ultimaVisita!.day);
-           dias = hojeZerado.difference(ref).inDays;
+        if (item.ultimaVisita != null) {
+          final ref = DateTime(item.ultimaVisita!.year, item.ultimaVisita!.month, item.ultimaVisita!.day);
+          dias = hojeZerado.difference(ref).inDays;
         }
 
         return Padding(
@@ -350,26 +404,20 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      cliente.nome, 
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInativo ? Colors.red.shade800 : Colors.black87),
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+              Text(
+                cliente.nome,
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInativo ? Colors.red.shade800 : Colors.black87),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Text('🔄 Visitas: ${cliente.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                  Text('🔄 Visitas: ${item.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                   const SizedBox(width: 16),
-                  Text('💰 Gasto: ${moeda.format(cliente.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                  Text('💰 Gasto: ${moeda.format(item.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -378,20 +426,29 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                 children: [
                   Expanded(
                     child: Text(
-                      isInativo ? 'Sem agendar há $dias dias (Último: $dataFormatada)' : '📅 Última visita: $dataFormatada', 
+                      isInativo ? 'Sem agendar há $dias dias (Último: $dataFormatada)' : '📅 Última visita: $dataFormatada',
                       style: TextStyle(fontSize: 12, color: isInativo ? Colors.red.shade600 : Colors.grey.shade600, fontWeight: FontWeight.bold),
                     ),
                   ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.purple,
-                      side: const BorderSide(color: Colors.purple),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    icon: const Icon(Icons.history, size: 14),
-                    label: const Text('HISTÓRICO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                    onPressed: () => context.push('${AppRoutes.clienteHistorico}/${cliente.id}'),
+                  Row(
+                    children: [
+                      OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.purple,
+                          side: const BorderSide(color: Colors.purple),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.history, size: 14),
+                        label: const Text('HISTÓRICO', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                        onPressed: () => context.push('${AppRoutes.clienteHistorico}/${cliente.id}'),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, color: Colors.grey, size: 20),
+                        tooltip: 'Editar Cliente',
+                        onPressed: () => context.push('${AppRoutes.clienteEditar}/${cliente.id}'),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -403,9 +460,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 }
 
-// =========================================================================
-// NOVO MODAL: IMPORTAÇÃO DA AGENDA DE CONTATOS (MOCKUP / UI)
-// =========================================================================
+// MODAL DE IMPORTAÇÃO DA AGENDA DE CONTATOS
 class _ModalImportacaoContatos extends StatefulWidget {
   const _ModalImportacaoContatos();
 
@@ -414,7 +469,6 @@ class _ModalImportacaoContatos extends StatefulWidget {
 }
 
 class _ModalImportacaoContatosState extends State<_ModalImportacaoContatos> {
-  // Lista fictícia para a interface. No futuro, será preenchida pelo pacote flutter_contacts.
   final List<Map<String, dynamic>> _contatosCelular = [
     {'nome': 'Amanda Silva Cliente', 'telefone': '(15) 99999-1111', 'selecionado': true},
     {'nome': 'Bruna Costa (Mãe do João)', 'telefone': '(15) 98888-2222', 'selecionado': false},
@@ -499,7 +553,6 @@ class _ModalImportacaoContatosState extends State<_ModalImportacaoContatos> {
                 backgroundColor: contatosSelecionados > 0 ? Colors.green : Colors.grey,
               ),
               onPressed: contatosSelecionados > 0 ? () {
-                // Aqui entrará a lógica do Firebase WriteBatch futuramente
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text('$contatosSelecionados clientes importados com sucesso!')),
