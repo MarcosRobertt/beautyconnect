@@ -22,12 +22,13 @@ class Cliente {
     this.observacoes = '',
     this.profissao,
     this.aniversario,
-    required this.createdAt,
-    required this.updatedAt,
+    DateTime? createdAt, // Retirado o required para evitar erro no formulário
+    DateTime? updatedAt, // Retirado o required para evitar erro no formulário
     this.totalVisitas = 0,
     this.totalGasto = 0.0,
     this.ultimaVisita,
-  });
+  })  : createdAt = createdAt ?? DateTime.now(),
+        updatedAt = updatedAt ?? DateTime.now();
 
   Cliente copyWith({
     String? id,
@@ -57,8 +58,10 @@ class Cliente {
     );
   }
 
-  Map<String, dynamic> toMap() {
+  // 🔄 Renomeado de toMap para toJson (Padronização com o Backup e Repositório)
+  Map<String, dynamic> toJson() {
     return {
+      'id': id, 
       'nome': nome,
       'telefone': telefone,
       'observacoes': observacoes,
@@ -72,19 +75,30 @@ class Cliente {
     };
   }
 
-  factory Cliente.fromMap(Map<String, dynamic> map, String id) {
+  // 🔄 Renomeado de fromMap para fromJson (Padronização com o Backup e Repositório)
+  factory Cliente.fromJson(Map<String, dynamic> map, [String? idOverride]) {
     return Cliente(
-      id: id,
+      id: idOverride ?? map['id'] ?? '',
       nome: map['nome'] ?? '',
       telefone: map['telefone'] ?? '',
       observacoes: map['observacoes'] ?? '',
       profissao: map['profissao'],
-      aniversario: map['aniversario'] != null ? (map['aniversario'] as Timestamp).toDate() : null,
-      createdAt: map['createdAt'] != null ? (map['createdAt'] as Timestamp).toDate() : DateTime.now(),
-      updatedAt: map['updatedAt'] != null ? (map['updatedAt'] as Timestamp).toDate() : DateTime.now(),
+      aniversario: _parseDate(map['aniversario']),
+      createdAt: _parseDate(map['createdAt']) ?? DateTime.now(),
+      updatedAt: _parseDate(map['updatedAt']) ?? DateTime.now(),
       totalVisitas: map['totalVisitas'] ?? 0,
       totalGasto: (map['totalGasto'] ?? 0.0).toDouble(),
-      ultimaVisita: map['ultimaVisita'] != null ? (map['ultimaVisita'] as Timestamp).toDate() : null,
+      ultimaVisita: _parseDate(map['ultimaVisita']),
     );
+  }
+
+  // Helper de segurança para converter datas que vêm do Firestore ou do Backup offline
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    if (value is String) return DateTime.tryParse(value); // Para o BackupService
+    if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
+    return null;
   }
 }
