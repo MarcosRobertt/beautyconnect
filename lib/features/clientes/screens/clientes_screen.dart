@@ -3,10 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../agenda/controllers/agendamento_controller.dart';
-import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
 
@@ -21,10 +20,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   late TabController _tabController;
   final TextEditingController _buscaController = TextEditingController();
 
-  // Filtros de Estado
   String _filtroTop = 'faturamento';
-  String _filtroTodos = 'todos'; // 'todos' ou 'recentes'
-  String _filtroInativos = 'todos_inativos'; // 'todos_inativos', '45', '90'
+  String _filtroTodos = 'todos';
+  String _filtroInativos = 'todos_inativos';
 
   @override
   void initState() {
@@ -39,196 +37,83 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
-  void _abrirModalImportacao() {
+  void _abrirModalImportacao(List<Cliente> clientesExistentes) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) => const _ModalImportacaoContatos(),
+      builder: (context) => _ModalImportacaoContatos(clientesExistentes: clientesExistentes),
     );
-  }
-
-  // 🚀 SCRIPT DE SINCRONIZAÇÃO OTIMIZADO (Sem travamento e com lotes seguros de 400 itens)
-  Future<void> _sincronizarBancoDeDadosAntigo() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const AlertDialog(
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            CircularProgressIndicator(color: Colors.purple),
-            SizedBox(height: 16),
-            Text('Sincronizando clientes antigas...\nAguarde alguns instantes.', textAlign: TextAlign.center),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      final repo = ref.read(agendamentoRepositoryProvider);
-      final todosAgendamentos = await repo.listarTodos();
-      final clientes = ref.read(clienteControllerProvider).value ?? [];
-      
-      // 1. Agrupa agendamentos por cliente em memória de forma instantânea
-      final Map<String, List<Agendamento>> agendamentosPorCliente = {};
-      for (var ag in todosAgendamentos) {
-        if (ag.status == AgendamentoStatus.concluido) {
-          agendamentosPorCliente.putIfAbsent(ag.clienteId, () => []).add(ag);
-        }
-      }
-
-      final firestore = FirebaseFirestore.instance;
-      WriteBatch batch = firestore.batch();
-      int operacoesNoBatch = 0;
-      int totalAtualizados = 0;
-
-      for (var cliente in clientes) {
-        final listaAgendamentos = agendamentosPorCliente[cliente.id] ?? [];
-        
-        if (listaAgendamentos.isNotEmpty) {
-          int visitas = listaAgendamentos.length;
-          double gasto = 0.0;
-          DateTime? ultima;
-
-          for (var ag in listaAgendamentos) {
-            gasto += ag.valor;
-            if (ultima == null || ag.data.isAfter(ultima)) {
-              ultima = ag.data;
-            }
-          }
-
-          final docRef = firestore.collection('clientes').doc(cliente.id);
-          batch.update(docRef, {
-            'totalVisitas': visitas,
-            'totalGasto': gasto,
-            'ultimaVisita': ultima != null ? Timestamp.fromDate(ultima) : null,
-          });
-
-          operacoesNoBatch++;
-          totalAtualizados++;
-
-          // 2. Trava de Segurança: Envia em lotes menores para não exceder o limite do Firebase
-          if (operacoesNoBatch >= 400) {
-            await batch.commit();
-            batch = firestore.batch();
-            operacoesNoBatch = 0;
-            await Future.delayed(const Duration(milliseconds: 50)); // Mantém a tela fluida
-          }
-        }
-      }
-
-      // Envia os itens restantes do lote
-      if (operacoesNoBatch > 0) {
-        await batch.commit();
-      }
-
-      // 3. Recarrega a lista de clientes para exibir as métricas imediatamente
-      ref.invalidate(clienteControllerProvider);
-
-      if (mounted) Navigator.of(context, rootNavigator: true).pop(); // Fecha o carregamento
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Sucesso! $totalAtualizados clientes sincronizadas.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erro ao sincronizar: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 Carrega APENAS a lista de clientes. Sem chamadas pesadas de histórico!
     final clientesAsync = ref.watch(clienteControllerProvider);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Clientes'),
-        actions: [
-          TextButton.icon(
-            onPressed: _abrirModalImportacao,
-            icon: const Icon(Icons.contact_phone, color: Colors.purple, size: 20),
-            label: const Text('Importar', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.purple),
-            tooltip: 'Opções de Sistema',
-            onSelected: (val) {
-              if (val == 'sync') _sincronizarBancoDeDadosAntigo();
-            },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'sync',
-                child: Row(
-                  children: [
-                    Icon(Icons.sync, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Sincronizar Banco Antigo', style: TextStyle(fontSize: 13)),
-                  ],
-                ),
-              )
+    return clientesAsync.when(
+      loading: () => Scaffold(
+        appBar: AppBar(title: const Text('Clientes')),
+        body: const Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        appBar: AppBar(title: const Text('Clientes')),
+        body: Center(child: Text('Erro ao carregar clientes: $e')),
+      ),
+      data: (todosClientes) {
+        final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+        // Top Clientes
+        final topClientes = List<Cliente>.from(todosClientes.where((c) => c.totalVisitas > 0));
+        if (_filtroTop == 'faturamento') {
+          topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
+        } else {
+          topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
+        }
+
+        // Recorrência e Inativos
+        final recorrencia = <Cliente>[];
+        final inativos = <Cliente>[];
+
+        for (var c in todosClientes) {
+          final dataRef = c.ultimaVisita ?? c.createdAt;
+          final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
+          final dias = hojeZerado.difference(refZerada).inDays;
+
+          if (dias >= 15 && dias < 30) {
+            recorrencia.add(c);
+          } else if (dias >= 30) {
+            inativos.add(c);
+          }
+        }
+
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Clientes'),
+            actions: [
+              TextButton.icon(
+                onPressed: () => _abrirModalImportacao(todosClientes),
+                icon: const Icon(Icons.contact_phone, color: Colors.purple, size: 20),
+                label: const Text('Importar', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 8),
             ],
+            bottom: TabBar(
+              controller: _tabController,
+              isScrollable: true,
+              tabs: const [
+                Tab(text: 'Todos'),
+                Tab(text: 'Top Clientes'),
+                Tab(text: 'Recorrência'),
+                Tab(text: 'Inativos'),
+              ],
+            ),
           ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(text: 'Todos'),
-            Tab(text: 'Top Clientes'),
-            Tab(text: 'Recorrência'),
-            Tab(text: 'Inativos'),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(AppRoutes.clienteNovo),
-        child: const Icon(Icons.add),
-      ),
-      body: clientesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
-        data: (todosClientes) {
-          final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-
-          // Top Clientes
-          final topClientes = List<Cliente>.from(todosClientes.where((c) => c.totalVisitas > 0));
-          if (_filtroTop == 'faturamento') {
-            topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
-          } else {
-            topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
-          }
-
-          // Recorrência e Inativos
-          final recorrencia = <Cliente>[];
-          final inativos = <Cliente>[];
-
-          for (var c in todosClientes) {
-            final dataRef = c.ultimaVisita ?? c.createdAt;
-            final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
-            final dias = hojeZerado.difference(refZerada).inDays;
-
-            if (dias >= 15 && dias < 30) {
-              recorrencia.add(c);
-            } else if (dias >= 30) {
-              inativos.add(c);
-            }
-          }
-
-          return TabBarView(
+          floatingActionButton: FloatingActionButton(
+            onPressed: () => context.push(AppRoutes.clienteNovo),
+            child: const Icon(Icons.add),
+          ),
+          body: TabBarView(
             controller: _tabController,
             children: [
               _construirAbaTodos(todosClientes, moeda),
@@ -236,15 +121,12 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               _construirAbaListaSimples(recorrencia, 'Clientes sem agendar entre 15 e 30 dias', moeda),
               _construirAbaInativos(inativos, moeda),
             ],
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 
-  // =========================================================================
-  // ABA 1: TODOS (Filtros Rápidos e Busca Local)
-  // =========================================================================
   Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
     List<Cliente> filtradosPorChip = listaBase;
     if (_filtroTodos == 'recentes') {
@@ -312,9 +194,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // ABA 2: TOP CLIENTES
-  // =========================================================================
   Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -332,7 +211,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           const SizedBox(height: 12),
           Expanded(
             child: listaTop.isEmpty
-                ? const Center(child: Text('Nenhuma cliente com histórico. Use "Sincronizar Banco Antigo".', style: TextStyle(color: Colors.grey)))
+                ? const Center(child: Text('Nenhuma cliente com atendimento concluído.', style: TextStyle(color: Colors.grey)))
                 : _construirListView(listaTop, moeda),
           ),
         ],
@@ -340,9 +219,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // ABA 3: INATIVOS
-  // =========================================================================
   Widget _construirAbaInativos(List<Cliente> listaBase, NumberFormat moeda) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
@@ -425,9 +301,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // ABA AUXILIAR: LISTA SIMPLES (Recorrência)
-  // =========================================================================
   Widget _construirAbaListaSimples(List<Cliente> listaBase, String subtitulo, NumberFormat moeda) {
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -442,9 +315,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // WIDGET LISTVIEW REUTILIZÁVEL
-  // =========================================================================
   Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool isInativo = false}) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
@@ -525,112 +395,321 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 }
 
 // =========================================================================
-// MODAL DE IMPORTAÇÃO DA AGENDA DE CONTATOS
+// MODAL REAL DE IMPORTAÇÃO DE CONTATOS DO CELULAR
 // =========================================================================
-class _ModalImportacaoContatos extends StatefulWidget {
-  const _ModalImportacaoContatos();
+class _ItemContatoImportacao {
+  final String nome;
+  final String telefone;
+  bool selecionado;
+  bool jaCadastrado;
 
-  @override
-  State<_ModalImportacaoContatos> createState() => _ModalImportacaoContatosState();
+  _ItemContatoImportacao({
+    required this.nome,
+    required this.telefone,
+    this.selecionado = false,
+    this.jaCadastrado = false,
+  });
 }
 
-class _ModalImportacaoContatosState extends State<_ModalImportacaoContatos> {
-  final List<Map<String, dynamic>> _contatosCelular = [
-    {'nome': 'Amanda Silva Cliente', 'telefone': '(15) 99999-1111', 'selecionado': true},
-    {'nome': 'Bruna Costa (Mãe do João)', 'telefone': '(15) 98888-2222', 'selecionado': false},
-    {'nome': 'Camila Unhas Gel', 'telefone': '(11) 97777-3333', 'selecionado': true},
-    {'nome': 'Daniella Prima', 'telefone': '(15) 96666-4444', 'selecionado': false},
-  ];
+class _ModalImportacaoContatos extends ConsumerStatefulWidget {
+  final List<Cliente> clientesExistentes;
 
+  const _ModalImportacaoContatos({required this.clientesExistentes});
+
+  @override
+  ConsumerState<_ModalImportacaoContatos> createState() => _ModalImportacaoContatosState();
+}
+
+class _ModalImportacaoContatosState extends ConsumerState<_ModalImportacaoContatos> {
+  final TextEditingController _buscaController = TextEditingController();
+  List<_ItemContatoImportacao> _todosContatos = [];
+  List<_ItemContatoImportacao> _contatosFiltrados = [];
+  bool _carregando = true;
+  bool _semPermissao = false;
+  bool _salvando = false;
   bool _selecionarTodos = false;
 
-  void _alternarTodos(bool? valor) {
+  @override
+  void initState() {
+    super.initState();
+    _carregarContatosReais();
+  }
+
+  @override
+  void dispose() {
+    _buscaController.dispose();
+    super.dispose();
+  }
+
+  String _limparTelefone(String f) {
+    return f.replaceAll(RegExp(r'[^\d]'), '');
+  }
+
+  Future<void> _carregarContatosReais() async {
+    try {
+      if (!await FlutterContacts.requestPermission(readonly: true)) {
+        if (mounted) setState(() { _semPermissao = true; _carregando = false; });
+        return;
+      }
+
+      final contatos = await FlutterContacts.getContacts(withProperties: true, withPhoto: false);
+      
+      final telefonesExistentes = widget.clientesExistentes
+          .map((c) => _limparTelefone(c.telefone))
+          .where((t) => t.isNotEmpty)
+          .toSet();
+
+      final List<_ItemContatoImportacao> lista = [];
+
+      for (var c in contatos) {
+        if (c.phones.isEmpty) continue;
+
+        for (var phone in c.phones) {
+          final rawPhone = phone.number;
+          final cleanPhone = _limparTelefone(rawPhone);
+
+          if (cleanPhone.length < 8) continue; // Descarta números inválidos
+
+          final nomeExibicao = c.displayName.isNotEmpty 
+              ? c.displayName 
+              : '${c.name.first} ${c.name.last}'.trim();
+
+          if (nomeExibicao.isEmpty) continue;
+
+          final jaExiste = telefonesExistentes.contains(cleanPhone);
+
+          lista.add(_ItemContatoImportacao(
+            nome: nomeExibicao,
+            telefone: rawPhone,
+            selecionado: false,
+            jaCadastrado: jaExiste,
+          ));
+        }
+      }
+
+      // Ordena alfabeticamente
+      lista.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
+
+      if (mounted) {
+        setState(() {
+          _todosContatos = lista;
+          _contatosFiltrados = lista;
+          _carregando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _carregando = false; });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao ler agenda: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _filtrarLista(String query) {
+    final q = query.trim().toLowerCase();
     setState(() {
-      _selecionarTodos = valor ?? false;
-      for (var c in _contatosCelular) {
-        c['selecionado'] = _selecionarTodos;
+      if (q.isEmpty) {
+        _contatosFiltrados = _todosContatos;
+      } else {
+        _contatosFiltrados = _todosContatos
+            .where((c) => c.nome.toLowerCase().contains(q) || c.telefone.contains(q))
+            .toList();
       }
     });
   }
 
+  void _alternarTodos(bool? valor) {
+    final v = valor ?? false;
+    setState(() {
+      _selecionarTodos = v;
+      for (var c in _contatosFiltrados) {
+        if (!c.jaCadastrado) {
+          c.selecionado = v;
+        }
+      }
+    });
+  }
+
+  Future<void> _importarSelecionados() async {
+    final selecionados = _todosContatos.where((c) => c.selecionado && !c.jaCadastrado).toList();
+    if (selecionados.isEmpty) return;
+
+    setState(() => _salvando = true);
+
+    try {
+      final firestore = FirebaseFirestore.instance;
+      WriteBatch batch = firestore.batch();
+      int contador = 0;
+
+      for (var item in selecionados) {
+        final docRef = firestore.collection('clientes').doc();
+        final novoCliente = Cliente(
+          id: docRef.id,
+          nome: item.nome,
+          telefone: item.telefone,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        batch.set(docRef, novoCliente.toJson());
+        contador++;
+
+        if (contador >= 400) {
+          await batch.commit();
+          batch = firestore.batch();
+          contador = 0;
+        }
+      }
+
+      if (contador > 0) {
+        await batch.commit();
+      }
+
+      ref.invalidate(clienteControllerProvider);
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${selecionados.length} clientes importadas com sucesso!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _salvando = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao importar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final contatosSelecionados = _contatosCelular.where((c) => c['selecionado'] == true).length;
+    final selecionadosCount = _todosContatos.where((c) => c.selecionado && !c.jaCadastrado).length;
 
     return SafeArea(
       child: Container(
         height: MediaQuery.of(context).size.height * 0.85,
         padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('📥 Importar da Agenda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              decoration: InputDecoration(
-                hintText: 'Buscar contato na sua agenda...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              ),
-            ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              title: const Text('Selecionar Todos', style: TextStyle(fontWeight: FontWeight.bold)),
-              value: _selecionarTodos,
-              onChanged: _alternarTodos,
-              controlAffinity: ListTileControlAffinity.leading,
-              contentPadding: EdgeInsets.zero,
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView.separated(
-                itemCount: _contatosCelular.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final contato = _contatosCelular[index];
-                  return CheckboxListTile(
-                    title: Text(contato['nome'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                    subtitle: Text('📱 ${contato['telefone']}'),
-                    value: contato['selecionado'],
-                    activeColor: Colors.purple,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: (bool? value) {
-                      setState(() {
-                        contato['selecionado'] = value;
-                        _selecionarTodos = _contatosCelular.every((c) => c['selecionado'] == true);
-                      });
-                    },
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: contatosSelecionados > 0 ? Colors.green : Colors.grey,
-              ),
-              onPressed: contatosSelecionados > 0 ? () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('$contatosSelecionados clientes importados com sucesso!')),
-                );
-              } : null,
-              child: Text(
-                'IMPORTAR $contatosSelecionados CLIENTE(S) SELECIONADOS',
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
-        ),
+        child: _carregando
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.purple),
+                    SizedBox(height: 16),
+                    Text('Lendo a agenda do celular...'),
+                  ],
+                ),
+              )
+            : _semPermissao
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.no_cell, size: 48, color: Colors.grey),
+                        const SizedBox(height: 12),
+                        const Text('Permissão para ler contatos negada.', style: TextStyle(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        const Text('Habilite a permissão de contatos nas configurações do celular.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _carregarContatosReais,
+                          child: const Text('Tentar Novamente'),
+                        ),
+                      ],
+                    ),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('📥 Importar da Agenda (${_todosContatos.length})', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _buscaController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar contato na sua agenda...',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _buscaController.text.isNotEmpty
+                              ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _buscaController.clear(); _filtrarLista(''); })
+                              : null,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        ),
+                        onChanged: _filtrarLista,
+                      ),
+                      const SizedBox(height: 8),
+                      CheckboxListTile(
+                        title: const Text('Selecionar Todos visíveis', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        value: _selecionarTodos,
+                        activeColor: Colors.purple,
+                        onChanged: _alternarTodos,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                      const Divider(height: 1),
+                      Expanded(
+                        child: _contatosFiltrados.isEmpty
+                            ? const Center(child: Text('Nenhum contato encontrado.', style: TextStyle(color: Colors.grey)))
+                            : ListView.separated(
+                                itemCount: _contatosFiltrados.length,
+                                separatorBuilder: (_, __) => const Divider(height: 1),
+                                itemBuilder: (context, index) {
+                                  final item = _contatosFiltrados[index];
+                                  return CheckboxListTile(
+                                    enabled: !item.jaCadastrado,
+                                    title: Text(
+                                      item.nome,
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: item.jaCadastrado ? Colors.grey : Colors.black87,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      item.jaCadastrado ? '📱 ${item.telefone} (Já cadastrada)' : '📱 ${item.telefone}',
+                                      style: TextStyle(color: item.jaCadastrado ? Colors.green.shade700 : Colors.grey.shade700, fontSize: 12),
+                                    ),
+                                    value: item.jaCadastrado ? false : item.selecionado,
+                                    activeColor: Colors.purple,
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    contentPadding: EdgeInsets.zero,
+                                    onChanged: item.jaCadastrado ? null : (bool? val) {
+                                      setState(() {
+                                        item.selecionado = val ?? false;
+                                        _selecionarTodos = _contatosFiltrados.every((c) => c.jaCadastrado || c.selecionado);
+                                      });
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          backgroundColor: selecionadosCount > 0 ? Colors.green : Colors.grey,
+                        ),
+                        onPressed: (selecionadosCount > 0 && !_salvando) ? _importarSelecionados : null,
+                        child: _salvando
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(
+                                'IMPORTAR $selecionadosCount CLIENTE(S)',
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                      ),
+                    ],
+                  ),
       ),
     );
   }
