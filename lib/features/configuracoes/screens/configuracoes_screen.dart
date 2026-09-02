@@ -1,5 +1,6 @@
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html;
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,9 +11,7 @@ import '../../../core/services/storage/backup_service.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
-import '../../clientes/models/cliente.dart';
 import '../../servicos/controllers/servico_controller.dart';
-import '../../servicos/models/servico.dart';
 
 class ConfiguracoesScreen extends ConsumerStatefulWidget {
   const ConfiguracoesScreen({super.key});
@@ -22,7 +21,6 @@ class ConfiguracoesScreen extends ConsumerStatefulWidget {
 }
 
 class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
-  final _backupService = BackupService();
   bool _processando = false;
 
   void _atualizarPagina() {
@@ -59,7 +57,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     final fatMes = calcFaturamento(agendamentosMes);
     final tmMes = calcTM(agendamentosMes, fatMes);
 
-    // Prompt configurado para NÃO ser um chat, e sim um relatório direto
     final contextoIA = '''
     ATUE COMO UM CONSULTOR DE NEGÓCIOS DE UM STUDIO DE BELEZA.
     Gere um relatório de análise de desempenho direto ao ponto. Não faça perguntas ao final.
@@ -81,6 +78,7 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     context.push('/consultoria-ia', extra: contextoIA);
   }
 
+  // 🚀 Download de Arquivo (Interface/Web) chamando o Serviço
   Future<void> _exportarBackup() async {
     setState(() => _processando = true);
     try {
@@ -88,15 +86,25 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
       final agendamentos = ref.read(todosAgendamentosProvider).value ?? [];
       final servicos = ref.read(servicoControllerProvider).value ?? [];
 
-      await _backupService.exportar(
+      // Gera a string limpa direto do serviço
+      final jsonString = BackupService.gerarJsonBackup(
         clientes: clientes,
         agendamentos: agendamentos,
         servicos: servicos,
       );
 
+      // Download nativo no navegador usando html.AnchorElement
+      final bytes = utf8.encode(jsonString);
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute("download", "beautyconnect_backup_${DateTime.now().millisecondsSinceEpoch}.json")
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Backup gerado e baixado com sucesso!')),
+          const SnackBar(content: Text('Backup gerado e baixado com sucesso!'), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
@@ -110,45 +118,52 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
     }
   }
 
-  Future<void> _importarBackup() async {
-    setState(() => _processando = true);
-    try {
-      final payload = await _backupService.importar();
-      if (payload == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Importação cancelada ou arquivo inválido.')),
-          );
+  // 🚀 Upload de Arquivo (Interface/Web) injetando no Serviço
+  void _importarBackup() {
+    final uploadInput = html.FileUploadInputElement();
+    uploadInput.accept = 'application/json';
+    uploadInput.click();
+
+    uploadInput.onChange.listen((e) async {
+      final files = uploadInput.files;
+      if (files == null || files.isEmpty) return;
+
+      setState(() => _processando = true);
+
+      final reader = html.FileReader();
+      reader.readAsText(files[0]);
+      
+      reader.onLoadEnd.listen((e) async {
+        try {
+          final jsonString = reader.result as String;
+          
+          // O Serviço envia direto pro Firebase e nos retorna a quantidade
+          final totalRestaurado = await BackupService.restaurarBackup(jsonString);
+
+          // Atualiza as listas na tela
+          ref.invalidate(clienteControllerProvider);
+          ref.invalidate(servicoControllerProvider);
+          ref.invalidate(todosAgendamentosProvider);
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Sucesso! $totalRestaurado registros importados no banco de dados.'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Erro arquivo inválido ou corrompido: $error'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _processando = false);
         }
-        return;
-      }
-
-      final clientes = payload['clientes'] as List<Cliente>? ?? [];
-      final agendamentos = payload['agendamentos'] as List<Agendamento>? ?? [];
-      final servicos = payload['servicos'] as List<Servico>? ?? [];
-
-      await Future.wait(servicos.map((s) => ref.read(servicoControllerProvider.notifier).salvar(s)));
-      await Future.wait(clientes.map((c) => ref.read(clienteControllerProvider.notifier).salvar(c)));
-      await Future.wait(agendamentos.map((a) => ref.read(agendamentoControllerProvider.notifier).salvar(a, novo: true)));
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Backup restaurado: ${clientes.length} cliente(s), ${servicos.length} serviço(s) e ${agendamentos.length} agendamento(s).',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao importar backup: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _processando = false);
-    }
+      });
+    });
   }
 
   @override
@@ -165,7 +180,16 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
         ],
       ),
       body: _processando
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.purple),
+                  SizedBox(height: 16),
+                  Text('Processando dados de backup no Firebase...'),
+                ],
+              ),
+            )
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
