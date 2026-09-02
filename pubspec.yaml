@@ -20,6 +20,8 @@ dependencies:
   # Dependências do banco de dados na nuvem
   firebase_core: any
   cloud_firestore: any
+  # Importação de Contatos
+  flutter_contacts: ^1.1.7
 
 dev_dependencies:
   flutter_test:
