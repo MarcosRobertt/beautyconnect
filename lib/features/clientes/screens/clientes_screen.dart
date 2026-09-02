@@ -2,32 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
-
-// Provedor temporário para Fallback de Clientes Antigos que ainda estão com 0 no Firebase
-final _agendamentosFallbackProvider = FutureProvider.autoDispose<List<Agendamento>>((ref) async {
-  return await ref.read(agendamentoControllerProvider.notifier).todos();
-});
-
-// Classe auxiliar local para padronizar exibição (Unifica dados do Banco com o Fallback)
-class _ClienteExibicao {
-  final Cliente cliente;
-  final int totalVisitas;
-  final double totalGasto;
-  final DateTime? ultimaVisita;
-
-  _ClienteExibicao({
-    required this.cliente,
-    required this.totalVisitas,
-    required this.totalGasto,
-    this.ultimaVisita,
-  });
-}
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -67,10 +48,80 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
+  // 🚀 FERRAMENTA SÊNIOR: Script de Migração (Roda uma única vez para salvar no banco)
+  Future<void> _sincronizarBancoDeDadosAntigo() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.purple),
+            SizedBox(height: 16),
+            Text('Sincronizando clientes antigas...\nIsso atualizará o banco de dados e será feito apenas uma vez.', textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      final repo = ref.read(agendamentoRepositoryProvider);
+      final todosAgendamentos = await repo.listarTodos();
+      final clientes = ref.read(clienteControllerProvider).value ?? [];
+      
+      final firestore = FirebaseFirestore.instance;
+      final batch = firestore.batch();
+      int atualizados = 0;
+      
+      for (var cliente in clientes) {
+        int visitas = 0;
+        double gasto = 0.0;
+        DateTime? ultima;
+
+        for (var ag in todosAgendamentos) {
+          if (ag.clienteId == cliente.id && ag.status == AgendamentoStatus.concluido) {
+            visitas++;
+            gasto += ag.valor;
+            if (ultima == null || ag.data.isAfter(ultima)) {
+              ultima = ag.data;
+            }
+          }
+        }
+
+        if (visitas > 0) {
+          final docRef = firestore.collection('clientes').doc(cliente.id);
+          batch.update(docRef, {
+            'totalVisitas': visitas,
+            'totalGasto': gasto,
+            'ultimaVisita': ultima != null ? Timestamp.fromDate(ultima) : null,
+          });
+          atualizados++;
+        }
+      }
+
+      if (atualizados > 0) await batch.commit();
+      
+      if (mounted) Navigator.pop(context); // Fecha Dialog
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sucesso! $atualizados clientes corrigidas no Firebase.'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(content: Text('Erro ao sincronizar: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // 🚀 LÊ APENAS CLIENTES. ZERO AGENDAMENTOS CARREGADOS!
     final clientesAsync = ref.watch(clienteControllerProvider);
-    final agendamentosAsync = ref.watch(_agendamentosFallbackProvider);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
     return Scaffold(
@@ -82,7 +133,25 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             icon: const Icon(Icons.contact_phone, color: Colors.purple, size: 20),
             label: const Text('Importar', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
           ),
-          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.purple),
+            tooltip: 'Opções de Sistema',
+            onSelected: (val) {
+              if (val == 'sync') _sincronizarBancoDeDadosAntigo();
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'sync',
+                child: Row(
+                  children: [
+                    Icon(Icons.sync, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Sincronizar Banco Antigo', style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              )
+            ],
+          ),
         ],
         bottom: TabBar(
           controller: _tabController,
@@ -103,94 +172,54 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro ao carregar clientes: $e')),
         data: (todosClientes) {
-          return agendamentosAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => _construirTelaComBase(todosClientes, [], moeda),
-            data: (agendamentos) => _construirTelaComBase(todosClientes, agendamentos, moeda),
+          final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+
+          // 1. TOP CLIENTES (Usa direto o valor do banco, sem calcular nada)
+          final topClientes = List<Cliente>.from(todosClientes.where((c) => c.totalVisitas > 0));
+          if (_filtroTop == 'faturamento') {
+            topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
+          } else {
+            topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
+          }
+
+          // 2. RECORRÊNCIA E INATIVOS (Usa direto o valor do banco)
+          final recorrencia = <Cliente>[];
+          final inativos = <Cliente>[];
+
+          for (var c in todosClientes) {
+            final dataRef = c.ultimaVisita ?? c.createdAt;
+            final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
+            final dias = hojeZerado.difference(refZerada).inDays;
+
+            if (dias >= 15 && dias < 30) {
+              recorrencia.add(c);
+            } else if (dias >= 30) {
+              inativos.add(c);
+            }
+          }
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _construirAbaTodos(todosClientes, moeda),
+              _construirAbaTopClientes(topClientes, moeda),
+              _construirAbaListaSimples(recorrencia, 'Clientes sem agendar entre 15 e 30 dias', moeda),
+              _construirAbaInativos(inativos, moeda),
+            ],
           );
         },
       ),
     );
   }
 
-  Widget _construirTelaComBase(List<Cliente> clientes, List<Agendamento> agendamentosFallback, NumberFormat moeda) {
-    final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-
-    // 🔄 LÓGICA DE FALLBACK: Unifica clientes antigos com o cálculo em memória se totalVisitas == 0
-    final List<_ClienteExibicao> listaExibicao = clientes.map((c) {
-      if (c.totalVisitas > 0 || c.totalGasto > 0 || c.ultimaVisita != null) {
-        return _ClienteExibicao(
-          cliente: c,
-          totalVisitas: c.totalVisitas,
-          totalGasto: c.totalGasto,
-          ultimaVisita: c.ultimaVisita,
-        );
-      }
-
-      // Cálculo em tempo de execução para dados legados
-      int visitas = 0;
-      double gasto = 0.0;
-      DateTime? ultima;
-
-      for (final ag in agendamentosFallback) {
-        if (ag.clienteId == c.id && ag.status == AgendamentoStatus.concluido) {
-          visitas++;
-          gasto += ag.valor;
-          if (ultima == null || ag.data.isAfter(ultima)) {
-            ultima = ag.data;
-          }
-        }
-      }
-
-      return _ClienteExibicao(
-        cliente: c,
-        totalVisitas: visitas,
-        totalGasto: gasto,
-        ultimaVisita: ultima,
-      );
-    }).toList();
-
-    // 1. TOP CLIENTES
-    final topClientes = List<_ClienteExibicao>.from(listaExibicao.where((c) => c.totalVisitas > 0));
-    if (_filtroTop == 'faturamento') {
-      topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
-    } else {
-      topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
-    }
-
-    // 2. RECORRÊNCIA E INATIVOS
-    final recorrencia = <_ClienteExibicao>[];
-    final inativos = <_ClienteExibicao>[];
-
-    for (var c in listaExibicao) {
-      final dataRef = c.ultimaVisita ?? c.cliente.createdAt;
-      final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
-      final dias = hojeZerado.difference(refZerada).inDays;
-
-      if (dias >= 15 && dias < 30) {
-        recorrencia.add(c);
-      } else if (dias >= 30) {
-        inativos.add(c);
-      }
-    }
-
-    return TabBarView(
-      controller: _tabController,
-      children: [
-        _construirAbaTodos(listaExibicao, moeda),
-        _construirAbaTopClientes(topClientes, moeda),
-        _construirAbaListaSimples(recorrencia, 'Clientes sem agendar entre 15 e 30 dias', moeda),
-        _construirAbaInativos(inativos, moeda),
-      ],
-    );
-  }
-
-  // ABA 1: TODOS (Com Filtros Rápidos)
-  Widget _construirAbaTodos(List<_ClienteExibicao> listaBase, NumberFormat moeda) {
-    List<_ClienteExibicao> filtradosPorChip = listaBase;
+  // =========================================================================
+  // ABA 1: TODOS (Com Filtros Locais Instantâneos)
+  // =========================================================================
+  Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
+    List<Cliente> filtradosPorChip = listaBase;
     if (_filtroTodos == 'recentes') {
       filtradosPorChip = listaBase.where((c) {
-        final diff = DateTime.now().difference(c.cliente.createdAt).inDays;
+        final diff = DateTime.now().difference(c.createdAt).inDays;
         return diff <= 7;
       }).toList();
     }
@@ -199,8 +228,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     final listaFinal = textoBusca.isEmpty
         ? filtradosPorChip
         : filtradosPorChip.where((c) =>
-            c.cliente.nome.toLowerCase().contains(textoBusca) ||
-            c.cliente.telefone.contains(textoBusca)
+            c.nome.toLowerCase().contains(textoBusca) ||
+            c.telefone.contains(textoBusca)
           ).toList();
 
     return Padding(
@@ -214,13 +243,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               hintText: 'Buscar cliente por nome ou telefone...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: textoBusca.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _buscaController.clear();
-                        setState(() {});
-                      },
-                    )
+                  ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _buscaController.clear(); setState(() {}); })
                   : null,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               contentPadding: const EdgeInsets.symmetric(vertical: 0),
@@ -233,14 +256,16 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             child: Row(
               children: [
                 ChoiceChip(
-                  label: const Text('Mostrar Todas'),
+                  label: const Text('Mostrar Todas', style: TextStyle(fontSize: 12)),
                   selected: _filtroTodos == 'todos',
+                  selectedColor: Colors.purple.shade100,
                   onSelected: (val) => setState(() => _filtroTodos = 'todos'),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('Cadastradas Recentemente'),
+                  label: const Text('Cadastradas Recentemente', style: TextStyle(fontSize: 12)),
                   selected: _filtroTodos == 'recentes',
+                  selectedColor: Colors.purple.shade100,
                   onSelected: (val) => setState(() => _filtroTodos = 'recentes'),
                 ),
               ],
@@ -257,8 +282,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
+  // =========================================================================
   // ABA 2: TOP CLIENTES
-  Widget _construirAbaTopClientes(List<_ClienteExibicao> listaTop, NumberFormat moeda) {
+  // =========================================================================
+  Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -275,7 +302,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           const SizedBox(height: 12),
           Expanded(
             child: listaTop.isEmpty
-                ? const Center(child: Text('Nenhum atendimento concluído registrado.', style: TextStyle(color: Colors.grey)))
+                ? const Center(child: Text('Use a opção "Sincronizar Banco" no menu.', style: TextStyle(color: Colors.grey)))
                 : _construirListView(listaTop, moeda),
           ),
         ],
@@ -283,25 +310,27 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
+  // =========================================================================
   // ABA 3: INATIVOS
-  Widget _construirAbaInativos(List<_ClienteExibicao> listaBase, NumberFormat moeda) {
+  // =========================================================================
+  Widget _construirAbaInativos(List<Cliente> listaBase, NumberFormat moeda) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
-    List<_ClienteExibicao> filtradosPorChip = listaBase.where((c) {
-      final ref = c.ultimaVisita ?? c.cliente.createdAt;
+    List<Cliente> filtradosPorChip = listaBase.where((c) {
+      final ref = c.ultimaVisita ?? c.createdAt;
       final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
 
       if (_filtroInativos == '45') return dias >= 45;
       if (_filtroInativos == '90') return dias >= 90;
-      return true;
+      return true; // 'todos_inativos'
     }).toList();
 
     final textoBusca = _buscaController.text.trim().toLowerCase();
     final listaFinal = textoBusca.isEmpty
         ? filtradosPorChip
         : filtradosPorChip.where((c) =>
-            c.cliente.nome.toLowerCase().contains(textoBusca) ||
-            c.cliente.telefone.contains(textoBusca)
+            c.nome.toLowerCase().contains(textoBusca) ||
+            c.telefone.contains(textoBusca)
           ).toList();
 
     return Padding(
@@ -328,20 +357,23 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             child: Row(
               children: [
                 ChoiceChip(
-                  label: const Text('Todas Inativas'),
+                  label: const Text('Todas Inativas', style: TextStyle(fontSize: 12)),
                   selected: _filtroInativos == 'todos_inativos',
+                  selectedColor: Colors.purple.shade100,
                   onSelected: (val) => setState(() => _filtroInativos = 'todos_inativos'),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('> 45 dias'),
+                  label: const Text('> 45 dias', style: TextStyle(fontSize: 12)),
                   selected: _filtroInativos == '45',
+                  selectedColor: Colors.purple.shade100,
                   onSelected: (val) => setState(() => _filtroInativos = '45'),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('> 90 dias'),
+                  label: const Text('> 90 dias', style: TextStyle(fontSize: 12)),
                   selected: _filtroInativos == '90',
+                  selectedColor: Colors.purple.shade100,
                   onSelected: (val) => setState(() => _filtroInativos = '90'),
                 ),
               ],
@@ -363,8 +395,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // ABA RECORRÊNCIA SIMPLES
-  Widget _construirAbaListaSimples(List<_ClienteExibicao> listaBase, String subtitulo, NumberFormat moeda) {
+  // =========================================================================
+  // ABA AUXILIAR: LISTA SIMPLES (Recorrência)
+  // =========================================================================
+  Widget _construirAbaListaSimples(List<Cliente> listaBase, String subtitulo, NumberFormat moeda) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -378,25 +412,26 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // WIDGET LISTVIEW REUTILIZÁVEL (Sem Histórico Inline, botão isolado)
-  Widget _construirListView(List<_ClienteExibicao> lista, NumberFormat moeda, {bool isInativo = false}) {
+  // =========================================================================
+  // WIDGET CONSTRUTOR DA LISTA
+  // =========================================================================
+  Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool isInativo = false}) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return ListView.separated(
       itemCount: lista.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final item = lista[index];
-        final cliente = item.cliente;
-
-        final dataFormatada = item.ultimaVisita != null
-            ? DateFormat('dd/MM/yyyy').format(item.ultimaVisita!)
+        final cliente = lista[index];
+        
+        final dataFormatada = cliente.ultimaVisita != null 
+            ? DateFormat('dd/MM/yyyy').format(cliente.ultimaVisita!) 
             : 'Nenhum atendimento';
 
         int dias = 0;
-        if (item.ultimaVisita != null) {
-          final ref = DateTime(item.ultimaVisita!.year, item.ultimaVisita!.month, item.ultimaVisita!.day);
-          dias = hojeZerado.difference(ref).inDays;
+        if (cliente.ultimaVisita != null) {
+           final ref = DateTime(cliente.ultimaVisita!.year, cliente.ultimaVisita!.month, cliente.ultimaVisita!.day);
+           dias = hojeZerado.difference(ref).inDays;
         }
 
         return Padding(
@@ -405,19 +440,18 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                cliente.nome,
+                cliente.nome, 
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInativo ? Colors.red.shade800 : Colors.black87),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Text('🔄 Visitas: ${item.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                  Text('🔄 Visitas: ${cliente.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                   const SizedBox(width: 16),
-                  Text('💰 Gasto: ${moeda.format(item.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                  Text('💰 Gasto: ${moeda.format(cliente.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -426,7 +460,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                 children: [
                   Expanded(
                     child: Text(
-                      isInativo ? 'Sem agendar há $dias dias (Último: $dataFormatada)' : '📅 Última visita: $dataFormatada',
+                      isInativo ? 'Sem agendar há $dias dias (Último: $dataFormatada)' : '📅 Última visita: $dataFormatada', 
                       style: TextStyle(fontSize: 12, color: isInativo ? Colors.red.shade600 : Colors.grey.shade600, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -460,7 +494,9 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 }
 
-// MODAL DE IMPORTAÇÃO DA AGENDA DE CONTATOS
+// =========================================================================
+// NOVO MODAL: IMPORTAÇÃO DA AGENDA DE CONTATOS
+// =========================================================================
 class _ModalImportacaoContatos extends StatefulWidget {
   const _ModalImportacaoContatos();
 
