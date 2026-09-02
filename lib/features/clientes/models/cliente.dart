@@ -10,7 +10,7 @@ class Cliente {
   final DateTime createdAt;
   final DateTime updatedAt;
   
-  // 🚀 NOVOS CAMPOS: Desnormalização para Performance
+  // 🚀 CAMPOS DE PERFORMANCE (Desnormalização)
   final int totalVisitas;
   final double totalGasto;
   final DateTime? ultimaVisita;
@@ -22,8 +22,8 @@ class Cliente {
     this.observacoes = '',
     this.profissao,
     this.aniversario,
-    DateTime? createdAt, // Retirado o required para evitar erro no formulário
-    DateTime? updatedAt, // Retirado o required para evitar erro no formulário
+    DateTime? createdAt, // Opcional para não quebrar o cliente_form_screen
+    DateTime? updatedAt, // Opcional para não quebrar o cliente_form_screen
     this.totalVisitas = 0,
     this.totalGasto = 0.0,
     this.ultimaVisita,
@@ -58,8 +58,14 @@ class Cliente {
     );
   }
 
-  // 🔄 Renomeado de toMap para toJson (Padronização com o Backup e Repositório)
-  Map<String, dynamic> toJson() {
+  // =======================================================================
+  // 🔄 CONVERSORES BLINDADOS (Suportam tanto ToMap quanto ToJson)
+  // =======================================================================
+  
+  Map<String, dynamic> toMap() => _converterParaMap();
+  Map<String, dynamic> toJson() => _converterParaMap();
+
+  Map<String, dynamic> _converterParaMap() {
     return {
       'id': id, 
       'nome': nome,
@@ -75,8 +81,10 @@ class Cliente {
     };
   }
 
-  // 🔄 Renomeado de fromMap para fromJson (Padronização com o Backup e Repositório)
-  factory Cliente.fromJson(Map<String, dynamic> map, [String? idOverride]) {
+  factory Cliente.fromMap(Map<String, dynamic> map, [String? idOverride]) => Cliente._converterDeMap(map, idOverride);
+  factory Cliente.fromJson(Map<String, dynamic> map, [String? idOverride]) => Cliente._converterDeMap(map, idOverride);
+
+  factory Cliente._converterDeMap(Map<String, dynamic> map, [String? idOverride]) {
     return Cliente(
       id: idOverride ?? map['id'] ?? '',
       nome: map['nome'] ?? '',
@@ -92,12 +100,12 @@ class Cliente {
     );
   }
 
-  // Helper de segurança para converter datas que vêm do Firestore ou do Backup offline
+  // 🛡️ Helper de segurança: Transforma Datas do Firebase e do Backup Local sem quebrar
   static DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) return value.toDate();
     if (value is DateTime) return value;
-    if (value is String) return DateTime.tryParse(value); // Para o BackupService
+    if (value is String) return DateTime.tryParse(value); 
     if (value is int) return DateTime.fromMillisecondsSinceEpoch(value);
     return null;
   }
