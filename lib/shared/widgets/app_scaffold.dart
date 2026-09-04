@@ -1,3 +1,4 @@
+import 'package:firebase_auth/package:firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -16,6 +17,31 @@ class AppScaffold extends StatelessWidget {
     // Ícone alterado para o Icons.menu clássico (100% de compatibilidade web e mobile)
     (icon: Icons.menu, selectedIcon: Icons.menu, label: 'Menu'),
   ];
+
+  /// Modal de confirmação para evitar saídas acidentais
+  void _confirmarSaida(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('⚠️ Confirmar Saída'),
+        content: const Text('Deseja realmente encerrar a sessão no BeautyConnect?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await FirebaseAuth.instance.signOut();
+            },
+            child: const Text('Sair da Conta'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +73,31 @@ class AppScaffold extends StatelessWidget {
                   ],
                 ),
               ),
+              // NOVO: Adicionamos o botão de Sair e Atualizar no final da barra lateral do PC
+              trailing: Expanded(
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 24.0),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh, color: Colors.grey),
+                          tooltip: 'Atualizar Tela',
+                          onPressed: () => GoRouter.of(context).refresh(),
+                        ),
+                        const SizedBox(height: 16),
+                        IconButton(
+                          icon: const Icon(Icons.logout, color: Colors.redAccent),
+                          tooltip: 'Sair da Conta',
+                          onPressed: () => _confirmarSaida(context),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
               destinations: _destinos
                   .map((d) => NavigationRailDestination(
                         icon: Icon(d.icon),
@@ -62,7 +113,29 @@ class AppScaffold extends StatelessWidget {
       );
     }
 
+    // VERSÃO MOBILE (Celular)
+    // Mantemos o NavigationBar idêntico na parte inferior.
+    // Como a navegação do celular não tem espaço de "sobra", adicionamos
+    // um AppBar minimalista apenas no celular para abrigar Atualizar e Sair.
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('BeautyConnect', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        centerTitle: false,
+        elevation: 0,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar',
+            onPressed: () => GoRouter.of(context).refresh(),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            tooltip: 'Sair',
+            onPressed: () => _confirmarSaida(context),
+          ),
+        ],
+      ),
       body: navigationShell,
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
