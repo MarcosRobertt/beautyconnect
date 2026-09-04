@@ -42,11 +42,11 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   Future<void> _exportarBackup() async {
     setState(() => _processandoBackup = true);
     try {
-      final sucesso = await BackupService.exportarParaJson(ref);
+      final sucesso = await BackupService.exportarBackup(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(sucesso ? ' Backup exportado com sucesso!' : ' Falha ao exportar backup.'),
+            content: Text(sucesso ? 'Backup exportado com sucesso!' : 'Falha ao exportar backup.'),
             backgroundColor: sucesso ? Colors.green : Colors.red,
           ),
         );
@@ -65,11 +65,11 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   Future<void> _importarBackup() async {
     setState(() => _processandoBackup = true);
     try {
-      final sucesso = await BackupService.importarDeJson(ref);
+      final sucesso = await BackupService.importarBackup(ref);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(sucesso ? ' Backup restaurado com sucesso!' : ' Restauração cancelada ou falhou.'),
+            content: Text(sucesso ? 'Backup restaurado com sucesso!' : 'Restauração cancelada ou falhou.'),
             backgroundColor: sucesso ? Colors.green : Colors.orange,
           ),
         );
@@ -101,7 +101,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // SEÇÃO INTELIGÊNCIA ARTIFICIAL
             const Text(
               'Inteligência Artificial',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
@@ -126,7 +125,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
             ),
             const SizedBox(height: 24),
 
-            // SEÇÃO BACKUP E RESTAURAÇÃO
             const Text(
               'Backup e Restauração',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
@@ -154,7 +152,6 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
             ),
             const SizedBox(height: 24),
 
-            // SEÇÃO SESSÃO DO USUÁRIO
             const Text(
               'Sessão do Usuário',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.grey),
