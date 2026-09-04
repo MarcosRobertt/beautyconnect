@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/services/storage/backup_service.dart';
 
@@ -42,19 +45,52 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   Future<void> _exportarBackup() async {
     setState(() => _processandoBackup = true);
     try {
-      final sucesso = await BackupService.exportarBackup(ref);
+      final firestore = FirebaseFirestore.instance;
+      final clientesSnap = await firestore.collection('clientes').get();
+      final servicosSnap = await firestore.collection('servicos').get();
+      final agendamentosSnap = await firestore.collection('agendamentos').get();
+
+      final Map<String, dynamic> backupData = {
+        'version': '1.1',
+        'exportedAt': DateTime.now().toIso8601String(),
+        'clientes': clientesSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'servicos': servicosSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+        'agendamentos': agendamentosSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
+      };
+
+      final jsonSanitizado = jsonEncode(
+        backupData,
+        toEncodable: (nonEncodable) {
+          if (nonEncodable is Timestamp) {
+            return nonEncodable.toDate().toIso8601String();
+          }
+          if (nonEncodable is DateTime) {
+            return nonEncodable.toIso8601String();
+          }
+          return nonEncodable.toString();
+        },
+      );
+
+      final uri = Uri.dataFromString(
+        jsonSanitizado,
+        mimeType: 'application/json',
+        encoding: utf8,
+      );
+      
+      await launchUrl(uri);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(sucesso ? 'Backup exportado com sucesso!' : 'Falha ao exportar backup.'),
-            backgroundColor: sucesso ? Colors.green : Colors.red,
+          const SnackBar(
+            content: Text('Backup exportado com sucesso!'),
+            backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erro ao exportar: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -63,21 +99,59 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
   }
 
   Future<void> _importarBackup() async {
+    final controller = TextEditingController();
+    final jsonString = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Restaurar Backup (.json)'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Cole o conteúdo do seu arquivo JSON de backup no campo abaixo:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 6,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: '{"version": "1.1", ...}',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, null),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+            child: const Text('Restaurar'),
+          ),
+        ],
+      ),
+    );
+
+    if (jsonString == null || jsonString.isEmpty) return;
+
     setState(() => _processandoBackup = true);
     try {
-      final sucesso = await BackupService.importarBackup(ref);
+      final totalRestaurado = await BackupService.restaurarBackup(jsonString);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(sucesso ? 'Backup restaurado com sucesso!' : 'Restauração cancelada ou falhou.'),
-            backgroundColor: sucesso ? Colors.green : Colors.orange,
+            content: Text('Sucesso! $totalRestaurado registros restaurados.'),
+            backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erro ao restaurar: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erro ao restaurar backup: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
