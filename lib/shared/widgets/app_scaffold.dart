@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Casco de navegação do app. Responsivo: barra lateral em telas largas
-/// (desktop/tablet/notebook) e navegação inferior em telas estreitas.
+/// (desktop/tablet/notebook) e navegação inferior limpa em telas estreitas.
 class AppScaffold extends StatelessWidget {
   const AppScaffold({super.key, required this.navigationShell});
 
@@ -17,7 +17,6 @@ class AppScaffold extends StatelessWidget {
     (icon: Icons.menu, selectedIcon: Icons.menu, label: 'Menu'),
   ];
 
-  /// Modal de confirmação para evitar saídas acidentais
   void _confirmarSaida(BuildContext context) {
     showDialog<void>(
       context: context,
@@ -111,25 +110,8 @@ class AppScaffold extends StatelessWidget {
       );
     }
 
+    // VERSÃO MOBILE LIMPA (Sem AppBar redundante para evitar topo duplo)
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('BeautyConnect', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        centerTitle: false,
-        elevation: 0,
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Atualizar',
-            onPressed: () => GoRouter.of(context).refresh(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.redAccent),
-            tooltip: 'Sair',
-            onPressed: () => _confirmarSaida(context),
-          ),
-        ],
-      ),
       body: navigationShell,
       bottomNavigationBar: NavigationBarTheme(
         data: NavigationBarThemeData(
