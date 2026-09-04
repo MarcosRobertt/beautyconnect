@@ -50,25 +50,14 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
       final servicosSnap = await firestore.collection('servicos').get();
       final agendamentosSnap = await firestore.collection('agendamentos').get();
 
-      final Map<String, dynamic> backupData = {
-        'version': '1.1',
-        'exportedAt': DateTime.now().toIso8601String(),
-        'clientes': clientesSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-        'servicos': servicosSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-        'agendamentos': agendamentosSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList(),
-      };
+      final clientesList = clientesSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      final servicosList = servicosSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
+      final agendamentosList = agendamentosSnap.docs.map((d) => {'id': d.id, ...d.data()}).toList();
 
-      final jsonSanitizado = jsonEncode(
-        backupData,
-        toEncodable: (nonEncodable) {
-          if (nonEncodable is Timestamp) {
-            return nonEncodable.toDate().toIso8601String();
-          }
-          if (nonEncodable is DateTime) {
-            return nonEncodable.toIso8601String();
-          }
-          return nonEncodable.toString();
-        },
+      final jsonSanitizado = BackupService.gerarJsonBackup(
+        clientes: clientesList,
+        servicos: servicosList,
+        agendamentos: agendamentosList,
       );
 
       final uri = Uri.dataFromString(
