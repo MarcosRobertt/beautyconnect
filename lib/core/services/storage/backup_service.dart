@@ -2,10 +2,6 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BackupService {
-  
-  // ===========================================================================
-  // 📥 EXPORTAR: Converte Banco -> JSON Seguro (Evita o erro 'minified:mS')
-  // ===========================================================================
   static String gerarJsonBackup({
     required List<dynamic> clientes,
     required List<dynamic> servicos,
@@ -14,9 +10,9 @@ class BackupService {
     final Map<String, dynamic> backupData = {
       'version': '1.1',
       'exportedAt': DateTime.now().toIso8601String(),
-      'clientes': clientes.map((c) => c.toJson()).toList(),
-      'servicos': servicos.map((s) => s.toJson()).toList(),
-      'agendamentos': agendamentos.map((a) => a.toJson()).toList(),
+      'clientes': clientes.map((c) => c is Map ? c : c.toJson()).toList(),
+      'servicos': servicos.map((s) => s is Map ? s : s.toJson()).toList(),
+      'agendamentos': agendamentos.map((a) => a is Map ? a : a.toJson()).toList(),
     };
 
     return jsonEncode(
@@ -33,14 +29,10 @@ class BackupService {
     );
   }
 
-  // ===========================================================================
-  // 📤 IMPORTAR: Converte JSON -> Banco (Evita corrupção de dados por Strings)
-  // ===========================================================================
   static Future<int> restaurarBackup(String jsonString) async {
     final Map<String, dynamic> data = jsonDecode(jsonString);
     final firestore = FirebaseFirestore.instance;
 
-    // Recupera as listas do JSON (Segurança caso o arquivo esteja vazio)
     final List<dynamic> clientes = data['clientes'] ?? [];
     final List<dynamic> servicos = data['servicos'] ?? [];
     final List<dynamic> agendamentos = data['agendamentos'] ?? [];
@@ -49,8 +41,7 @@ class BackupService {
     int operacoes = 0;
     int totalRestaurado = 0;
 
-    // Função de commit em lote (Proteção contra o limite de 500 do Firebase)
-    Future<void> _commitSeNecessario() async {
+    Future<void> commitSeNecessario() async {
       if (operacoes >= 400) {
         await batch.commit();
         batch = firestore.batch();
@@ -58,7 +49,6 @@ class BackupService {
       }
     }
 
-    // 1. Restaurar Clientes
     for (var c in clientes) {
       final docId = c['id'] ?? firestore.collection('clientes').doc().id;
       final docRef = firestore.collection('clientes').doc(docId);
@@ -67,10 +57,9 @@ class BackupService {
       batch.set(docRef, dadosLimpos);
       operacoes++;
       totalRestaurado++;
-      await _commitSeNecessario();
+      await commitSeNecessario();
     }
 
-    // 2. Restaurar Serviços
     for (var s in servicos) {
       final docId = s['id'] ?? firestore.collection('servicos').doc().id;
       final docRef = firestore.collection('servicos').doc(docId);
@@ -79,10 +68,9 @@ class BackupService {
       batch.set(docRef, dadosLimpos);
       operacoes++;
       totalRestaurado++;
-      await _commitSeNecessario();
+      await commitSeNecessario();
     }
 
-    // 3. Restaurar Agendamentos
     for (var a in agendamentos) {
       final docId = a['id'] ?? firestore.collection('agendamentos').doc().id;
       final docRef = firestore.collection('agendamentos').doc(docId);
@@ -91,24 +79,18 @@ class BackupService {
       batch.set(docRef, dadosLimpos);
       operacoes++;
       totalRestaurado++;
-      await _commitSeNecessario();
+      await commitSeNecessario();
     }
 
-    // Submete os dados finais restantes
     if (operacoes > 0) {
       await batch.commit();
     }
 
-    return totalRestaurado; // Retorna quantos itens foram gravados para exibir na tela
+    return totalRestaurado;
   }
 
-  // ===========================================================================
-  // 🛡️ SANITIZADOR DINÂMICO (Transforma qualquer String ISO de volta em Timestamp)
-  // ===========================================================================
   static Map<String, dynamic> _converterStringsParaTimestamp(Map<String, dynamic> mapa) {
     final novoMapa = <String, dynamic>{};
-    
-    // Expressão Regular para identificar datas no padrão "2026-09-02T13:23:51..."
     final regexDataISO = RegExp(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}');
 
     mapa.forEach((chave, valor) {
@@ -120,10 +102,9 @@ class BackupService {
         }
       } 
       else if (valor is Map<String, dynamic>) {
-        novoMapa[chave] = _converterStringsParaTimestamp(valor); // Tratamento recursivo
+        novoMapa[chave] = _converterStringsParaTimestamp(valor);
         return;
       }
-      // Mantém o valor original (texto, números, listas normais)
       novoMapa[chave] = valor;
     });
 
