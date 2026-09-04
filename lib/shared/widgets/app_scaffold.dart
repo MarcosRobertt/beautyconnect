@@ -1,4 +1,4 @@
-import 'package:firebase_auth/package:firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,7 +14,6 @@ class AppScaffold extends StatelessWidget {
     (icon: Icons.people_outline, selectedIcon: Icons.people, label: 'Clientes'),
     (icon: Icons.spa_outlined, selectedIcon: Icons.spa, label: 'Serviços'),
     (icon: Icons.calendar_today_outlined, selectedIcon: Icons.calendar_today, label: 'Agenda'),
-    // Ícone alterado para o Icons.menu clássico (100% de compatibilidade web e mobile)
     (icon: Icons.menu, selectedIcon: Icons.menu, label: 'Menu'),
   ];
 
@@ -73,7 +72,6 @@ class AppScaffold extends StatelessWidget {
                   ],
                 ),
               ),
-              // NOVO: Adicionamos o botão de Sair e Atualizar no final da barra lateral do PC
               trailing: Expanded(
                 child: Align(
                   alignment: Alignment.bottomCenter,
@@ -113,10 +111,6 @@ class AppScaffold extends StatelessWidget {
       );
     }
 
-    // VERSÃO MOBILE (Celular)
-    // Mantemos o NavigationBar idêntico na parte inferior.
-    // Como a navegação do celular não tem espaço de "sobra", adicionamos
-    // um AppBar minimalista apenas no celular para abrigar Atualizar e Sair.
     return Scaffold(
       appBar: AppBar(
         title: const Text('BeautyConnect', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
