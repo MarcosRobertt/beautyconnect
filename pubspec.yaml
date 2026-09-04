@@ -23,6 +23,8 @@ dependencies:
   firebase_auth: any
   # Importação de Contatos
   flutter_contacts: ^1.1.7
+  # Abertura de URLs externas / WhatsApp / Download de arquivos
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
