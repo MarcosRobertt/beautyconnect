@@ -66,8 +66,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Colors.purple.shade800;
+    final lightPurple = Colors.purple.shade50;
+
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: const Color(0xFFF8F5FA), // Fundo em tom suave roxo-cinza
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -75,88 +78,146 @@ class _LoginScreenState extends State<LoginScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 400),
               child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 3,
+                shadowColor: Colors.purple.withOpacity(0.15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: Colors.purple.shade100, width: 1),
+                ),
+                color: Colors.white,
                 child: Padding(
-                  padding: const EdgeInsets.all(32.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Icon(Icons.water_drop, size: 48, color: Colors.purple),
-                      const SizedBox(height: 16),
-                      const Text(
+                      // ÍCONE E LOGO
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: lightPurple,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.water_drop, size: 40, color: primaryColor),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
                         'BeautyConnect',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: primaryColor,
+                          letterSpacing: -0.5,
+                        ),
                       ),
-                      const Text(
-                        'by studio condeza',
+                      const SizedBox(height: 4),
+                      Text(
+                        'BY STUDIO CONDEZA',
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade600,
+                          letterSpacing: 1.2,
+                        ),
                       ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 36),
 
+                      // MENSAGEM DE ERRO
                       if (_erroMensagem != null) ...[
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
                             color: Colors.red.shade50,
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: Colors.red.shade200),
                           ),
                           child: Text(
                             _erroMensagem!,
-                            style: TextStyle(color: Colors.red.shade800, fontSize: 13, fontWeight: FontWeight.bold),
+                            style: TextStyle(
+                              color: Colors.red.shade800,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                             textAlign: TextAlign.center,
                           ),
                         ),
                         const SizedBox(height: 16),
                       ],
 
+                      // CAMPO E-MAIL
                       TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'E-mail',
-                          prefixIcon: Icon(Icons.email_outlined),
-                          border: OutlineInputBorder(),
+                          labelStyle: TextStyle(color: Colors.grey.shade700),
+                          prefixIcon: Icon(Icons.email_outlined, color: primaryColor),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: primaryColor, width: 2),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
                         ),
                         onSubmitted: (_) => _fazerLogin(),
                       ),
                       const SizedBox(height: 16),
 
+                      // CAMPO SENHA
                       TextField(
                         controller: _senhaController,
                         obscureText: _ocultarSenha,
                         decoration: InputDecoration(
                           labelText: 'Senha',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          border: const OutlineInputBorder(),
+                          labelStyle: TextStyle(color: Colors.grey.shade700),
+                          prefixIcon: Icon(Icons.lock_outline, color: primaryColor),
                           suffixIcon: IconButton(
-                            icon: Icon(_ocultarSenha ? Icons.visibility : Icons.visibility_off),
+                            icon: Icon(
+                              _ocultarSenha ? Icons.visibility : Icons.visibility_off,
+                              color: Colors.grey.shade600,
+                            ),
                             onPressed: () => setState(() => _ocultarSenha = !_ocultarSenha),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: primaryColor, width: 2),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                         ),
                         onSubmitted: (_) => _fazerLogin(),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 28),
 
+                      // BOTÃO ENTRAR
                       SizedBox(
-                        height: 50,
+                        height: 52,
                         child: FilledButton(
                           style: FilledButton.styleFrom(
-                            backgroundColor: Colors.purple,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            backgroundColor: primaryColor,
+                            foregroundColor: Colors.white,
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                           onPressed: _carregando ? null : _fazerLogin,
                           child: _carregando
                               ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
                                 )
-                              : const Text('ENTRAR', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              : const Text(
+                                  'ENTRAR',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                ),
                         ),
                       ),
                     ],
