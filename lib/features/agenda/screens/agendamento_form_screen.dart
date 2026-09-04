@@ -448,21 +448,22 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     if (mounted) context.pop();
   }
 
-  // 🚀 MODAL TOTALMENTE OTIMIZADO PARA CELULAR (Rola a lista completa e desativa teclado)
+  // 🚀 MODAL COM BUSCA BLINDADA (Controlador nativo + layout ajustado para teclado)
   void _abrirModalAdicionarServico(List<Servico> todosServicos) {
-    FocusScope.of(context).unfocus(); // Desativa o teclado para não travar o clique no mobile
+    FocusScope.of(context).unfocus();
+    final buscaModalController = TextEditingController();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (ctx) {
-        String textoBusca = '';
         bool processandoClique = false;
         
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
-            // Filtra apenas serviços que AINDA NÃO FORAM ADICIONADOS
+            final textoBusca = buscaModalController.text.trim().toLowerCase();
+
             final servicosDisponiveis = todosServicos
                 .where((s) => !_servicosIdsSelecionados.contains(s.id))
                 .toList();
@@ -475,10 +476,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               ultimos5Servicos.addAll(servicosDisponiveis.take(5));
             }
 
-            final buscaAtiva = textoBusca.trim().isNotEmpty;
+            final buscaAtiva = textoBusca.isNotEmpty;
             final listaExibicao = buscaAtiva 
               ? servicosDisponiveis.where((s) => 
-                  s.nome.toLowerCase().contains(textoBusca.toLowerCase())
+                  s.nome.toLowerCase().contains(textoBusca)
                 ).toList()
               : servicosDisponiveis;
 
@@ -494,80 +495,97 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               Navigator.pop(modalCtx);
             }
 
-            return Container(
-              height: MediaQuery.of(modalCtx).size.height * 0.75, // Altura fixa e segura para mobile
+            return Padding(
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 16,
-                top: 16, left: 16, right: 16
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom,
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Adicionar Serviço', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalCtx)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    decoration: const InputDecoration(
-                      hintText: 'Buscar serviço por nome...',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Container(
+                height: MediaQuery.of(modalCtx).size.height * 0.85,
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Adicionar Serviço', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
                     ),
-                    onChanged: (val) => setModalState(() => textoBusca = val),
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  if (!buscaAtiva && ultimos5Servicos.isNotEmpty) ...[
-                    const Text('⭐ Últimos Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: ultimos5Servicos.map((s) => ActionChip(
-                        label: Text(s.nome, style: TextStyle(color: Colors.purple.shade900, fontSize: 12)),
-                        backgroundColor: Colors.purple.shade50,
-                        side: BorderSide(color: Colors.purple.shade200),
-                        onPressed: () => _adicionarEFechar(s),
-                      )).toList(),
+                    TextField(
+                      controller: buscaModalController,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        hintText: 'Buscar serviço por nome...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: buscaModalController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  buscaModalController.clear();
+                                  setModalState(() {});
+                                },
+                              )
+                            : null,
+                        border: const OutlineInputBorder(),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      onChanged: (_) => setModalState(() {}),
+                      onSubmitted: (_) => FocusScope.of(modalCtx).unfocus(),
                     ),
                     const SizedBox(height: 12),
-                    const Divider(height: 1),
+                    
+                    if (!buscaAtiva && ultimos5Servicos.isNotEmpty) ...[
+                      const Text('⭐ Últimos Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: ultimos5Servicos.map((s) => ActionChip(
+                          label: Text(s.nome, style: TextStyle(color: Colors.purple.shade900, fontSize: 12)),
+                          backgroundColor: Colors.purple.shade50,
+                          side: BorderSide(color: Colors.purple.shade200),
+                          onPressed: () => _adicionarEFechar(s),
+                        )).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                      const Divider(height: 1),
+                      const SizedBox(height: 8),
+                    ],
+
+                    const Text('Todos os Serviços', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 8),
-                  ],
 
-                  const Text('Todos os Serviços', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                  const SizedBox(height: 8),
-
-                  Expanded(
-                    child: listaExibicao.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Nenhum serviço disponível.',
-                              style: TextStyle(color: Colors.grey),
+                    Expanded(
+                      child: listaExibicao.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Nenhum serviço encontrado.',
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: listaExibicao.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final s = listaExibicao[i];
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  title: Text(s.nome, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                  subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
+                                  trailing: const Icon(Icons.add_circle_outline, color: Colors.purple),
+                                  onTap: () => _adicionarEFechar(s),
+                                );
+                              },
                             ),
-                          )
-                        : ListView.separated(
-                            itemCount: listaExibicao.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1),
-                            itemBuilder: (_, i) {
-                              final s = listaExibicao[i];
-                              return ListTile(
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                                title: Text(s.nome, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
-                                trailing: const Icon(Icons.add_circle_outline, color: Colors.purple),
-                                onTap: () => _adicionarEFechar(s),
-                              );
-                            },
-                          ),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
             );
           }
