@@ -1,4 +1,4 @@
-import 'dart5:async';
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -18,7 +18,6 @@ import '../../features/servicos/screens/servicos_screen.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../constants/app_constants.dart';
 
-/// Notificador em tempo real do estado de autenticação para o GoRouter
 class GoRouterRefreshStream extends ChangeNotifier {
   late final StreamSubscription<dynamic> _subscription;
 
@@ -45,27 +44,23 @@ final appRouter = GoRouter(
     final usuarioLogado = FirebaseAuth.instance.currentUser != null;
     final estaNaTelaLogin = state.matchedLocation == '/login';
 
-    // 1. Se NÃO estiver logado e tentar acessar qualquer tela interna -> Redireciona para /login
     if (!usuarioLogado && !estaNaTelaLogin) {
       return '/login';
     }
 
-    // 2. Se JA estiver logado e tentar acessar a tela de /login -> Redireciona para o Dashboard
     if (usuarioLogado && estaNaTelaLogin) {
       return AppRoutes.dashboard;
     }
 
-    return null; // Permite a navegação normal
+    return null;
   },
   routes: [
-    // Rota de Login (Nível Raiz)
     GoRoute(
       path: '/login',
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => const LoginScreen(),
     ),
 
-    // Shell com navegação lateral/inferior — Dashboard, Clientes, Agenda, Configurações.
     StatefulShellRoute.indexedStack(
       builder: (context, state, navigationShell) => AppScaffold(navigationShell: navigationShell),
       branches: [
@@ -87,7 +82,6 @@ final appRouter = GoRouter(
       ],
     ),
 
-    // Telas de formulário abrem por cima do shell (rota de nível raiz).
     GoRoute(
       path: AppRoutes.clienteNovo,
       parentNavigatorKey: rootNavigatorKey,
