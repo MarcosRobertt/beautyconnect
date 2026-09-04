@@ -34,7 +34,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   bool _isBloqueio = false; 
   String? _clienteId;
   
-  // --- ESTRUTURA HÍBRIDA: COMANDA DINÂMICA ---
   final List<String> _servicosIdsSelecionados = [];
   String _servicoNomeOriginal = ''; 
   List<String> _ultimosServicosIds = []; 
@@ -46,7 +45,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   bool _carregando = true;
   String? _erro;
 
-  // --- VARIÁVEIS DE REPETIÇÃO DE AGENDA ---
   String _tipoRepeticao = 'nenhum'; 
   int _ocorrencias = 2; 
 
@@ -155,8 +153,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       cancelText: 'Cancelar',
       confirmText: 'OK',
       helpText: 'Selecione a data',
-      fieldLabelText: 'Insira a data',
-      fieldHintText: 'Mês/Dia/Ano',
     );
     if (selecionada != null) setState(() => _data = selecionada);
   }
@@ -452,118 +448,125 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     if (mounted) context.pop();
   }
 
+  // 🚀 MODAL TOTALMENTE OTIMIZADO PARA CELULAR (Rola a lista completa e desativa teclado)
   void _abrirModalAdicionarServico(List<Servico> todosServicos) {
+    FocusScope.of(context).unfocus(); // Desativa o teclado para não travar o clique no mobile
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) {
+      builder: (ctx) {
         String textoBusca = '';
-        bool processandoClique = false; // TRAVA DE SEGURANÇA ADICIONADA
+        bool processandoClique = false;
         
         return StatefulBuilder(
-          builder: (context, setModalState) {
-            final ultimos5Servicos = todosServicos
+          builder: (modalCtx, setModalState) {
+            // Filtra apenas serviços que AINDA NÃO FORAM ADICIONADOS
+            final servicosDisponiveis = todosServicos
+                .where((s) => !_servicosIdsSelecionados.contains(s.id))
+                .toList();
+
+            final ultimos5Servicos = servicosDisponiveis
                 .where((s) => _ultimosServicosIds.contains(s.id))
                 .toList();
             
             if (ultimos5Servicos.isEmpty && _ultimosServicosIds.isEmpty) {
-              ultimos5Servicos.addAll(todosServicos.take(5));
+              ultimos5Servicos.addAll(servicosDisponiveis.take(5));
             }
 
             final buscaAtiva = textoBusca.trim().isNotEmpty;
-            final resultadosBusca = buscaAtiva 
-              ? todosServicos.where((s) => 
+            final listaExibicao = buscaAtiva 
+              ? servicosDisponiveis.where((s) => 
                   s.nome.toLowerCase().contains(textoBusca.toLowerCase())
                 ).toList()
-              : <Servico>[];
+              : servicosDisponiveis;
 
-            return Padding(
+            void _adicionarEFechar(Servico s) {
+              if (processandoClique) return;
+              setModalState(() => processandoClique = true);
+              
+              setState(() {
+                _servicosIdsSelecionados.add(s.id);
+                _recalcularTotais();
+              });
+              
+              Navigator.pop(modalCtx);
+            }
+
+            return Container(
+              height: MediaQuery.of(modalCtx).size.height * 0.75, // Altura fixa e segura para mobile
               padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                top: 20, left: 20, right: 20
+                bottom: MediaQuery.of(modalCtx).viewInsets.bottom + 16,
+                top: 16, left: 16, right: 16
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text('Adicionar Serviço', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalCtx)),
                     ],
                   ),
+                  const SizedBox(height: 8),
                   TextField(
                     decoration: const InputDecoration(
                       hintText: 'Buscar serviço por nome...',
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
                     onChanged: (val) => setModalState(() => textoBusca = val),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   
-                  if (!buscaAtiva) ...[
-                    if (ultimos5Servicos.isNotEmpty) ...[
-                      const Text('⭐ Últimos 5 Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: ultimos5Servicos.map((s) => ActionChip(
-                          label: Text(s.nome, style: TextStyle(color: Colors.purple.shade900)),
-                          backgroundColor: Colors.purple.shade50,
-                          side: BorderSide(color: Colors.purple.shade200),
-                          onPressed: () {
-                            // EVITA MÚLTIPLAS INSERÇÕES POR CLIQUE ACIDENTAL
-                            if (processandoClique) return;
-                            setModalState(() => processandoClique = true);
-                            
-                            setState(() {
-                              _servicosIdsSelecionados.add(s.id);
-                              _recalcularTotais();
-                            });
-                            Navigator.pop(context);
-                          },
-                        )).toList(),
-                      ),
-                    ]
-                  ] else ...[
-                    if (resultadosBusca.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text('Nenhum serviço correspondente encontrado.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 250),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: resultadosBusca.length,
-                          separatorBuilder: (_, __) => const Divider(height: 1),
-                          itemBuilder: (ctx, i) {
-                            final s = resultadosBusca[i];
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(s.nome, style: const TextStyle(fontWeight: FontWeight.w600)),
-                              subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
-                              onTap: () {
-                                // EVITA MÚLTIPLAS INSERÇÕES POR CLIQUE ACIDENTAL
-                                if (processandoClique) return;
-                                setModalState(() => processandoClique = true);
-                                
-                                setState(() {
-                                  _servicosIdsSelecionados.add(s.id);
-                                  _recalcularTotais();
-                                });
-                                Navigator.pop(context);
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                  ]
+                  if (!buscaAtiva && ultimos5Servicos.isNotEmpty) ...[
+                    const Text('⭐ Últimos Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: ultimos5Servicos.map((s) => ActionChip(
+                        label: Text(s.nome, style: TextStyle(color: Colors.purple.shade900, fontSize: 12)),
+                        backgroundColor: Colors.purple.shade50,
+                        side: BorderSide(color: Colors.purple.shade200),
+                        onPressed: () => _adicionarEFechar(s),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
+                  ],
+
+                  const Text('Todos os Serviços', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
+                  const SizedBox(height: 8),
+
+                  Expanded(
+                    child: listaExibicao.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'Nenhum serviço disponível.',
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: listaExibicao.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1),
+                            itemBuilder: (_, i) {
+                              final s = listaExibicao[i];
+                              return ListTile(
+                                dense: true,
+                                contentPadding: EdgeInsets.zero,
+                                title: Text(s.nome, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
+                                trailing: const Icon(Icons.add_circle_outline, color: Colors.purple),
+                                onTap: () => _adicionarEFechar(s),
+                              );
+                            },
+                          ),
+                  ),
                 ],
               ),
             );
