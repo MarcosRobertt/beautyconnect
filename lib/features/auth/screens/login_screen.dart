@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/package:firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -32,18 +32,15 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Tenta abrir o cofre do Firebase com as chaves fornecidas
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: senha,
       );
       
-      // Se deu certo, joga o usuário para o Dashboard (Tela Inicial)
       if (mounted) {
-        context.go('/'); // Substitua pela rota inicial do seu app se for diferente
+        context.go('/');
       }
     } on FirebaseAuthException catch (e) {
-      // Tratamento de erros comuns
       setState(() {
         if (e.code == 'user-not-found' || e.code == 'wrong-password' || e.code == 'invalid-credential') {
           _erroMensagem = 'E-mail ou senha incorretos.';
@@ -70,13 +67,13 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100, // Fundo cinza bem clarinho
+      backgroundColor: Colors.grey.shade100,
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400), // Card centralizado no PC, preenche no celular
+              constraints: const BoxConstraints(maxWidth: 400),
               child: Card(
                 elevation: 4,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -86,7 +83,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // LOGO E TÍTULO
                       const Icon(Icons.water_drop, size: 48, color: Colors.purple),
                       const SizedBox(height: 16),
                       const Text(
@@ -101,7 +97,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 40),
 
-                      // ALERTA DE ERRO (Se houver)
                       if (_erroMensagem != null) ...[
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -119,7 +114,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 16),
                       ],
 
-                      // CAMPO E-MAIL
                       TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
@@ -132,7 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // CAMPO SENHA
                       TextField(
                         controller: _senhaController,
                         obscureText: _ocultarSenha,
@@ -149,7 +142,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // BOTÃO ENTRAR
                       SizedBox(
                         height: 50,
                         child: FilledButton(
