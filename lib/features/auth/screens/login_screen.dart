@@ -57,6 +57,116 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // --- NOVA FUNÇÃO DE RECUPERAÇÃO DE SENHA ---
+  void _mostrarDialogoRecuperacao(BuildContext context, Color primaryColor) {
+    // Tenta puxar o e-mail se a usuária já tiver digitado no campo de login
+    final recuperarEmailController = TextEditingController(text: _emailController.text.trim());
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        bool enviando = false; 
+
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.lock_reset, color: primaryColor),
+                  const SizedBox(width: 8),
+                  const Text('Redefinir Senha', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Digite o e-mail associado à sua conta. Enviaremos um link de redefinição com validade temporária.',
+                    style: TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: recuperarEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      labelText: 'E-mail',
+                      prefixIcon: Icon(Icons.email_outlined, color: primaryColor),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: primaryColor, width: 2),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: enviando ? null : () => Navigator.pop(dialogContext),
+                  child: Text('Cancelar', style: TextStyle(color: Colors.grey.shade700)),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: primaryColor,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: enviando
+                      ? null
+                      : () async {
+                          final email = recuperarEmailController.text.trim();
+                          if (email.isEmpty || !email.contains('@')) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Insira um e-mail válido.'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+
+                          setStateDialog(() => enviando = true);
+
+                          try {
+                            await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                            if (context.mounted) {
+                              Navigator.pop(dialogContext); // Fecha o modal
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Se o e-mail estiver cadastrado, um link foi enviado.'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              setStateDialog(() => enviando = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Ocorreu um erro ao tentar enviar o link.'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                  child: enviando
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('ENVIAR LINK'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+  // -------------------------------------------
+
   @override
   void dispose() {
     _emailController.dispose();
@@ -195,7 +305,24 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         onSubmitted: (_) => _fazerLogin(),
                       ),
-                      const SizedBox(height: 28),
+                      
+                      // LINK: ESQUECEU A SENHA
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => _mostrarDialogoRecuperacao(context, primaryColor),
+                          style: TextButton.styleFrom(
+                            foregroundColor: primaryColor,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+                            minimumSize: Size.zero,
+                          ),
+                          child: const Text(
+                            'Esqueceu a senha?',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
                       // BOTÃO ENTRAR
                       SizedBox(
