@@ -39,11 +39,10 @@ String _paraHora(int minutos) {
 /// Dashboard, pela tela de Clientes e pela tela de Agenda Inteligente.
 class InteligenciaService {
   /// Horário de expediente padrão usado para calcular horários livres.
-  /// Assunção do MVP: expediente único das 08:00 às 20:00, sem intervalos
-  /// configuráveis. Pode ser revisado numa sprint futura se a manicure
-  /// trabalhar em outro horário.
+  /// Expediente Seg-Sex (08:00 às 20:00) e Sábado (08:00 às 14:00).
   static const horaAbertura = '08:00';
   static const horaFechamento = '20:00';
+  static const horaFechamentoSabado = '14:00';
 
   /// Calcula último atendimento, frequência média de retorno, próxima data
   /// sugerida e se o cliente está atrasado, a partir de TODOS os
@@ -91,19 +90,35 @@ class InteligenciaService {
 
   /// Calcula as faixas de horário livre num dia, dado o expediente padrão e
   /// os agendamentos não cancelados daquele dia (de todos os clientes).
-  static List<FaixaLivre> horariosLivresNoDia(List<Agendamento> agendamentosDoDia) {
+  static List<FaixaLivre> horariosLivresNoDia(List<Agendamento> agendamentosDoDia, {DateTime? dataReferencia}) {
     final ocupados = agendamentosDoDia.where((a) => a.status != AgendamentoStatus.cancelado).toList()
       ..sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
 
+    // Descobre a data alvo para aplicar a regra correta do sábado
+    DateTime? dataAlvo = dataReferencia;
+    if (dataAlvo == null && ocupados.isNotEmpty) {
+      dataAlvo = ocupados.first.data;
+    }
+
+    String fechamentoStr = horaFechamento;
+    if (dataAlvo != null && dataAlvo.weekday == DateTime.saturday) {
+      fechamentoStr = horaFechamentoSabado;
+    }
+
     final livres = <FaixaLivre>[];
     var cursor = _paraMinutos(horaAbertura);
-    final fechamento = _paraMinutos(horaFechamento);
+    final fechamento = _paraMinutos(fechamentoStr);
 
     for (final a in ocupados) {
       final inicio = _paraMinutos(a.horaInicio);
       final fim = _paraMinutos(a.horaFim);
+      
       if (inicio > cursor) {
-        livres.add(FaixaLivre(inicio: _paraHora(cursor), fim: _paraHora(inicio)));
+        // Trava de segurança: impede que horários manuais lançados fora de hora abram slots inválidos
+        int fimSlot = inicio > fechamento ? fechamento : inicio;
+        if (fimSlot > cursor) {
+          livres.add(FaixaLivre(inicio: _paraHora(cursor), fim: _paraHora(fimSlot)));
+        }
       }
       if (fim > cursor) cursor = fim;
     }
@@ -119,7 +134,11 @@ class InteligenciaService {
   static int minutosLivresRestantesHoje(List<Agendamento> agendamentosDeHoje) {
     final agora = DateTime.now();
     final minutoAtual = agora.hour * 60 + agora.minute;
-    final fechamento = _paraMinutos(horaFechamento);
+    
+    // Regra do sábado aplicada para a métrica de "Hoje" no dashboard
+    final fechamentoStr = agora.weekday == DateTime.saturday ? horaFechamentoSabado : horaFechamento;
+    final fechamento = _paraMinutos(fechamentoStr);
+    
     if (minutoAtual >= fechamento) return 0;
 
     final ocupados = agendamentosDeHoje.where((a) => a.status != AgendamentoStatus.cancelado).toList()
@@ -127,14 +146,26 @@ class InteligenciaService {
 
     var cursor = minutoAtual < _paraMinutos(horaAbertura) ? _paraMinutos(horaAbertura) : minutoAtual;
     var livres = 0;
+    
     for (final a in ocupados) {
       final inicio = _paraMinutos(a.horaInicio);
       final fim = _paraMinutos(a.horaFim);
       if (fim <= cursor) continue;
+      
       final inicioEfetivo = inicio < cursor ? cursor : inicio;
-      if (inicioEfetivo > cursor) livres += inicioEfetivo - cursor;
+      
+      // Se chegarmos no limite de fechamento, paramos de contar
+      if (inicioEfetivo >= fechamento) break;
+      
+      if (inicioEfetivo > cursor) {
+        final limite = inicioEfetivo > fechamento ? fechamento : inicioEfetivo;
+        livres += limite - cursor;
+      }
+      
       cursor = fim > cursor ? fim : cursor;
+      if (cursor >= fechamento) break;
     }
+    
     if (fechamento > cursor) livres += fechamento - cursor;
     return livres;
   }
