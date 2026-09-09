@@ -12,7 +12,7 @@ import '../../agenda/services/inteligencia_service.dart';
 String formatarMoedaIA(double valor) => 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
 
 class AnaliseIaScreen extends ConsumerStatefulWidget {
-  const AnaliseIaScreen({super.key}); // Removido contextoMetricas pois a IA lê direto do provider agora
+  const AnaliseIaScreen({super.key});
 
   @override
   ConsumerState<AnaliseIaScreen> createState() => _AnaliseIaScreenState();
@@ -120,6 +120,8 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
               final inicioMesAnterior = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1, 1);
               final fimMesAnterior = DateTime(_mesSelecionado.year, _mesSelecionado.month, 0, 23, 59, 59);
 
+              final ehMesAtual = _mesSelecionado.year == hoje.year && _mesSelecionado.month == hoje.month;
+
               double receitaMes = 0, receitaMesAnterior = 0;
               int procedimentosMes = 0, procedimentosMesAnterior = 0;
               int minutosMes = 0, minutosMesAnterior = 0;
@@ -192,20 +194,43 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
               return ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Análise do Mês', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                      DropdownButton<DateTime>(
-                        value: _mesSelecionado,
-                        underline: const SizedBox(),
-                        icon: const Icon(Icons.calendar_month, size: 18),
-                        items: ultimosMeses.map((data) {
-                          final label = DateFormat('MMMM yyyy', 'pt_BR').format(data);
-                          return DropdownMenuItem(value: data, child: Text(label[0].toUpperCase() + label.substring(1), style: const TextStyle(fontSize: 14)));
-                        }).toList(),
-                        onChanged: (v) { if (v != null) setState(() => _mesSelecionado = v); },
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Análise do Mês', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                          DropdownButton<DateTime>(
+                            value: _mesSelecionado,
+                            underline: const SizedBox(),
+                            icon: const Icon(Icons.calendar_month, size: 18),
+                            items: ultimosMeses.map((data) {
+                              final label = DateFormat('MMMM yyyy', 'pt_BR').format(data);
+                              return DropdownMenuItem(value: data, child: Text(label[0].toUpperCase() + label.substring(1), style: const TextStyle(fontSize: 14)));
+                            }).toList(),
+                            onChanged: (v) { if (v != null) setState(() => _mesSelecionado = v); },
+                          ),
+                        ],
                       ),
+                      if (ehMesAtual) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.auto_awesome, size: 14, color: Colors.purple.shade700),
+                            const SizedBox(width: 4),
+                            Text(
+                              'PREVISÃO (Mês em Aberto)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.purple.shade700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -213,11 +238,11 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _CardMetricaIA(titulo: 'Faturamento', valorAtual: receitaMes, valorAnterior: receitaMesAnterior, ehMoeda: true),
+                        _CardMetricaIA(titulo: 'Faturamento', valorAtual: receitaMes, valorAnterior: receitaMesAnterior, ehMoeda: true, ehPrevisao: ehMesAtual),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Ticket Médio', valorAtual: tmMes, valorAnterior: tmMesAnterior, ehMoeda: true),
+                        _CardMetricaIA(titulo: 'Ticket Médio', valorAtual: tmMes, valorAnterior: tmMesAnterior, ehMoeda: true, ehPrevisao: ehMesAtual),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Rentabilidade/Hora', valorAtual: rentabilidadeHora, valorAnterior: rentabilidadeHoraAnterior, ehMoeda: true),
+                        _CardMetricaIA(titulo: 'Rentabilidade/Hora', valorAtual: rentabilidadeHora, valorAnterior: rentabilidadeHoraAnterior, ehMoeda: true, ehPrevisao: ehMesAtual),
                       ],
                     ),
                   ),
@@ -391,10 +416,18 @@ class _BlocoTextoIA extends StatelessWidget {
 }
 
 class _CardMetricaIA extends StatelessWidget {
-  const _CardMetricaIA({required this.titulo, required this.valorAtual, required this.valorAnterior, required this.ehMoeda});
+  const _CardMetricaIA({
+    required this.titulo,
+    required this.valorAtual,
+    required this.valorAnterior,
+    required this.ehMoeda,
+    this.ehPrevisao = false,
+  });
+
   final String titulo;
   final double valorAtual, valorAnterior;
   final bool ehMoeda;
+  final bool ehPrevisao;
 
   @override
   Widget build(BuildContext context) {
@@ -421,6 +454,26 @@ class _CardMetricaIA extends StatelessWidget {
           Text(titulo, style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600), maxLines: 1),
           const SizedBox(height: 4),
           Text(exibicaoValor, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87), maxLines: 1),
+          
+          if (ehPrevisao) ...[
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.purple.shade50,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '🏷️ PREVISÃO',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.purple.shade700,
+                ),
+              ),
+            ),
+          ],
+
           const SizedBox(height: 8),
           Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: corBadge.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(iconeSeta, size: 12, color: corBadge), const SizedBox(width: 2), Text(txtEvolucao, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: corBadge))])),
         ],
