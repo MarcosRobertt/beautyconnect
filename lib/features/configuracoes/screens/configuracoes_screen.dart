@@ -158,6 +158,14 @@ class _ConfiguracoesScreenState extends ConsumerState<ConfiguracoesScreen> {
         title: const Text('Menu', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        // ÚNICA ALTERAÇÃO NESTE ARQUIVO: O botão de atualizar no canto direito
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Atualizar Tela',
+            onPressed: () => GoRouter.of(context).refresh(),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
