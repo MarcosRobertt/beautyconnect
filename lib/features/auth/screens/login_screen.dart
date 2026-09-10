@@ -57,9 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // --- NOVA FUNÇÃO DE RECUPERAÇÃO DE SENHA ---
   void _mostrarDialogoRecuperacao(BuildContext context, Color primaryColor) {
-    // Tenta puxar o e-mail se a usuária já tiver digitado no campo de login
     final recuperarEmailController = TextEditingController(text: _emailController.text.trim());
     
     showDialog(
@@ -130,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           try {
                             await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
                             if (context.mounted) {
-                              Navigator.pop(dialogContext); // Fecha o modal
+                              Navigator.pop(dialogContext);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text('Se o e-mail estiver cadastrado, um link foi enviado.'),
@@ -165,7 +163,6 @@ class _LoginScreenState extends State<LoginScreen> {
       },
     );
   }
-  // -------------------------------------------
 
   @override
   void dispose() {
@@ -176,11 +173,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Colors.purple.shade800;
-    final lightPurple = Colors.purple.shade50;
+    // Ajuste da Paleta Visual para a Identidade BeautyConnect (Dashboard)
+    const primaryColor = Color(0xFF8A2463); 
+    const lightPurple = Color(0xFFF5E1EC); 
+    const borderColor = Color(0xFFEED5E3);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FA), // Fundo em tom suave roxo-cinza
+      backgroundColor: const Color(0xFFFAF0F4), // Fundo blush idêntico ao Dashboard
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -189,10 +188,10 @@ class _LoginScreenState extends State<LoginScreen> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Card(
                 elevation: 3,
-                shadowColor: Colors.purple.withOpacity(0.15),
+                shadowColor: primaryColor.withOpacity(0.12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
-                  side: BorderSide(color: Colors.purple.shade100, width: 1),
+                  side: const BorderSide(color: borderColor, width: 1),
                 ),
                 color: Colors.white,
                 child: Padding(
@@ -205,15 +204,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       Center(
                         child: Container(
                           padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             color: lightPurple,
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(Icons.water_drop, size: 40, color: primaryColor),
+                          child: const Icon(Icons.water_drop, size: 40, color: primaryColor),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      Text(
+                      const Text(
                         'BeautyConnect',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -265,10 +264,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           labelText: 'E-mail',
                           labelStyle: TextStyle(color: Colors.grey.shade700),
-                          prefixIcon: Icon(Icons.email_outlined, color: primaryColor),
+                          prefixIcon: const Icon(Icons.email_outlined, color: primaryColor),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: primaryColor, width: 2),
+                            borderSide: const BorderSide(color: primaryColor, width: 2),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -286,7 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           labelText: 'Senha',
                           labelStyle: TextStyle(color: Colors.grey.shade700),
-                          prefixIcon: Icon(Icons.lock_outline, color: primaryColor),
+                          prefixIcon: const Icon(Icons.lock_outline, color: primaryColor),
                           suffixIcon: IconButton(
                             icon: Icon(
                               _ocultarSenha ? Icons.visibility : Icons.visibility_off,
@@ -296,7 +295,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: primaryColor, width: 2),
+                            borderSide: const BorderSide(color: primaryColor, width: 2),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
