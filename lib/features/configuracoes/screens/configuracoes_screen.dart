@@ -27,24 +27,24 @@ class ConfiguracoesScreen extends ConsumerWidget {
         title: const Text('Menu', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
         actions: [
-          // Sincronização Efetiva: Invalida os caches de estado do Riverpod
           IconButton(
             icon: const Icon(Icons.refresh, color: primaryColor),
             tooltip: 'Sincronizar Dados',
-            onPressed: () {
-              // 1. Invalida o controller de despesas para rebuscar no Firestore
-              ref.invalidate(despesaControllerProvider);
-              
-              // 2. Reavalia rotas do GoRouter
-              GoRouter.of(context).refresh();
-
-              // 3. Feedback visual para a usuária
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Dados sincronizados com sucesso! 🔄'),
-                  duration: Duration(seconds: 2),
-                ),
+            onPressed: () async {
+              // Explicita a busca forcada no servidor para limpar o cache mobile
+              await ref.read(despesaControllerProvider.notifier).carregarDespesasMes(
+                DateTime.now(),
+                forcarServidor: true,
               );
+              
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Dados sincronizados com o servidor! 🔄'),
+                    duration: Duration(seconds: 2),
+                  ),
+                );
+              }
             },
           ),
         ],
@@ -52,7 +52,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Cabeçalho de Perfil
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -84,7 +83,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // Seção: Inteligência & Financeiro
           const Padding(
             padding: EdgeInsets.only(left: 8, bottom: 8),
             child: Text('INTELIGÊNCIA & FINANCEIRO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
@@ -114,7 +112,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // Seção: Sistema
           const Padding(
             padding: EdgeInsets.only(left: 8, bottom: 8),
             child: Text('SISTEMA', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
@@ -144,7 +141,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 32),
 
-          // Botão Sair
           TextButton.icon(
             onPressed: () => _fazerLogout(context),
             icon: const Icon(Icons.logout, color: Colors.redAccent),
