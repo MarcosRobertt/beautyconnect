@@ -41,6 +41,30 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
     );
   }
 
+  void _abrirModalEdicao(Despesa despesa) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => _FormularioDespesa(
+        categorias: _categorias, 
+        mesReferencia: _mesSelecionado,
+        despesaEdit: despesa,
+        onExcluir: () {
+          Navigator.pop(context); // Fecha o modal primeiro
+          _confirmarExclusao(despesa.id);
+        },
+        onCopiar: () async {
+          await ref.read(despesaControllerProvider.notifier).duplicarDespesaProximoMes(despesa, _mesSelecionado);
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copiada para o próximo mês! 📋')));
+          }
+        },
+      ),
+    );
+  }
+
   void _confirmarExclusao(String id) {
     showDialog(
       context: context,
@@ -184,7 +208,9 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
                             child: ListTile(
+                              onTap: () => _abrirModalEdicao(d),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              trailing: const Icon(Icons.edit_outlined, color: Colors.grey, size: 20),
                               title: Row(
                                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
@@ -205,6 +231,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                         const SizedBox(width: 4),
                                         Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                         const Spacer(),
+                                        // O botão "Marcar Pago" continua aqui pois é uma ação muito usada
                                         InkWell(
                                           onTap: () => ref.read(despesaControllerProvider.notifier).alternarStatusDespesa(d, _mesSelecionado),
                                           child: Container(
@@ -212,31 +239,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                             decoration: BoxDecoration(color: pago ? Colors.green.shade50 : Colors.orange.shade50, borderRadius: BorderRadius.circular(6)),
                                             child: Text(pago ? 'PAGO ✅' : 'MARCAR PAGO ⏳', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: pago ? Colors.green.shade700 : Colors.orange.shade700)),
                                           ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(Icons.copy_rounded, size: 18, color: Colors.blueGrey),
-                                          tooltip: 'Copiar para o próximo mês',
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                          onPressed: () async {
-                                            await ref.read(despesaControllerProvider.notifier).duplicarDespesaProximoMes(d, _mesSelecionado);
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(
-                                                  content: Text('"${d.descricao}" copiada para o próximo mês! 📋'),
-                                                  duration: const Duration(seconds: 2),
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                        const SizedBox(width: 8),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                                          constraints: const BoxConstraints(),
-                                          padding: EdgeInsets.zero,
-                                          onPressed: () => _confirmarExclusao(d.id),
                                         ),
                                       ],
                                     )
@@ -279,7 +281,20 @@ class _CardResumo extends StatelessWidget {
 class _FormularioDespesa extends ConsumerStatefulWidget {
   final List<String> categorias;
   final DateTime mesReferencia;
-  const _FormularioDespesa({required this.categorias, required this.mesReferencia});
+  
+  // Variáveis extras para injetar dados na Edição
+  final Despesa? despesaEdit;
+  final VoidCallback? onExcluir;
+  final VoidCallback? onCopiar;
+
+  const _FormularioDespesa({
+    required this.categorias, 
+    required this.mesReferencia, 
+    this.despesaEdit, 
+    this.onExcluir, 
+    this.onCopiar
+  });
+  
   @override
   ConsumerState<_FormularioDespesa> createState() => _FormularioDespesaState();
 }
@@ -292,20 +307,32 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
   final _parcelasController = TextEditingController(text: '1');
   bool _pago = false;
   bool _salvando = false;
-  
-  // Nova variável para controlar a data exata da despesa
   late DateTime _dataSelecionada;
 
   @override
   void initState() {
     super.initState();
-    // Se o usuário estiver no mês atual, usa a data de hoje
-    // Se estiver em um mês passado (Agosto), usa o dia 1º daquele mês
-    final hoje = DateTime.now();
-    if (widget.mesReferencia.year == hoje.year && widget.mesReferencia.month == hoje.month) {
-      _dataSelecionada = hoje;
+    
+    // Se for uma Edição, preenche todos os campos com os dados existentes!
+    if (widget.despesaEdit != null) {
+      final d = widget.despesaEdit!;
+      _descController.text = d.descricao;
+      _valorController.text = d.valor.toStringAsFixed(2).replaceAll('.', ',');
+      _categoriaSelecionada = d.categoria;
+      _tipo = d.tipo == 'PARCELADA' ? 'PARCELADA' : d.tipo;
+      _pago = d.status == 'PAGO';
+      _dataSelecionada = d.dataVencimento;
+      if (d.totalParcelas != null) {
+        _parcelasController.text = d.totalParcelas.toString();
+      }
     } else {
-      _dataSelecionada = DateTime(widget.mesReferencia.year, widget.mesReferencia.month, 1);
+      // Se for uma Nova Despesa
+      final hoje = DateTime.now();
+      if (widget.mesReferencia.year == hoje.year && widget.mesReferencia.month == hoje.month) {
+        _dataSelecionada = hoje;
+      } else {
+        _dataSelecionada = DateTime(widget.mesReferencia.year, widget.mesReferencia.month, 1);
+      }
     }
   }
 
@@ -314,17 +341,21 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
     
     setState(() => _salvando = true);
     final valorStr = _valorController.text.replaceAll(',', '.');
-    
+
     final despesa = Despesa(
-      id: '',
+      id: widget.despesaEdit?.id ?? '', // Se tiver editando, mantem o ID original!
       descricao: _descController.text.trim(),
       valor: double.tryParse(valorStr) ?? 0.0,
       categoria: _categoriaSelecionada!,
       tipo: _tipo,
-      dataVencimento: _dataSelecionada, // Usa exatamente a data visível no campo
+      dataVencimento: _dataSelecionada, // Campo atualizado
       dataPagamento: _pago ? _dataSelecionada : null,
       status: _pago ? 'PAGO' : 'PENDENTE',
-      totalParcelas: _tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null,
+      
+      // Preserva informações vitais de parcelamento caso seja uma edição
+      totalParcelas: widget.despesaEdit?.totalParcelas ?? (_tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null),
+      parcelaAtual: widget.despesaEdit?.parcelaAtual,
+      idAgrupador: widget.despesaEdit?.idAgrupador,
     );
 
     await ref.read(despesaControllerProvider.notifier).salvarDespesa(despesa);
@@ -335,16 +366,43 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
 
   @override
   Widget build(BuildContext context) {
+    final ehEdicao = widget.despesaEdit != null;
+
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('➕ Nova Despesa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
+          
+          // CABEÇALHO COM AÇÕES
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                ehEdicao ? '✏️ Editar Despesa' : '➕ Nova Despesa', 
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))
+              ),
+              if (ehEdicao)
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.copy_rounded, color: Colors.blueGrey),
+                      tooltip: 'Copiar para o próximo mês',
+                      onPressed: widget.onCopiar,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      tooltip: 'Excluir Lançamento',
+                      onPressed: widget.onExcluir,
+                    ),
+                  ],
+                ),
+            ],
+          ),
           const SizedBox(height: 16),
           
-          // NOVO CAMPO: Seletor de Data de Vencimento
+          // CAMPO: Data de Vencimento
           InkWell(
             onTap: () async {
               final dt = await showDatePicker(
@@ -365,7 +423,7 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
             },
             child: InputDecorator(
               decoration: const InputDecoration(
-                labelText: 'Data da Despesa',
+                labelText: 'Data de Vencimento', // Renomeado para fluxo de caixa mais claro
                 border: OutlineInputBorder(),
               ),
               child: Row(
@@ -386,20 +444,26 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
           ),
           const SizedBox(height: 16),
           
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'REGULAR', label: Text('Regular')),
-              ButtonSegment(value: 'FIXA', label: Text('Fixa')),
-              ButtonSegment(value: 'PARCELADA', label: Text('Parcelada')),
-            ],
-            selected: {_tipo},
-            onSelectionChanged: (val) => setState(() => _tipo = val.first),
+          // Se for edição, desabilita a mudança de "Tipo" para não desconfigurar parcelas em lote
+          IgnorePointer(
+            ignoring: ehEdicao,
+            child: Opacity(
+              opacity: ehEdicao ? 0.6 : 1.0,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'REGULAR', label: Text('Regular')),
+                  ButtonSegment(value: 'FIXA', label: Text('Fixa')),
+                  ButtonSegment(value: 'PARCELADA', label: Text('Parcelada')),
+                ],
+                selected: {_tipo},
+                onSelectionChanged: (val) => setState(() => _tipo = val.first),
+              ),
+            ),
           ),
           const SizedBox(height: 16),
           
           Row(
             children: [
-              // MÁGICA DO TECLADO: TextInputType.numberWithOptions(decimal: true) adicionado aqui!
               Expanded(child: TextField(
                 controller: _valorController, 
                 decoration: const InputDecoration(labelText: 'Valor Total (R\$)', border: OutlineInputBorder()), 
@@ -410,7 +474,8 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
                 Expanded(child: TextField(
                   controller: _parcelasController, 
                   decoration: const InputDecoration(labelText: 'Nº Parcelas', border: OutlineInputBorder()), 
-                  keyboardType: TextInputType.number // Número de parcelas continua inteiro
+                  keyboardType: TextInputType.number,
+                  enabled: !ehEdicao, // Bloqueia alterar qtde parcelas na edição
                 )),
               ]
             ],
@@ -441,7 +506,9 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: const Color(0xFF8A2463)), 
                 onPressed: _salvando ? null : _salvar, 
-                child: _salvando ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('SALVAR DESPESA')
+                child: _salvando 
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                    : Text(ehEdicao ? 'ATUALIZAR DESPESA' : 'SALVAR DESPESA')
               ),
             ],
           )
