@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+// Importação nativa para Web que nos permite forçar o recarregamento no iPhone
+import 'dart:html' as html; 
+
 import 'analise_ia_screen.dart';
 import '../../financeiro/screens/despesas_screen.dart';
 import '../../financeiro/controllers/despesa_controller.dart';
@@ -30,21 +33,20 @@ class ConfiguracoesScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.refresh, color: primaryColor),
             tooltip: 'Sincronizar Dados',
-            onPressed: () async {
-              // Explicita a busca forcada no servidor para limpar o cache mobile
-              await ref.read(despesaControllerProvider.notifier).carregarDespesasMes(
-                DateTime.now(),
-                forcarServidor: true,
+            onPressed: () {
+              // Dá um feedback visual rápido
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Sincronizando sistema... 🔄'),
+                  duration: Duration(milliseconds: 1500),
+                ),
               );
-              
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Dados sincronizados com o servidor! 🔄'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              }
+
+              // Aguarda meio segundo para a usuária ver a mensagem e força o "Hard Reload"
+              // Isso destroi o cache do PWA no iPhone e baixa os dados frescos do Firestore
+              Future.delayed(const Duration(milliseconds: 500), () {
+                html.window.location.reload();
+              });
             },
           ),
         ],
