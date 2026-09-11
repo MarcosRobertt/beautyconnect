@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -143,7 +142,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                           ],
                         ),
                         subtitle: Padding(
-                          padding: const EdgeInsets.top(8.0),
+                          padding: const EdgeInsets.only(top: 8.0), // Ajustado de EdgeInsets.top para EdgeInsets.only
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
