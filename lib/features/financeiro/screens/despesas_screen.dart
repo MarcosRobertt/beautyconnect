@@ -299,14 +299,22 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
     setState(() => _salvando = true);
     final valorStr = _valorController.text.replaceAll(',', '.');
     
+    // --- CORREÇÃO DE DATA APLICADA AQUI ---
+    // Pega o mês que está sendo visualizado na tela e adapta a data da despesa
+    final hoje = DateTime.now();
+    final ultimoDiaMes = DateTime(widget.mesReferencia.year, widget.mesReferencia.month + 1, 0).day;
+    final diaValido = hoje.day > ultimoDiaMes ? ultimoDiaMes : hoje.day;
+    final dataLancamento = DateTime(widget.mesReferencia.year, widget.mesReferencia.month, diaValido);
+    // --------------------------------------
+
     final despesa = Despesa(
       id: '',
       descricao: _descController.text.trim(),
       valor: double.tryParse(valorStr) ?? 0.0,
       categoria: _categoriaSelecionada!,
       tipo: _tipo,
-      dataVencimento: DateTime.now(),
-      dataPagamento: _pago ? DateTime.now() : null,
+      dataVencimento: dataLancamento,
+      dataPagamento: _pago ? dataLancamento : null,
       status: _pago ? 'PAGO' : 'PENDENTE',
       totalParcelas: _tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null,
     );
