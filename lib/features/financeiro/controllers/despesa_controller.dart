@@ -12,22 +12,32 @@ class DespesaController extends StateNotifier<AsyncValue<List<Despesa>>> {
   final _db = FirebaseFirestore.instance;
   final _uuid = const Uuid();
 
-  Future<void> carregarDespesasMes(DateTime mesReferencia) async {
+  Future<void> carregarDespesasMes(DateTime mesReferencia, {bool forcarServidor = false}) async {
     try {
       state = const AsyncValue.loading();
       final inicioMes = DateTime(mesReferencia.year, mesReferencia.month, 1);
       final fimMes = DateTime(mesReferencia.year, mesReferencia.month + 1, 0, 23, 59, 59);
 
+      // Força busca no servidor se forcarServidor == true (resolve o cache do Mobile)
+      final options = forcarServidor 
+          ? const GetOptions(source: Source.server) 
+          : const GetOptions(source: Source.serverAndCache);
+
       final snapshot = await _db.collection('despesas')
           .where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String())
           .where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String())
-          .get();
+          .get(options);
 
       final despesas = snapshot.docs.map((doc) => Despesa.fromMap(doc.data(), doc.id)).toList();
       despesas.sort((a, b) => a.dataVencimento.compareTo(b.dataVencimento));
       state = AsyncValue.data(despesas);
     } catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
+      if (forcarServidor) {
+        // Fallback de segurança se a rede falhar no celular
+        carregarDespesasMes(mesReferencia, forcarServidor: false);
+      } else {
+        state = AsyncValue.error(e, StackTrace.current);
+      }
     }
   }
 
@@ -78,7 +88,7 @@ class DespesaController extends StateNotifier<AsyncValue<List<Despesa>>> {
         'dataPagamento': novaDataPagamento?.toIso8601String(),
       });
 
-      await carregarDespesasMes(mesReferencia);
+      await carregarDespesasMes(mesReferencia, forcarServidor: true);
     } catch (e) {
       throw Exception('Erro ao alterar status: $e');
     }
@@ -87,7 +97,7 @@ class DespesaController extends StateNotifier<AsyncValue<List<Despesa>>> {
   Future<void> excluirDespesa(String id, DateTime mesReferencia) async {
     try {
       await _db.collection('despesas').doc(id).delete();
-      await carregarDespesasMes(mesReferencia);
+      await carregarDespesasMes(mesReferencia, forcarServidor: true);
     } catch (e) {
       throw Exception('Erro ao excluir despesa: $e');
     }
