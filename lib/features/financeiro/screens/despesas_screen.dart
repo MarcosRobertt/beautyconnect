@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package0/flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../controllers/despesa_controller.dart';
 import '../models/despesa.dart';
@@ -77,7 +77,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (despesasRaw) {
-          // APLICAÇÃO DOS FILTROS COMBINADOS (STATUS + CATEGORIA)
           final despesasFiltradas = despesasRaw.where((d) {
             final bateStatus = _filtroStatus == 'TODAS' ||
                 (_filtroStatus == 'PAGAS' && d.status == 'PAGO') ||
@@ -86,7 +85,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
             return bateStatus && bateCategoria;
           }).toList();
 
-          // CÁLCULO DINÂMICO DOS TOTAIS BASEADOS NO FILTRO ATIVO
           final totalFiltrado = despesasFiltradas.fold(0.0, (sum, item) => sum + item.valor);
           final totalAPagarFiltrado = despesasFiltradas
               .where((d) => d.status == 'PENDENTE')
@@ -99,7 +97,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                 color: Colors.white,
                 child: Column(
                   children: [
-                    // NAVEGAÇÃO DE MÊS
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -119,10 +116,8 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                             }),
                           ],
                         ),
-                        // BOTOES DE FILTRO (STATUS E CATEGORIA)
                         Row(
                           children: [
-                            // FILTRO CATEGORIA
                             PopupMenuButton<String>(
                               initialValue: _filtroCategoria,
                               icon: Icon(Icons.category_outlined, color: _filtroCategoria != 'TODAS' ? primaryColor : Colors.grey),
@@ -134,7 +129,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                 ..._categorias.map((c) => PopupMenuItem(value: c, child: Text(c))),
                               ],
                             ),
-                            // FILTRO STATUS
                             PopupMenuButton<String>(
                               initialValue: _filtroStatus,
                               icon: const Icon(Icons.tune, color: primaryColor),
@@ -150,19 +144,15 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                         ),
                       ],
                     ),
-                    
-                    // RÓTULO DO FILTRO ATIVO
                     if (_filtroStatus != 'TODAS' || _filtroCategoria != 'TODAS')
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8.0),
                         child: Text(
-                          'Exibindo: ${_filtroStatus.replaceAll('_', ' ')} • ${_filtroCategoria}',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryColor),
+                          'Exibindo: ${_filtroStatus.replaceAll('_', ' ')} • $_filtroCategoria',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryColor),
                         ),
                       ),
-
                     const SizedBox(height: 8),
-                    // CARDS DE RESUMO RECALCULADOS
                     Row(
                       children: [
                         Expanded(child: _CardResumo(titulo: 'Total (Filtrado)', valor: totalFiltrado, cor: Colors.blueGrey)),
@@ -173,8 +163,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                   ],
                 ),
               ),
-
-              // LISTA DE LANÇAMENTOS
               Expanded(
                 child: despesasFiltradas.isEmpty
                     ? Center(child: Text('Nenhuma despesa encontrada.', style: TextStyle(color: Colors.grey.shade600)))
@@ -212,7 +200,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                         const SizedBox(width: 4),
                                         Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                         const Spacer(),
-                                        // BOTÃO INTERATIVO: ALTERNAR STATUS
                                         InkWell(
                                           onTap: () => ref.read(despesaControllerProvider.notifier).alternarStatusDespesa(d, _mesSelecionado),
                                           child: Container(
@@ -222,7 +209,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                           ),
                                         ),
                                         const SizedBox(width: 8),
-                                        // BOTÃO EXCLUIR
                                         IconButton(
                                           icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
                                           constraints: const BoxConstraints(),
