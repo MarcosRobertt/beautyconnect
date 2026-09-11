@@ -292,6 +292,22 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
   final _parcelasController = TextEditingController(text: '1');
   bool _pago = false;
   bool _salvando = false;
+  
+  // Nova variável para controlar a data exata da despesa
+  late DateTime _dataSelecionada;
+
+  @override
+  void initState() {
+    super.initState();
+    // Se o usuário estiver no mês atual, usa a data de hoje
+    // Se estiver em um mês passado (Agosto), usa o dia 1º daquele mês
+    final hoje = DateTime.now();
+    if (widget.mesReferencia.year == hoje.year && widget.mesReferencia.month == hoje.month) {
+      _dataSelecionada = hoje;
+    } else {
+      _dataSelecionada = DateTime(widget.mesReferencia.year, widget.mesReferencia.month, 1);
+    }
+  }
 
   void _salvar() async {
     if (_descController.text.isEmpty || _valorController.text.isEmpty || _categoriaSelecionada == null) return;
@@ -299,22 +315,14 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
     setState(() => _salvando = true);
     final valorStr = _valorController.text.replaceAll(',', '.');
     
-    // --- CORREÇÃO DE DATA APLICADA AQUI ---
-    // Pega o mês que está sendo visualizado na tela e adapta a data da despesa
-    final hoje = DateTime.now();
-    final ultimoDiaMes = DateTime(widget.mesReferencia.year, widget.mesReferencia.month + 1, 0).day;
-    final diaValido = hoje.day > ultimoDiaMes ? ultimoDiaMes : hoje.day;
-    final dataLancamento = DateTime(widget.mesReferencia.year, widget.mesReferencia.month, diaValido);
-    // --------------------------------------
-
     final despesa = Despesa(
       id: '',
       descricao: _descController.text.trim(),
       valor: double.tryParse(valorStr) ?? 0.0,
       categoria: _categoriaSelecionada!,
       tipo: _tipo,
-      dataVencimento: dataLancamento,
-      dataPagamento: _pago ? dataLancamento : null,
+      dataVencimento: _dataSelecionada, // Usa exatamente a data visível no campo
+      dataPagamento: _pago ? _dataSelecionada : null,
       status: _pago ? 'PAGO' : 'PENDENTE',
       totalParcelas: _tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null,
     );
@@ -335,7 +343,47 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
         children: [
           const Text('➕ Nova Despesa', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
           const SizedBox(height: 16),
-          TextField(controller: _descController, decoration: const InputDecoration(labelText: 'Descrição', border: OutlineInputBorder()), textCapitalization: TextCapitalization.sentences),
+          
+          // NOVO CAMPO: Seletor de Data de Vencimento
+          InkWell(
+            onTap: () async {
+              final dt = await showDatePicker(
+                context: context,
+                initialDate: _dataSelecionada,
+                firstDate: DateTime(2020),
+                lastDate: DateTime(2100),
+                builder: (context, child) {
+                  return Theme(
+                    data: Theme.of(context).copyWith(
+                      colorScheme: const ColorScheme.light(primary: Color(0xFF8A2463)),
+                    ),
+                    child: child!,
+                  );
+                },
+              );
+              if (dt != null) setState(() => _dataSelecionada = dt);
+            },
+            child: InputDecorator(
+              decoration: const InputDecoration(
+                labelText: 'Data da Despesa',
+                border: OutlineInputBorder(),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(DateFormat('dd/MM/yyyy').format(_dataSelecionada), style: const TextStyle(fontSize: 16)),
+                  const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          TextField(
+            controller: _descController, 
+            decoration: const InputDecoration(labelText: 'Descrição', border: OutlineInputBorder()), 
+            textCapitalization: TextCapitalization.sentences
+          ),
           const SizedBox(height: 16),
           
           SegmentedButton<String>(
@@ -351,10 +399,19 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
           
           Row(
             children: [
-              Expanded(child: TextField(controller: _valorController, decoration: const InputDecoration(labelText: 'Valor Total (R\$)', border: OutlineInputBorder()), keyboardType: TextInputType.number)),
+              // MÁGICA DO TECLADO: TextInputType.numberWithOptions(decimal: true) adicionado aqui!
+              Expanded(child: TextField(
+                controller: _valorController, 
+                decoration: const InputDecoration(labelText: 'Valor Total (R\$)', border: OutlineInputBorder()), 
+                keyboardType: const TextInputType.numberWithOptions(decimal: true)
+              )),
               if (_tipo == 'PARCELADA') ...[
                 const SizedBox(width: 12),
-                Expanded(child: TextField(controller: _parcelasController, decoration: const InputDecoration(labelText: 'Nº Parcelas', border: OutlineInputBorder()), keyboardType: TextInputType.number)),
+                Expanded(child: TextField(
+                  controller: _parcelasController, 
+                  decoration: const InputDecoration(labelText: 'Nº Parcelas', border: OutlineInputBorder()), 
+                  keyboardType: TextInputType.number // Número de parcelas continua inteiro
+                )),
               ]
             ],
           ),
