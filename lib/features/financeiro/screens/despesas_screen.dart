@@ -16,9 +16,15 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
   String _filtroCategoria = 'TODAS';
 
   final List<String> _categorias = [
-    'Transporte', 'Alimentação', 'Insumos', 'Juros de Cartão',
-    'Equipamentos', 'Saúde', 'Cuidados Pessoais', 'Vestuário',
-    'Manutenção', 'Lazer', 'Outras Despesas'
+'Insumos de Atendimento',
+  'Estrutura & Ocupação',
+  'Equipamentos & Manutenção',
+  'Taxas & Tarifas Financeiras',
+  'Marketing & Divulgação',
+  'Sistemas & Operacional',
+  'Retirada & Pró-Labore',
+  'Despesas Gerais',
+  'Despesas Pessoais',
   ];
 
   @override
