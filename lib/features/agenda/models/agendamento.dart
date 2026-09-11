@@ -36,6 +36,11 @@ class Agendamento {
     String? observacao,
     this.createdAt,
     this.updatedAt,
+    // NOVOS CAMPOS FINANCEIROS (Opcionais para não quebrar o histórico)
+    this.valorBruto,
+    this.taxaAplicada,
+    this.valorTaxa,
+    this.valorLiquido,
   })  : _horaFimGuardada = horaFim,
         _observacaoGuardada = observacao;
 
@@ -53,6 +58,12 @@ class Agendamento {
   final String? _observacaoGuardada;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  
+  // DECLARAÇÃO DOS NOVOS CAMPOS FINANCEIROS
+  final double? valorBruto;
+  final double? taxaAplicada;
+  final double? valorTaxa;
+  final double? valorLiquido;
 
   String get observacao => _observacaoGuardada ?? '';
   String get observacoes => _observacaoGuardada ?? '';
@@ -68,6 +79,30 @@ class Agendamento {
     final inicioDt = DateTime(2026, 1, 1, hora, minuto);
     final fimDt = inicioDt.add(Duration(minutes: duracaoMinutos));
     return '${fimDt.hour.toString().padLeft(2, '0')}:${fimDt.minute.toString().padLeft(2, '0')}';
+  }
+
+  // --- NOVA FUNÇÃO DE MATEMÁTICA FINANCEIRA ---
+  Agendamento fecharComanda(FormaPagamento pagamentoEscolhido) {
+    double taxa = 0.0;
+
+    // Regras de taxa das maquininhas
+    if (pagamentoEscolhido == FormaPagamento.credito) {
+      taxa = 3.15;
+    } else if (pagamentoEscolhido == FormaPagamento.debito) {
+      taxa = 0.89;
+    }
+
+    double calcValorTaxa = valor * (taxa / 100);
+    double calcLiquido = valor - calcValorTaxa;
+
+    return copyWith(
+      status: AgendamentoStatus.concluido,
+      formaPagamento: pagamentoEscolhido,
+      valorBruto: valor,
+      taxaAplicada: taxa,
+      valorTaxa: calcValorTaxa,
+      valorLiquido: calcLiquido,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -86,6 +121,11 @@ class Agendamento {
       'observacao': observacao,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
+      // SALVANDO OS NOVOS DADOS NO FIREBASE
+      'valorBruto': valorBruto,
+      'taxaAplicada': taxaAplicada,
+      'valorTaxa': valorTaxa,
+      'valorLiquido': valorLiquido,
     };
   }
 
@@ -107,6 +147,11 @@ class Agendamento {
       observacao: json['observacao'] as String? ?? json['observacoes'] as String?,
       createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'] as String) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'] as String) : null,
+      // LENDO OS NOVOS DADOS DO FIREBASE COM SEGURANÇA
+      valorBruto: (json['valorBruto'] as num?)?.toDouble(),
+      taxaAplicada: (json['taxaAplicada'] as num?)?.toDouble(),
+      valorTaxa: (json['valorTaxa'] as num?)?.toDouble(),
+      valorLiquido: (json['valorLiquido'] as num?)?.toDouble(),
     );
   }
 
@@ -125,6 +170,10 @@ class Agendamento {
     String? observacao,
     DateTime? createdAt,
     DateTime? updatedAt,
+    double? valorBruto,
+    double? taxaAplicada,
+    double? valorTaxa,
+    double? valorLiquido,
   }) {
     return Agendamento(
       id: id ?? this.id,
@@ -141,6 +190,11 @@ class Agendamento {
       observacao: observacao ?? _observacaoGuardada,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      // PERMITINDO A CÓPIA DOS NOVOS CAMPOS
+      valorBruto: valorBruto ?? this.valorBruto,
+      taxaAplicada: taxaAplicada ?? this.taxaAplicada,
+      valorTaxa: valorTaxa ?? this.valorTaxa,
+      valorLiquido: valorLiquido ?? this.valorLiquido,
     );
   }
 }
