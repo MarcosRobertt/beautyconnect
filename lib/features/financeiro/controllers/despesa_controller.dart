@@ -1,4 +1,3 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
@@ -66,6 +65,31 @@ class DespesaController extends StateNotifier<AsyncValue<List<Despesa>>> {
       await batch.commit();
     } catch (e) {
       throw Exception('Erro ao salvar despesa: $e');
+    }
+  }
+
+  Future<void> alternarStatusDespesa(Despesa despesa, DateTime mesReferencia) async {
+    try {
+      final novoStatus = despesa.status == 'PAGO' ? 'PENDENTE' : 'PAGO';
+      final novaDataPagamento = novoStatus == 'PAGO' ? DateTime.now() : null;
+
+      await _db.collection('despesas').doc(despesa.id).update({
+        'status': novoStatus,
+        'dataPagamento': novaDataPagamento?.toIso8601String(),
+      });
+
+      await carregarDespesasMes(mesReferencia);
+    } catch (e) {
+      throw Exception('Erro ao alterar status: $e');
+    }
+  }
+
+  Future<void> excluirDespesa(String id, DateTime mesReferencia) async {
+    try {
+      await _db.collection('despesas').doc(id).delete();
+      await carregarDespesasMes(mesReferencia);
+    } catch (e) {
+      throw Exception('Erro ao excluir despesa: $e');
     }
   }
 }
