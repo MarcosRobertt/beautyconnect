@@ -132,14 +132,30 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     }
   }
 
+  // Mantivemos o método antigo intocado para não quebrar telas que ainda o usam.
   Future<void> confirmar(String id) async {
     await _repository.confirmar(id);
     await carregar();
   }
 
+  // Mantivemos o método antigo intocado para não quebrar telas que ainda o usam.
   Future<void> concluir(String id) async {
     await _repository.concluir(id);
     await carregar();
+  }
+
+  // --- NOVO MÉTODO PARA FECHAR COMANDAS COM MATEMÁTICA DE TAXAS ---
+  Future<void> concluirComanda(Agendamento agendamento, FormaPagamento pagamento) async {
+    try {
+      // O próprio modelo aplica os descontos e gera o objeto pronto
+      final agendamentoFechado = agendamento.fecharComanda(pagamento);
+      
+      // Usa o editar do repositório porque estamos alterando vários campos de um doc que já existe
+      await _repository.editar(agendamentoFechado); 
+      await carregar();
+    } catch (e) {
+      throw Exception('Erro ao fechar comanda com taxas: $e');
+    }
   }
 
   Future<void> cancelar(String id) async {
