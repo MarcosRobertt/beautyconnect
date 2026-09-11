@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package0/flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../controllers/despesa_controller.dart';
 import '../models/despesa.dart';
@@ -13,6 +13,7 @@ class DespesasScreen extends ConsumerStatefulWidget {
 class _DespesasScreenState extends ConsumerState<DespesasScreen> {
   DateTime _mesSelecionado = DateTime.now();
   String _filtroStatus = 'TODAS'; 
+  String _filtroCategoria = 'TODAS';
 
   final List<String> _categorias = [
     'Transporte', 'Alimentação', 'Insumos', 'Juros de Cartão',
@@ -32,6 +33,26 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => _FormularioDespesa(categorias: _categorias, mesReferencia: _mesSelecionado),
+    );
+  }
+
+  void _confirmarExclusao(String id) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Excluir Despesa'),
+        content: const Text('Tem certeza que deseja remover este lançamento?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCELAR')),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(despesaControllerProvider.notifier).excluirDespesa(id, _mesSelecionado);
+            },
+            child: const Text('EXCLUIR', style: TextStyle(color: Colors.red)),
+          )
+        ],
+      ),
     );
   }
 
@@ -56,14 +77,20 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (despesasRaw) {
-          final despesas = despesasRaw.where((d) {
-            if (_filtroStatus == 'PAGAS') return d.status == 'PAGO';
-            if (_filtroStatus == 'NAO_PAGAS') return d.status == 'PENDENTE';
-            return true;
+          // APLICAÇÃO DOS FILTROS COMBINADOS (STATUS + CATEGORIA)
+          final despesasFiltradas = despesasRaw.where((d) {
+            final bateStatus = _filtroStatus == 'TODAS' ||
+                (_filtroStatus == 'PAGAS' && d.status == 'PAGO') ||
+                (_filtroStatus == 'NAO_PAGAS' && d.status == 'PENDENTE');
+            final bateCategoria = _filtroCategoria == 'TODAS' || d.categoria == _filtroCategoria;
+            return bateStatus && bateCategoria;
           }).toList();
 
-          final totalMes = despesasRaw.fold(0.0, (sum, item) => sum + item.valor);
-          final totalAPagar = despesasRaw.where((d) => d.status == 'PENDENTE').fold(0.0, (sum, item) => sum + item.valor);
+          // CÁLCULO DINÂMICO DOS TOTAIS BASEADOS NO FILTRO ATIVO
+          final totalFiltrado = despesasFiltradas.fold(0.0, (sum, item) => sum + item.valor);
+          final totalAPagarFiltrado = despesasFiltradas
+              .where((d) => d.status == 'PENDENTE')
+              .fold(0.0, (sum, item) => sum + item.valor);
 
           return Column(
             children: [
@@ -72,6 +99,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                 color: Colors.white,
                 child: Column(
                   children: [
+                    // NAVEGAÇÃO DE MÊS
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -91,12 +119,26 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                             }),
                           ],
                         ),
+                        // BOTOES DE FILTRO (STATUS E CATEGORIA)
                         Row(
                           children: [
-                            Text(_filtroStatus.replaceAll('_', ' '), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: primaryColor)),
+                            // FILTRO CATEGORIA
+                            PopupMenuButton<String>(
+                              initialValue: _filtroCategoria,
+                              icon: Icon(Icons.category_outlined, color: _filtroCategoria != 'TODAS' ? primaryColor : Colors.grey),
+                              tooltip: 'Filtrar Categoria',
+                              onSelected: (val) => setState(() => _filtroCategoria = val),
+                              itemBuilder: (context) => [
+                                const PopupMenuItem(value: 'TODAS', child: Text('Todas as Categorias')),
+                                const PopupMenuDivider(),
+                                ..._categorias.map((c) => PopupMenuItem(value: c, child: Text(c))),
+                              ],
+                            ),
+                            // FILTRO STATUS
                             PopupMenuButton<String>(
                               initialValue: _filtroStatus,
                               icon: const Icon(Icons.tune, color: primaryColor),
+                              tooltip: 'Filtrar Status',
                               onSelected: (val) => setState(() => _filtroStatus = val),
                               itemBuilder: (context) => const [
                                 PopupMenuItem(value: 'TODAS', child: Text('Todas as Despesas')),
@@ -108,66 +150,94 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    
+                    // RÓTULO DO FILTRO ATIVO
+                    if (_filtroStatus != 'TODAS' || _filtroCategoria != 'TODAS')
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8.0),
+                        child: Text(
+                          'Exibindo: ${_filtroStatus.replaceAll('_', ' ')} • ${_filtroCategoria}',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryColor),
+                        ),
+                      ),
+
+                    const SizedBox(height: 8),
+                    // CARDS DE RESUMO RECALCULADOS
                     Row(
                       children: [
-                        Expanded(child: _CardResumo(titulo: 'Total do Mês', valor: totalMes, cor: Colors.blueGrey)),
+                        Expanded(child: _CardResumo(titulo: 'Total (Filtrado)', valor: totalFiltrado, cor: Colors.blueGrey)),
                         const SizedBox(width: 12),
-                        Expanded(child: _CardResumo(titulo: 'A Pagar', valor: totalAPagar, cor: Colors.redAccent)),
+                        Expanded(child: _CardResumo(titulo: 'A Pagar', valor: totalAPagarFiltrado, cor: Colors.redAccent)),
                       ],
                     ),
                   ],
                 ),
               ),
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: despesas.length,
-                  itemBuilder: (context, index) {
-                    final d = despesas[index];
-                    final subtipo = d.tipo == 'PARCELADA' ? 'PARCELADA (${d.parcelaAtual}/${d.totalParcelas})' : d.tipo;
-                    final pago = d.status == 'PAGO';
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        title: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(child: Text(d.descricao, style: const TextStyle(fontWeight: FontWeight.bold))),
-                            Text('R\$ ${d.valor.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          ],
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 8.0), // Ajustado de EdgeInsets.top para EdgeInsets.only
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('🏷️ $subtipo • ${d.categoria}', style: const TextStyle(fontSize: 11)),
-                              const SizedBox(height: 4),
-                              Row(
+              // LISTA DE LANÇAMENTOS
+              Expanded(
+                child: despesasFiltradas.isEmpty
+                    ? Center(child: Text('Nenhuma despesa encontrada.', style: TextStyle(color: Colors.grey.shade600)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: despesasFiltradas.length,
+                        itemBuilder: (context, index) {
+                          final d = despesasFiltradas[index];
+                          final subtipo = d.tipo == 'PARCELADA' ? 'PARCELADA (${d.parcelaAtual}/${d.totalParcelas})' : d.tipo;
+                          final pago = d.status == 'PAGO';
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            elevation: 0,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              title: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Icon(Icons.calendar_today, size: 12, color: Colors.grey.shade600),
-                                  const SizedBox(width: 4),
-                                  Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                                  const Spacer(),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(color: pago ? Colors.green.shade50 : Colors.orange.shade50, borderRadius: BorderRadius.circular(4)),
-                                    child: Text(pago ? 'PAGO ✅' : 'NÃO PAGO ⏳', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: pago ? Colors.green.shade700 : Colors.orange.shade700)),
-                                  )
+                                  Expanded(child: Text(d.descricao, style: const TextStyle(fontWeight: FontWeight.bold))),
+                                  Text('R\$ ${d.valor.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                 ],
-                              )
-                            ],
-                          ),
-                        ),
+                              ),
+                              subtitle: Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('🏷️ $subtipo • ${d.categoria}', style: const TextStyle(fontSize: 11)),
+                                    const SizedBox(height: 6),
+                                    Row(
+                                      children: [
+                                        Icon(Icons.calendar_today, size: 12, color: Colors.grey.shade600),
+                                        const SizedBox(width: 4),
+                                        Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                                        const Spacer(),
+                                        // BOTÃO INTERATIVO: ALTERNAR STATUS
+                                        InkWell(
+                                          onTap: () => ref.read(despesaControllerProvider.notifier).alternarStatusDespesa(d, _mesSelecionado),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                            decoration: BoxDecoration(color: pago ? Colors.green.shade50 : Colors.orange.shade50, borderRadius: BorderRadius.circular(6)),
+                                            child: Text(pago ? 'PAGO ✅' : 'MARCAR PAGO ⏳', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: pago ? Colors.green.shade700 : Colors.orange.shade700)),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        // BOTÃO EXCLUIR
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
+                                          constraints: const BoxConstraints(),
+                                          padding: EdgeInsets.zero,
+                                          onPressed: () => _confirmarExclusao(d.id),
+                                        ),
+                                      ],
+                                    )
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
               )
             ],
           );
