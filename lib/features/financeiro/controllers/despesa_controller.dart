@@ -44,7 +44,8 @@ class DespesaController extends StateNotifier<AsyncValue<List<Despesa>>> {
       final batch = _db.batch();
       final colecao = _db.collection('despesas');
 
-      if (despesa.tipo == 'PARCELADA' && despesa.totalParcelas != null && despesa.totalParcelas! > 1) {
+      // Só gera várias parcelas se for uma NOVA despesa (id vazio)
+      if (despesa.id.isEmpty && despesa.tipo == 'PARCELADA' && despesa.totalParcelas != null && despesa.totalParcelas! > 1) {
         final valorParcela = despesa.valor / despesa.totalParcelas!;
         final idAgrupador = _uuid.v4();
 
@@ -63,11 +64,12 @@ class DespesaController extends StateNotifier<AsyncValue<List<Despesa>>> {
           });
         }
       } else {
+        // Atualiza despesa existente OU cria uma nova normal
         final docRef = colecao.doc(despesa.id.isEmpty ? _uuid.v4() : despesa.id);
         batch.set(docRef, {
           ...despesa.toMap(),
           'id': docRef.id,
-        });
+        }, SetOptions(merge: true));
       }
 
       await batch.commit();
