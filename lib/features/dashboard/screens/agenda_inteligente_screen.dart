@@ -21,8 +21,12 @@ class AgendaInteligenteScreen extends ConsumerWidget {
       a.data.year == data.year && a.data.month == data.month && a.data.day == data.day
     ).toList();
 
+    // Sábado encerra às 14h (10 slots de 30m); demais dias encerram às 18h (18 slots de 30m)
+    final int horaFim = (data.weekday == DateTime.saturday) ? 14 : 18;
+    final int maxSlots = (data.weekday == DateTime.saturday) ? 10 : 18;
+
     List<String> livres = [];
-    for (int h = 9; h < 18; h++) {
+    for (int h = 9; h < horaFim; h++) {
       for (int m = 0; m < 60; m += 30) {
         int slotStart = h * 60 + m;
         int slotEnd = slotStart + 30;
@@ -43,13 +47,15 @@ class AgendaInteligenteScreen extends ConsumerWidget {
     }
 
     if (livres.isEmpty) return ['LOTADO'];
-    if (livres.length == 18) return ['LIVRE']; // 9h às 18h = 18 slots de 30min
+    if (livres.length == maxSlots) return ['LIVRE'];
     return livres;
   }
 
-  // Calcula % Livre da semana (Ter-Sáb = 5 dias * 9h = 2700 min)
+  // Calcula % Livre da semana (Ter-Sex: 4d x 9h = 2160m | Sáb: 1d x 5h = 300m | Total = 2460m)
   double _calcularPctSemana(DateTime segundaFeiraDaSemana, List<Agendamento> agendamentos) {
+    const int totalMinutosSemana = 2460;
     int ocupado = 0;
+
     for (var a in agendamentos) {
       if (a.status == AgendamentoStatus.cancelado) continue;
       if (a.data.weekday == DateTime.monday || a.data.weekday == DateTime.sunday) continue;
@@ -61,14 +67,17 @@ class AgendaInteligenteScreen extends ConsumerWidget {
         
         int start = _parseHora(a.horaInicio);
         int end = _parseHora(a.horaFim);
+
+        final int horaFimDia = (a.data.weekday == DateTime.saturday) ? 14 * 60 : 18 * 60;
+        
         if (start < 9 * 60) start = 9 * 60;
-        if (end > 18 * 60) end = 18 * 60;
+        if (end > horaFimDia) end = horaFimDia;
         
         if (end > start) ocupado += (end - start);
       }
     }
     
-    final pct = ((2700 - ocupado) / 2700) * 100;
+    final pct = ((totalMinutosSemana - ocupado) / totalMinutosSemana) * 100;
     return pct.clamp(0.0, 100.0);
   }
 
@@ -94,6 +103,9 @@ class AgendaInteligenteScreen extends ConsumerWidget {
     final diasStr = ['Seg', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Dom'];
     final rotulo = '${diasStr[dia.weekday - 1]} (${dia.day.toString().padLeft(2,'0')}/${dia.month.toString().padLeft(2,'0')})';
 
+    final ehSabado = dia.weekday == DateTime.saturday;
+    final textoLivre = ehSabado ? 'Agenda 100% Livre (09h às 14h) ✨' : 'Agenda 100% Livre (09h às 18h) ✨';
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Column(
@@ -110,7 +122,7 @@ class AgendaInteligenteScreen extends ConsumerWidget {
           if (slots.first == 'LOTADO')
             const Text('Agenda totalmente lotada! 🔥', style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.w600, fontStyle: FontStyle.italic))
           else if (slots.first == 'LIVRE')
-            const Text('Agenda 100% Livre (09h às 18h) ✨', style: TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600))
+            Text(textoLivre, style: const TextStyle(fontSize: 12, color: Colors.green, fontWeight: FontWeight.w600))
           else
             Wrap(
               spacing: 6,
