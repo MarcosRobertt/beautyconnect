@@ -8,6 +8,7 @@ import 'analise_ia_screen.dart';
 import '../../financeiro/screens/despesas_screen.dart';
 import '../../financeiro/controllers/despesa_controller.dart';
 import '../../financeiro/screens/financeiro_screen.dart';
+import '../controllers/backup_controller.dart';
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -19,37 +20,90 @@ class ConfiguracoesScreen extends ConsumerWidget {
     }
   }
 
-  void _mostrarStatusBackup(BuildContext context) {
+  void _mostrarStatusBackup(BuildContext context, WidgetRef ref) {
+    final backupController = ref.read(backupControllerProvider);
+    const primaryColor = Color(0xFF8A2463);
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.cloud_done, color: Colors.green, size: 28),
-            const SizedBox(width: 12),
-            const Expanded(child: Text('Sincronização em Nuvem', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            Icon(Icons.cloud_done, color: Colors.green, size: 28),
+            SizedBox(width: 12),
+            Expanded(child: Text('Central de Backup', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Fique tranquila! O BeautyConnect utiliza tecnologia de banco de dados em tempo real.', style: TextStyle(fontSize: 14)),
-            const SizedBox(height: 12),
-            const Text('Todos os seus agendamentos, clientes e dados financeiros já estão salvos e criptografados com segurança nos servidores do Google Cloud.', style: TextStyle(fontSize: 14)),
+            const Text(
+              'Os dados do Studio Condeza estão continuamente protegidos e sincronizados na nuvem do Google Cloud.',
+              style: TextStyle(fontSize: 13, color: Colors.black87),
+            ),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Row(
-                children: [
-                  Icon(Icons.phonelink_setup, color: Colors.blue.shade700, size: 24),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text('Se você trocar de celular, basta fazer login com seu e-mail e senha para carregar tudo automaticamente.', style: TextStyle(fontSize: 13, color: Colors.blue.shade900)),
-                  ),
-                ],
+            
+            // Botão Exportar
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: const Text('Exportar Cópia (.json)'),
+                onPressed: () async {
+                  try {
+                    await backupController.exportarBackupJson();
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Backup baixado com sucesso! 📁')),
+                      );
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Erro ao exportar: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Botão Restaurar
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: primaryColor,
+                  side: const BorderSide(color: primaryColor),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.upload_file_rounded, size: 18),
+                label: const Text('Restaurar do Arquivo (.json)'),
+                onPressed: () async {
+                  try {
+                    await backupController.restaurarBackupJson();
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        const SnackBar(content: Text('Dados restaurados com sucesso! 🔄')),
+                      );
+                      Navigator.pop(ctx);
+                    }
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(content: Text('Erro ao restaurar: $e')),
+                      );
+                    }
+                  }
+                },
               ),
             ),
           ],
@@ -57,7 +111,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('ENTENDI', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
+            child: const Text('FECHAR', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
           ),
         ],
       ),
@@ -165,9 +219,9 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.cloud_done_outlined, color: Colors.green),
                   title: const Text('Status de Backup'),
-                  subtitle: const Text('Sincronizado na Nuvem', style: TextStyle(fontSize: 11)),
+                  subtitle: const Text('Sincronizado na Nuvem / Cópia JSON', style: TextStyle(fontSize: 11)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () => _mostrarStatusBackup(context),
+                  onTap: () => _mostrarStatusBackup(context, ref),
                 ),
                 const Divider(height: 1, indent: 56),
                 ListTile(
