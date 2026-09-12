@@ -10,20 +10,27 @@ final backupControllerProvider = Provider<BackupController>((ref) {
 class BackupController {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  /// Lê as coleções do Firebase e baixa um arquivo JSON no dispositivo de forma segura para a Web
   Future<void> exportarBackupJson() async {
-    final Map<String, dynamic> backupData = {
-      'versao': '1.0',
-      'dataExportacao': DateTime.now().toIso8601String(),
-      'colecoes': {},
-    };
-
+    final Map<String, dynamic> colecoesMap = {};
     final colecoes = ['agendamentos', 'despesas', 'clientes', 'servicos'];
 
     for (final colecao in colecoes) {
       final snapshot = await _db.collection(colecao).get();
-      final listaDocumentos = snapshot.docs.map((doc) => doc.data()).toList();
-      (backupData['colecoes'] as Map<String, dynamic>)[colecao] = listaDocumentos;
+      // Converte a estrutura interna do Firestore Web para um Map genérico sem estourar cast na minificação
+      final listaDocumentos = snapshot.docs.map((doc) {
+        final data = doc.data();
+        return Map<String, dynamic>.from(data);
+      }).toList();
+      
+      colecoesMap[colecao] = listaDocumentos;
     }
+
+    final Map<String, dynamic> backupData = {
+      'versao': '1.0',
+      'dataExportacao': DateTime.now().toIso8601String(),
+      'colecoes': colecoesMap,
+    };
 
     final jsonString = jsonEncode(backupData);
     final bytes = utf8.encode(jsonString);
@@ -38,6 +45,7 @@ class BackupController {
     html.Url.revokeObjectUrl(url);
   }
 
+  /// Lê um arquivo JSON selecionado pelo usuário e grava os dados de volta no Firestore via WriteBatch
   Future<void> restaurarBackupJson() async {
     final uploadInput = html.FileUploadInputElement()..accept = '.json';
     uploadInput.click();
@@ -52,13 +60,13 @@ class BackupController {
 
     await reader.onLoadEnd.first;
     final content = reader.result as String;
-    final Map<String, dynamic> data = jsonDecode(content);
+    final Map<String, dynamic> data = Map<String, dynamic>.from(jsonDecode(content) as Map);
 
     if (!data.containsKey('colecoes')) {
       throw Exception('Arquivo de backup inválido.');
     }
 
-    final colecoes = data['colecoes'] as Map<String, dynamic>;
+    final colecoes = Map<String, dynamic>.from(data['colecoes'] as Map);
 
     for (final entry in colecoes.entries) {
       final nomeColecao = entry.key;
@@ -75,6 +83,7 @@ class BackupController {
         batch.set(docRef, mapDoc, SetOptions(merge: true));
         contador++;
 
+        // Limite de segurança do Firestore (máximo 500 operações por batch)
         if (contador == 450) {
           await batch.commit();
           batch = _db.batch();
