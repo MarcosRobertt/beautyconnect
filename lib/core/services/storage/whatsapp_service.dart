@@ -9,7 +9,7 @@ class WhatsAppService {
   }) async {
     final numLimpo = telefone.replaceAll(RegExp(r'\D'), '');
     final mensagem = Uri.encodeComponent(
-      'Olá, $nomeCliente! Confirmamos seu agendamento no BeautyConnect para o dia ${agendamento.data.day}/${agendamento.data.month} às ${agendamento.horaInicio}.',
+      'Olá, $nomeCliente! Passando para confirmarmos seu agendamento para o dia ${agendamento.data.day}/${agendamento.data.month} às ${agendamento.horaInicio}.',
     );
     final url = Uri.parse('https://wa.me/55$numLimpo?text=$mensagem');
 
