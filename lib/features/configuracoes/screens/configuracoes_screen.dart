@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-// Importação nativa para Web que nos permite forçar o recarregamento no iPhone
 import 'dart:html' as html; 
 
 import 'analise_ia_screen.dart';
 import '../../financeiro/screens/despesas_screen.dart';
 import '../../financeiro/controllers/despesa_controller.dart';
+// IMPORTAMOS A NOVA TELA AQUI
+import '../../financeiro/screens/financeiro_screen.dart';
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -34,16 +35,9 @@ class ConfiguracoesScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh, color: primaryColor),
             tooltip: 'Sincronizar Dados',
             onPressed: () {
-              // Dá um feedback visual rápido
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Sincronizando sistema... 🔄'),
-                  duration: Duration(milliseconds: 1500),
-                ),
+                const SnackBar(content: Text('Sincronizando sistema... 🔄'), duration: Duration(milliseconds: 1500)),
               );
-
-              // Aguarda meio segundo para a usuária ver a mensagem e força o "Hard Reload"
-              // Isso destroi o cache do PWA no iPhone e baixa os dados frescos do Firestore
               Future.delayed(const Duration(milliseconds: 500), () {
                 html.window.location.reload();
               });
@@ -56,19 +50,12 @@ class ConfiguracoesScreen extends ConsumerWidget {
         children: [
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: Colors.grey.shade200),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: const Color(0xFFF5E1EC),
-                    child: const Icon(Icons.storefront, size: 30, color: primaryColor),
-                  ),
+                  const CircleAvatar(radius: 28, backgroundColor: Color(0xFFF5E1EC), child: Icon(Icons.storefront, size: 30, color: primaryColor)),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -103,11 +90,22 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1, indent: 56),
                 ListTile(
-                  leading: const Icon(Icons.account_balance_wallet, color: Colors.green),
+                  leading: const Icon(Icons.account_balance_wallet, color: Colors.redAccent),
                   title: const Text('Gestão de Despesas', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Custos Fixos, Parcelados e Regulares', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DespesasScreen())),
+                ),
+                // ==========================================
+                // NOSSO NOVO BOTÃO ENTRA AQUI
+                // ==========================================
+                const Divider(height: 1, indent: 56),
+                ListTile(
+                  leading: const Icon(Icons.trending_up, color: Colors.green),
+                  title: const Text('Resultados Financeiros', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Receitas, DRE, Caixa e Gráficos', style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanceiroScreen())),
                 ),
               ],
             ),
@@ -123,15 +121,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
             child: Column(
               children: [
-                ListTile(
-                  leading: const Icon(Icons.cloud_download_outlined, color: Colors.blueGrey),
-                  title: const Text('Backup de Dados'),
-                  trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo de backup em nuvem em desenvolvimento.')));
-                  },
-                ),
-                const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App'),
