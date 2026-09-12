@@ -7,7 +7,6 @@ import 'dart:html' as html;
 import 'analise_ia_screen.dart';
 import '../../financeiro/screens/despesas_screen.dart';
 import '../../financeiro/controllers/despesa_controller.dart';
-// IMPORTAMOS A NOVA TELA AQUI
 import '../../financeiro/screens/financeiro_screen.dart';
 
 class ConfiguracoesScreen extends ConsumerWidget {
@@ -96,9 +95,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DespesasScreen())),
                 ),
-                // ==========================================
-                // NOSSO NOVO BOTÃO ENTRA AQUI
-                // ==========================================
                 const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.trending_up, color: Colors.green),
@@ -121,6 +117,16 @@ class ConfiguracoesScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
             child: Column(
               children: [
+                // BOTÃO DE BACKUP RESTAURADO AQUI
+                ListTile(
+                  leading: const Icon(Icons.cloud_download_outlined, color: Colors.blueGrey),
+                  title: const Text('Backup de Dados'),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo de backup em nuvem em desenvolvimento.')));
+                  },
+                ),
+                const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App'),
