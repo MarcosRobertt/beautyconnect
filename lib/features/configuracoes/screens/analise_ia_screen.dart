@@ -129,8 +129,22 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
               final servicosMes = <String, double>{};
               final servicosMesAnterior = <String, double>{};
               final faturamentoPorDia = <int, double>{}; 
+              final faturamentoPorDiaAnterior = <int, double>{}; 
               final ocupacaoPorDiaSemana = {2: 0, 3: 0, 4: 0, 5: 0, 6: 0};
 
+              final Set<String> clientesAtendidosMes = {};
+              final Set<String> clientesAtendidosMesAnterior = {};
+              final Map<String, DateTime> primeiraVisitaCliente = {};
+
+              // Mapeia a primeira visita histórica de cada cliente
+              for (final a in todos) {
+                if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
+                if (!primeiraVisitaCliente.containsKey(a.clienteId) || a.data.isBefore(primeiraVisitaCliente[a.clienteId]!)) {
+                  primeiraVisitaCliente[a.clienteId] = a.data;
+                }
+              }
+
+              // Processa faturamento e contagens do mês selecionado e anterior
               for (final a in todos) {
                 if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
 
@@ -140,15 +154,39 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                   minutosMes += a.duracaoMinutos;
                   servicosMes[a.servico] = (servicosMes[a.servico] ?? 0) + a.valor;
                   faturamentoPorDia[a.data.day] = (faturamentoPorDia[a.data.day] ?? 0) + a.valor;
+                  clientesAtendidosMes.add(a.clienteId);
 
                   if (ocupacaoPorDiaSemana.containsKey(a.data.weekday)) ocupacaoPorDiaSemana[a.data.weekday] = ocupacaoPorDiaSemana[a.data.weekday]! + 1;
-                } else if (a.data.isAfter(inicioMesAnterior.subtract(const Duration(seconds: 1))) && a.data.isBefore(fimMesAnterior.add(const Duration(seconds: 1)))) {
+                } 
+                else if (a.data.isAfter(inicioMesAnterior.subtract(const Duration(seconds: 1))) && a.data.isBefore(fimMesAnterior.add(const Duration(seconds: 1)))) {
                   receitaMesAnterior += a.valor;
                   procedimentosMesAnterior++;
                   minutosMesAnterior += a.duracaoMinutos;
                   servicosMesAnterior[a.servico] = (servicosMesAnterior[a.servico] ?? 0) + a.valor;
+                  faturamentoPorDiaAnterior[a.data.day] = (faturamentoPorDiaAnterior[a.data.day] ?? 0) + a.valor;
+                  clientesAtendidosMesAnterior.add(a.clienteId);
                 }
               }
+
+              // Determina clientes novas para cada período específico
+              int clientesNovasMes = 0;
+              for (String cid in clientesAtendidosMes) {
+                final pv = primeiraVisitaCliente[cid];
+                if (pv != null && pv.isAfter(inicioMes.subtract(const Duration(seconds: 1))) && pv.isBefore(fimMes.add(const Duration(seconds: 1)))) {
+                  clientesNovasMes++;
+                }
+              }
+
+              int clientesNovasMesAnterior = 0;
+              for (String cid in clientesAtendidosMesAnterior) {
+                final pv = primeiraVisitaCliente[cid];
+                if (pv != null && pv.isAfter(inicioMesAnterior.subtract(const Duration(seconds: 1))) && pv.isBefore(fimMesAnterior.add(const Duration(seconds: 1)))) {
+                  clientesNovasMesAnterior++;
+                }
+              }
+
+              final diasTrabalhadosMes = faturamentoPorDia.keys.length;
+              final diasTrabalhadosMesAnterior = faturamentoPorDiaAnterior.keys.length;
 
               final tmMes = procedimentosMes > 0 ? receitaMes / procedimentosMes : 0.0;
               final tmMesAnterior = procedimentosMesAnterior > 0 ? receitaMesAnterior / procedimentosMesAnterior : 0.0;
@@ -234,6 +272,8 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  
+                  // CARDS FINANCEIROS
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
@@ -246,6 +286,29 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                       ],
                     ),
                   ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // CARDS DE PRODUTIVIDADE E ENGAJAMENTO (HISTÓRICO E ATUAL)
+                  Text('Produtividade & Engajamento', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _CardMetricaIA(titulo: 'Atendimentos', valorAtual: procedimentosMes.toDouble(), valorAnterior: procedimentosMesAnterior.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        const SizedBox(width: 12),
+                        _CardMetricaIA(titulo: 'Clientes Atendidas', valorAtual: clientesAtendidosMes.length.toDouble(), valorAnterior: clientesAtendidosMesAnterior.length.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        const SizedBox(width: 12),
+                        _CardMetricaIA(titulo: 'Clientes Novas ✨', valorAtual: clientesNovasMes.toDouble(), valorAnterior: clientesNovasMesAnterior.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        const SizedBox(width: 12),
+                        _CardMetricaIA(titulo: 'Horas Trabalhadas', valorAtual: horasMes, valorAnterior: horasMesAnterior, ehMoeda: false, isDecimal: true, ehPrevisao: ehMesAtual),
+                        const SizedBox(width: 12),
+                        _CardMetricaIA(titulo: 'Dias Trabalhados', valorAtual: diasTrabalhadosMes.toDouble(), valorAnterior: diasTrabalhadosMesAnterior.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                      ],
+                    ),
+                  ),
+                  
                   const SizedBox(height: 24),
                   
                   _CalendarioMensalCalor(mesReferencia: _mesSelecionado, faturamentoPorDia: faturamentoPorDia),
@@ -269,7 +332,7 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                         const SizedBox(height: 16),
                         _BlocoTextoIA(
                           titulo: 'Eficiência de Tempo:',
-                          texto: 'Você trabalhou ${horasMes.toStringAsFixed(1)} horas neste mês. '
+                          texto: 'Você trabalhou ${horasMes.toStringAsFixed(1)} horas neste mês em $diasTrabalhadosMes dias. '
                                  'Sua hora na cadeira rendeu ${formatarMoedaIA(rentabilidadeHora)} '
                                  '(${rentabilidadeHora > rentabilidadeHoraAnterior ? 'crescimento' : 'queda'} vs mês passado).',
                         ),
@@ -421,12 +484,14 @@ class _CardMetricaIA extends StatelessWidget {
     required this.valorAtual,
     required this.valorAnterior,
     required this.ehMoeda,
+    this.isDecimal = false,
     this.ehPrevisao = false,
   });
 
   final String titulo;
   final double valorAtual, valorAnterior;
   final bool ehMoeda;
+  final bool isDecimal;
   final bool ehPrevisao;
 
   @override
@@ -443,7 +508,9 @@ class _CardMetricaIA extends StatelessWidget {
       else { corBadge = Colors.amber.shade700; iconeSeta = Icons.trending_flat; }
     } else if (valorAtual > 0) { corBadge = Colors.green; iconeSeta = Icons.trending_up; txtEvolucao = 'Novo!'; }
 
-    final exibicaoValor = ehMoeda ? formatarMoedaIA(valorAtual) : valorAtual.toInt().toString();
+    final String exibicaoValor = ehMoeda 
+        ? formatarMoedaIA(valorAtual) 
+        : (isDecimal ? valorAtual.toStringAsFixed(1) : valorAtual.toInt().toString());
 
     return Container(
       width: 140, padding: const EdgeInsets.all(12),
