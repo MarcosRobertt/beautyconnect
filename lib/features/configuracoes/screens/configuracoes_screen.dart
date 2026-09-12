@@ -45,7 +45,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             
-            // Botão Exportar
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -76,7 +75,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
 
-            // Botão Restaurar
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
