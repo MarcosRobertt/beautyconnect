@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart5:convert';
 import 'dart:html' as html;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,17 +10,37 @@ final backupControllerProvider = Provider<BackupController>((ref) {
 class BackupController {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Lê as coleções do Firebase e baixa um arquivo JSON no dispositivo de forma segura para a Web
+  /// Função auxiliar para converter Timestamps e tipos nativos do Firestore em dados aceitos pelo JSON
+  dynamic _sanitizarParaJson(dynamic input) {
+    if (input == null) return null;
+    if (input is Timestamp) return input.toDate().toIso8601String();
+    if (input is DateTime) return input.toIso8601String();
+    if (input is Map) {
+      final Map<String, dynamic> result = {};
+      input.forEach((key, value) {
+        result[key.toString()] = _sanitizarParaJson(value);
+      });
+      return result;
+    }
+    if (input is List) {
+      return input.map((item) => _sanitizarParaJson(item)).toList();
+    }
+    if (input is num || input is bool || input is String) {
+      return input;
+    }
+    return input.toString();
+  }
+
+  /// Lê as coleções do Firebase e baixa o arquivo JSON sanitizado no dispositivo
   Future<void> exportarBackupJson() async {
     final Map<String, dynamic> colecoesMap = {};
     final colecoes = ['agendamentos', 'despesas', 'clientes', 'servicos'];
 
     for (final colecao in colecoes) {
       final snapshot = await _db.collection(colecao).get();
-      // Converte a estrutura interna do Firestore Web para um Map genérico sem estourar cast na minificação
       final listaDocumentos = snapshot.docs.map((doc) {
         final data = doc.data();
-        return Map<String, dynamic>.from(data);
+        return _sanitizarParaJson(data);
       }).toList();
       
       colecoesMap[colecao] = listaDocumentos;
@@ -83,7 +103,6 @@ class BackupController {
         batch.set(docRef, mapDoc, SetOptions(merge: true));
         contador++;
 
-        // Limite de segurança do Firestore (máximo 500 operações por batch)
         if (contador == 450) {
           await batch.commit();
           batch = _db.batch();
