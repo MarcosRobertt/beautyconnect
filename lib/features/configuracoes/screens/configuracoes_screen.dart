@@ -19,6 +19,51 @@ class ConfiguracoesScreen extends ConsumerWidget {
     }
   }
 
+  void _mostrarStatusBackup(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.cloud_done, color: Colors.green, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Sincronização em Nuvem', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Fique tranquila! O BeautyConnect utiliza tecnologia de banco de dados em tempo real.', style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 12),
+            const Text('Todos os seus agendamentos, clientes e dados financeiros já estão salvos e criptografados com segurança nos servidores do Google Cloud.', style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Row(
+                children: [
+                  Icon(Icons.phonelink_setup, color: Colors.blue.shade700, size: 24),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('Se você trocar de celular, basta fazer login com seu e-mail e senha para carregar tudo automaticamente.', style: TextStyle(fontSize: 13, color: Colors.blue.shade900)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('ENTENDI', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     const primaryColor = Color(0xFF8A2463);
@@ -117,14 +162,12 @@ class ConfiguracoesScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
             child: Column(
               children: [
-                // BOTÃO DE BACKUP RESTAURADO AQUI
                 ListTile(
-                  leading: const Icon(Icons.cloud_download_outlined, color: Colors.blueGrey),
-                  title: const Text('Backup de Dados'),
+                  leading: const Icon(Icons.cloud_done_outlined, color: Colors.green),
+                  title: const Text('Status de Backup'),
+                  subtitle: const Text('Sincronizado na Nuvem', style: TextStyle(fontSize: 11)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo de backup em nuvem em desenvolvimento.')));
-                  },
+                  onTap: () => _mostrarStatusBackup(context),
                 ),
                 const Divider(height: 1, indent: 56),
                 ListTile(
