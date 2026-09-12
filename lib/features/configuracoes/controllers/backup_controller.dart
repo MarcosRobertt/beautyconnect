@@ -10,7 +10,7 @@ final backupControllerProvider = Provider<BackupController>((ref) {
 class BackupController {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Função auxiliar para converter Timestamps e tipos nativos do Firestore em dados aceitos pelo JSON
+  /// Função auxiliar para converter Timestamps e tipos nativos do Firestore
   dynamic _sanitizarParaJson(dynamic input) {
     if (input == null) return null;
     if (input is Timestamp) return input.toDate().toIso8601String();
@@ -39,7 +39,10 @@ class BackupController {
     for (final colecao in colecoes) {
       final snapshot = await _db.collection(colecao).get();
       final listaDocumentos = snapshot.docs.map((doc) {
-        final data = doc.data();
+        // Pega os dados e força a gravação do ID original ("A placa do carro")
+        final Map<String, dynamic> data = Map<String, dynamic>.from(doc.data());
+        data['id'] = doc.id; 
+        
         return _sanitizarParaJson(data);
       }).toList();
       
@@ -65,7 +68,7 @@ class BackupController {
     html.Url.revokeObjectUrl(url);
   }
 
-  /// Lê um arquivo JSON selecionado pelo usuário e grava os dados de volta no Firestore via WriteBatch
+  /// Lê o JSON e grava de volta no Firestore mantendo o ID original
   Future<void> restaurarBackupJson() async {
     final uploadInput = html.FileUploadInputElement()..accept = '.json';
     uploadInput.click();
@@ -97,6 +100,8 @@ class BackupController {
 
       for (final docData in documentos) {
         final Map<String, dynamic> mapDoc = Map<String, dynamic>.from(docData as Map);
+        
+        // Agora ele sempre vai achar o ID original aqui!
         final String id = mapDoc['id'] ?? _db.collection(nomeColecao).doc().id;
         final docRef = _db.collection(nomeColecao).doc(id);
         
