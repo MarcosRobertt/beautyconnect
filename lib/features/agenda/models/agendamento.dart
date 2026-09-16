@@ -10,6 +10,7 @@ enum AgendamentoStatus {
 
 enum FormaPagamento {
   pix('Pix'),
+  dinheiro('Dinheiro'),
   credito('Cartão de Crédito'),
   debito('Cartão de Débito'),
   dinheiro('Dinheiro'),
