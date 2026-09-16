@@ -6,7 +6,7 @@ final clienteControllerProvider = StateNotifierProvider<ClienteController, Async
   return ClienteController();
 });
 
-// CORREÇÃO: Agora o provedor expõe a classe correta com os métodos para o Dashboard
+// ALIAS: Mantido para não quebrar a tela do Dashboard (dashboard_controller.dart)
 final clienteRepositoryProvider = Provider<ClienteController>((ref) {
   return ref.watch(clienteControllerProvider.notifier);
 });
@@ -34,11 +34,12 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
-  // CORREÇÃO: Método listar para manter a compatibilidade com o DashboardController
+  // MÉTODO COMPATIBILIDADE: Necessário para o Dashboard
   Future<List<Cliente>> listar() async {
     return state.value ?? [];
   }
 
+  // MÉTODO COMPATIBILIDADE: Necessário para o Formulário de Cliente
   Future<Cliente?> buscar(String id) async {
     final clientesAtuais = state.value ?? [];
     try {
@@ -54,14 +55,19 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     return null;
   }
 
+  // LÓGICA PRINCIPAL CORRIGIDA: Permite salvar edição com o mesmo telefone
   Future<void> salvar(Cliente cliente) async {
     final clientesAtuais = state.value ?? [];
+    
+    // Higieniza o número removendo espaços e traços
     final telLimpoNovo = cliente.telefone.replaceAll(RegExp(r'\D'), '');
 
     if (telLimpoNovo.isNotEmpty) {
       final jaExisteOutro = clientesAtuais.any((c) {
         final telLimpoExistente = c.telefone.replaceAll(RegExp(r'\D'), '');
         final ehMesmoTelefone = telLimpoExistente == telLimpoNovo;
+        
+        // REGRA CHAVE: O bloqueio só ocorre se o ID for DIFERENTE do cliente atual
         final ehOutroCliente = c.id != cliente.id;
 
         return ehMesmoTelefone && ehOutroCliente;
@@ -75,9 +81,11 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     final mapData = cliente.toMap();
 
     if (cliente.id.isEmpty) {
+      // É um cadastro novo
       final docRef = await _db.collection('clientes').add(mapData);
       await docRef.update({'id': docRef.id});
     } else {
+      // É uma edição
       await _db.collection('clientes').doc(cliente.id).set(
         mapData,
         SetOptions(merge: true),
@@ -85,6 +93,7 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
+  // MÉTODO COMPATIBILIDADE: Necessário para o Formulário de Cliente
   Future<void> editar(Cliente cliente) async {
     await salvar(cliente);
   }
@@ -95,10 +104,12 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
+  // MÉTODO COMPATIBILIDADE: Necessário para o Formulário de Cliente
   Future<void> excluir(String id) async {
     await deletar(id);
   }
 
+  // ALERTA VISUAL: Avisa sobre nomes parecidos sem bloquear o salvamento
   List<Cliente> verificarNomesSemelhantes(String nome, {String? idAtual}) {
     if (nome.trim().length < 3) return [];
     final clientesAtuais = state.value ?? [];
