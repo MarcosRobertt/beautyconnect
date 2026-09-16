@@ -6,6 +6,9 @@ final clienteControllerProvider = StateNotifierProvider<ClienteController, Async
   return ClienteController();
 });
 
+// Alias de provedor para compatibilidade com o DashboardController
+final clienteRepositoryProvider = clienteControllerProvider;
+
 class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
   ClienteController() : super(const AsyncValue.loading()) {
     carregarClientes();
@@ -30,20 +33,33 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
-  /// Salva um novo cliente ou atualiza um existente ignorando o próprio ID na validação de duplicidade
+  /// Localiza um cliente por ID na memória ou diretamente no Firestore
+  Future<Cliente?> buscar(String id) async {
+    final clientesAtuais = state.value ?? [];
+    try {
+      return clientesAtuais.firstWhere((c) => c.id == id);
+    } catch (_) {
+      final doc = await _db.collection('clientes').doc(id).get();
+      if (doc.exists && doc.data() != null) {
+        final data = doc.data()!;
+        data['id'] = doc.id;
+        return Cliente.fromMap(data);
+      }
+    }
+    return null;
+  }
+
+  /// Salva um novo cliente ou atualiza um existente ignorando o próprio ID na validação
   Future<void> salvar(Cliente cliente) async {
     final clientesAtuais = state.value ?? [];
 
-    // Higieniza o número removendo formatação (espaços, traços, parênteses)
     final telLimpoNovo = cliente.telefone.replaceAll(RegExp(r'\D'), '');
 
     if (telLimpoNovo.isNotEmpty) {
-      // Verifica se o telefone pertence a um cliente DIFERENTE do que está sendo editado
       final jaExisteOutro = clientesAtuais.any((c) {
         final telLimpoExistente = c.telefone.replaceAll(RegExp(r'\D'), '');
-        
         final ehMesmoTelefone = telLimpoExistente == telLimpoNovo;
-        final ehOutroCliente = c.id != cliente.id; // Permite edição se for o mesmo ID
+        final ehOutroCliente = c.id != cliente.id;
 
         return ehMesmoTelefone && ehOutroCliente;
       });
@@ -56,11 +72,9 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     final mapData = cliente.toMap();
 
     if (cliente.id.isEmpty) {
-      // Novo Cadastro
       final docRef = await _db.collection('clientes').add(mapData);
       await docRef.update({'id': docRef.id});
     } else {
-      // Edição de Cadastro Existente
       await _db.collection('clientes').doc(cliente.id).set(
         mapData,
         SetOptions(merge: true),
@@ -68,11 +82,21 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
+  /// Alias de edição para compatibilidade com o formulário de clientes
+  Future<void> editar(Cliente cliente) async {
+    await salvar(cliente);
+  }
+
   /// Remove um cliente da base de dados
   Future<void> deletar(String id) async {
     if (id.isNotEmpty) {
       await _db.collection('clientes').doc(id).delete();
     }
+  }
+
+  /// Alias de exclusão para compatibilidade com o formulário de clientes
+  Future<void> excluir(String id) async {
+    await deletar(id);
   }
 
   /// Retorna lista de clientes com nomes parecidos para alerta preventivo não-bloqueante
