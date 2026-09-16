@@ -13,7 +13,6 @@ enum FormaPagamento {
   dinheiro('Dinheiro'),
   credito('Cartão de Crédito'),
   debito('Cartão de Débito'),
-  dinheiro('Dinheiro'),
   permuta('Permuta'),
   pendente('Pendente (Comanda Aberta)');
 
