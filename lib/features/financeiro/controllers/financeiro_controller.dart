@@ -63,7 +63,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   DateTime _mesAtual = DateTime.now();
   int _anoAtual = DateTime.now().year;
 
-  /// NOVA LÓGICA DE TAXAS: Dinheiro e Pix = 0% de taxa
+  /// LÓGICA DE TAXAS: Dinheiro e Pix = 0% de taxa
   static double calcularTaxa(String forma, double valorBruto) {
     final f = forma.trim().toLowerCase();
     if (f == 'dinheiro' || f == 'pix') {
@@ -74,6 +74,20 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       return valorBruto * 0.0199; // Exemplo: 1.99% de taxa de débito
     }
     return 0.0;
+  }
+
+  /// NORMALIZADOR: Padroniza o nome vindo do banco de dados para evitar duplicações no gráfico
+  String _normalizarFormaPagamento(String formaOriginal) {
+    final f = formaOriginal.trim().toLowerCase();
+    if (f == 'pix') return 'Pix';
+    if (f == 'dinheiro') return 'Dinheiro';
+    if (f.contains('crédito') || f.contains('credito')) return 'Cartão de Crédito';
+    if (f.contains('débito') || f.contains('debito')) return 'Cartão de Débito';
+    if (f == 'pendente') return 'Pendente';
+    
+    // Se o banco retornar algo desconhecido, mantém a primeira letra maiúscula
+    if (formaOriginal.isEmpty) return 'Outros';
+    return formaOriginal[0].toUpperCase() + formaOriginal.substring(1).toLowerCase();
   }
 
   // Função auxiliar para buscar totais sem sujar o código principal
@@ -127,7 +141,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       double totalTaxas = 0;
       Map<String, double> topServicosMap = {};
       
-      // Inicializando todas as formas de pagamento zeradas
+      // Inicializando todas as formas de pagamento oficiais zeradas
       Map<String, double> formasPgtoMap = {
         'Pix': 0.0,
         'Dinheiro': 0.0,
@@ -143,17 +157,22 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         final data = doc.data();
         final valor = (data['valorLiquido'] ?? data['valor'] ?? 0).toDouble();
         final servico = data['servico'] ?? 'Outros';
-        final forma = data['formaPagamento'] ?? 'Outros';
+        
+        // Pega a string que veio do banco e envia para o Normalizador
+        final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
+        final formaNormalizada = _normalizarFormaPagamento(formaRaw);
+        
         final dataAgenda = DateTime.parse(data['data']);
 
         totalReceitas += valor;
         totalTaxas += (data['valorTaxa'] ?? 0).toDouble();
         topServicosMap[servico] = (topServicosMap[servico] ?? 0) + valor;
         
-        if (formasPgtoMap.containsKey(forma)) {
-          formasPgtoMap[forma] = formasPgtoMap[forma]! + valor;
+        // Soma na chave normalizada (Ex: tudo cai no 'Pix' com P maiúsculo)
+        if (formasPgtoMap.containsKey(formaNormalizada)) {
+          formasPgtoMap[formaNormalizada] = formasPgtoMap[formaNormalizada]! + valor;
         } else {
-          formasPgtoMap[forma] = (formasPgtoMap[forma] ?? 0) + valor;
+          formasPgtoMap[formaNormalizada] = valor;
         }
         
         fluxoDiario[dataAgenda.day]!['receita'] = fluxoDiario[dataAgenda.day]!['receita']! + valor;
