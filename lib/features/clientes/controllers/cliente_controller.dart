@@ -1,64 +1,90 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import '../models/cliente.dart';
-import '../repositories/cliente_repository.dart';
 
-// Repositório do Firestore desacoplado do Hive
-final clienteRepositoryProvider = Provider<ClienteRepository>((ref) {
-  return ClienteRepository(null as dynamic);
-});
-
-/// Estado exposto para as telas: lista de clientes + termo de pesquisa atual.
-final clienteControllerProvider =
-    StateNotifierProvider<ClienteController, AsyncValue<List<Cliente>>>((ref) {
-  return ClienteController(ref.watch(clienteRepositoryProvider));
-});
-
-/// Total real de clientes cadastrados, lendo diretamente do Firestore.
-final totalClientesProvider = FutureProvider<int>((ref) async {
-  ref.watch(clienteControllerProvider);
-  final repository = ref.watch(clienteRepositoryProvider);
-  final todos = await repository.listar();
-  return todos.length;
+final clienteControllerProvider = StateNotifierProvider<ClienteController, AsyncValue<List<Cliente>>>((ref) {
+  return ClienteController();
 });
 
 class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
-  ClienteController(this._repository) : super(const AsyncValue.loading()) {
-    carregar();
+  ClienteController() : super(const AsyncValue.loading()) {
+    carregarClientes();
   }
 
-  final ClienteRepository _repository;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Future<void> carregar() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _repository.listar());
+  /// Ouve as alterações na coleção de clientes em tempo real
+  Future<void> carregarClientes() async {
+    try {
+      _db.collection('clientes').snapshots().listen((snapshot) {
+        final lista = snapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id;
+          return Cliente.fromMap(data);
+        }).toList();
+        
+        state = AsyncValue.data(lista);
+      });
+    } catch (e, stack) {
+      state = AsyncValue.error(e, stack);
+    }
   }
 
-  Future<void> pesquisar(String texto) async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => _repository.pesquisar(texto));
-  }
-
+  /// Salva um novo cliente ou atualiza um existente ignorando o próprio ID na validação de duplicidade
   Future<void> salvar(Cliente cliente) async {
-    await _repository.salvar(cliente);
-    await carregar();
+    final clientesAtuais = state.value ?? [];
+
+    // Higieniza o número removendo formatação (espaços, traços, parênteses)
+    final telLimpoNovo = cliente.telefone.replaceAll(RegExp(r'\D'), '');
+
+    if (telLimpoNovo.isNotEmpty) {
+      // Verifica se o telefone pertence a um cliente DIFERENTE do que está sendo editado
+      final jaExisteOutro = clientesAtuais.any((c) {
+        final telLimpoExistente = c.telefone.replaceAll(RegExp(r'\D'), '');
+        
+        final ehMesmoTelefone = telLimpoExistente == telLimpoNovo;
+        final ehOutroCliente = c.id != cliente.id; // Permite edição se for o mesmo ID
+
+        return ehMesmoTelefone && ehOutroCliente;
+      });
+
+      if (jaExisteOutro) {
+        throw Exception('Este número de telefone já está cadastrado para outro cliente.');
+      }
+    }
+
+    final mapData = cliente.toMap();
+
+    if (cliente.id.isEmpty) {
+      // Novo Cadastro
+      final docRef = await _db.collection('clientes').add(mapData);
+      await docRef.update({'id': docRef.id});
+    } else {
+      // Edição de Cadastro Existente
+      await _db.collection('clientes').doc(cliente.id).set(
+        mapData,
+        SetOptions(merge: true),
+      );
+    }
   }
 
-  Future<void> editar(Cliente cliente) async {
-    await _repository.editar(cliente);
-    await carregar();
+  /// Remove um cliente da base de dados
+  Future<void> deletar(String id) async {
+    if (id.isNotEmpty) {
+      await _db.collection('clientes').doc(id).delete();
+    }
   }
 
-  Future<void> excluir(String id) async {
-    await _repository.excluir(id);
-    await carregar();
-  }
+  /// Retorna lista de clientes com nomes parecidos para alerta preventivo não-bloqueante
+  List<Cliente> verificarNomesSemelhantes(String nome, {String? idAtual}) {
+    if (nome.trim().length < 3) return [];
+    final clientesAtuais = state.value ?? [];
+    final nomeLower = nome.toLowerCase().trim();
 
-  Future<Cliente?> buscar(String id) => _repository.buscar(id);
-
-  /// Usado pela tela de Configurações após restaurar um backup.
-  Future<void> substituirTudo(List<Cliente> novos) async {
-    await _repository.substituirTudo(novos);
-    await carregar();
+    return clientesAtuais.where((c) {
+      final ehOutro = c.id != idAtual;
+      final contemNome = c.nome.toLowerCase().contains(nomeLower);
+      return ehOutro && contemNome;
+    }).toList();
   }
 }
