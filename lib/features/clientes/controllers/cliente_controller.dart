@@ -6,8 +6,10 @@ final clienteControllerProvider = StateNotifierProvider<ClienteController, Async
   return ClienteController();
 });
 
-// Alias de provedor para compatibilidade com o DashboardController
-final clienteRepositoryProvider = clienteControllerProvider;
+// CORREÇÃO: Agora o provedor expõe a classe correta com os métodos para o Dashboard
+final clienteRepositoryProvider = Provider<ClienteController>((ref) {
+  return ref.watch(clienteControllerProvider.notifier);
+});
 
 class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
   ClienteController() : super(const AsyncValue.loading()) {
@@ -16,7 +18,6 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Ouve as alterações na coleção de clientes em tempo real
   Future<void> carregarClientes() async {
     try {
       _db.collection('clientes').snapshots().listen((snapshot) {
@@ -33,7 +34,11 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
-  /// Localiza um cliente por ID na memória ou diretamente no Firestore
+  // CORREÇÃO: Método listar para manter a compatibilidade com o DashboardController
+  Future<List<Cliente>> listar() async {
+    return state.value ?? [];
+  }
+
   Future<Cliente?> buscar(String id) async {
     final clientesAtuais = state.value ?? [];
     try {
@@ -49,10 +54,8 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     return null;
   }
 
-  /// Salva um novo cliente ou atualiza um existente ignorando o próprio ID na validação
   Future<void> salvar(Cliente cliente) async {
     final clientesAtuais = state.value ?? [];
-
     final telLimpoNovo = cliente.telefone.replaceAll(RegExp(r'\D'), '');
 
     if (telLimpoNovo.isNotEmpty) {
@@ -82,24 +85,20 @@ class ClienteController extends StateNotifier<AsyncValue<List<Cliente>>> {
     }
   }
 
-  /// Alias de edição para compatibilidade com o formulário de clientes
   Future<void> editar(Cliente cliente) async {
     await salvar(cliente);
   }
 
-  /// Remove um cliente da base de dados
   Future<void> deletar(String id) async {
     if (id.isNotEmpty) {
       await _db.collection('clientes').doc(id).delete();
     }
   }
 
-  /// Alias de exclusão para compatibilidade com o formulário de clientes
   Future<void> excluir(String id) async {
     await deletar(id);
   }
 
-  /// Retorna lista de clientes com nomes parecidos para alerta preventivo não-bloqueante
   List<Cliente> verificarNomesSemelhantes(String nome, {String? idAtual}) {
     if (nome.trim().length < 3) return [];
     final clientesAtuais = state.value ?? [];
