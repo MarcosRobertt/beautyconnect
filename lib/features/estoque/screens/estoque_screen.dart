@@ -265,7 +265,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                               title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('${item.categoria} • Compra: ${fmtData.format(item.dataCompra)}'),
                               trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center, // <--- ERRO CORRIGIDO AQUI
+                                mainAxisAlignment: MainAxisAlignment.center, // CORREÇÃO EXATA AQUI!
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: item.emAlerta ? Colors.red : Colors.black87)),
