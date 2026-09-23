@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -266,7 +265,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                               title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('${item.categoria} • Compra: ${fmtData.format(item.dataCompra)}'),
                               trailing: Column(
-                                mainCenter: MainAxisAlignment.center,
+                                mainAxisAlignment: MainAxisAlignment.center, // <--- ERRO CORRIGIDO AQUI
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: item.emAlerta ? Colors.red : Colors.black87)),
