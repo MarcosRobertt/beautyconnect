@@ -8,6 +8,7 @@ import 'analise_ia_screen.dart';
 import '../../financeiro/screens/despesas_screen.dart';
 import '../../financeiro/controllers/despesa_controller.dart';
 import '../../financeiro/screens/financeiro_screen.dart';
+import '../../estoque/screens/estoque_screen.dart';
 import '../controllers/backup_controller.dart';
 
 class ConfiguracoesScreen extends ConsumerWidget {
@@ -199,6 +200,15 @@ class ConfiguracoesScreen extends ConsumerWidget {
                   subtitle: const Text('Receitas, DRE, Caixa e Gráficos', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanceiroScreen())),
+                ),
+                const Divider(height: 1, indent: 56),
+                // NOVO BOTÃO: Estoque de Insumos
+                ListTile(
+                  leading: const Icon(Icons.inventory_2_outlined, color: Colors.deepOrange),
+                  title: const Text('Estoque de Insumos', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Controle de Produtos, Compras e Alertas', style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueScreen())),
                 ),
               ],
             ),
