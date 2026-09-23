@@ -13,6 +13,7 @@ import '../../features/clientes/screens/historico_cliente_screen.dart';
 import '../../features/configuracoes/screens/analise_ia_screen.dart';
 import '../../features/configuracoes/screens/configuracoes_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
+import '../../features/estoque/screens/estoque_screen.dart';
 import '../../features/servicos/screens/servico_form_screen.dart';
 import '../../features/servicos/screens/servicos_screen.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -45,42 +46,34 @@ final appRouter = GoRouter(
     final usuarioLogado = usuario != null;
     final estaNaTelaLogin = state.matchedLocation == '/login';
 
-    // 1. Não está logado -> Trava na tela de login
     if (!usuarioLogado && !estaNaTelaLogin) {
       return '/login';
     }
 
-    // 2. Está logado -> Inicia a verificação de segurança temporal
     if (usuarioLogado) {
       final ultimoLogin = usuario.metadata.lastSignInTime;
 
       if (ultimoLogin != null) {
         final agora = DateTime.now();
-        // weekday: 1 = Segunda, 2 = Terça ... 7 = Domingo
         final diasDesdeSegunda = agora.weekday - 1; 
         
-        // Descobre exatamente quando foi a segunda-feira desta semana às 00:00:00
         final ultimaSegundaFeira = DateTime(
           agora.year, 
           agora.month, 
           agora.day,
         ).subtract(Duration(days: diasDesdeSegunda));
 
-        // Se o login for mais antigo que a segunda-feira atual às 00:00, expirou!
         if (ultimoLogin.isBefore(ultimaSegundaFeira)) {
-          // Desconecta o usuário no Firebase imediatamente e avisa o GoRouter
           FirebaseAuth.instance.signOut();
           return '/login';
         }
       }
 
-      // Se passou na verificação de tempo e tentou ir pro login, joga pro painel
       if (estaNaTelaLogin) {
         return AppRoutes.dashboard;
       }
     }
 
-    // Navegação permitida livremente
     return null;
   },
   routes: [
@@ -159,6 +152,12 @@ final appRouter = GoRouter(
       path: '/consultoria-ia',
       parentNavigatorKey: rootNavigatorKey,
       builder: (context, state) => const AnaliseIaScreen(),
+    ),
+    // ROTA ADICIONADA: Estoque de Insumos
+    GoRoute(
+      path: '/estoque',
+      parentNavigatorKey: rootNavigatorKey,
+      builder: (context, state) => const EstoqueScreen(),
     ),
   ],
 );
