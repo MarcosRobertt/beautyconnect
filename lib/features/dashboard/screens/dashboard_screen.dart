@@ -31,7 +31,6 @@ String _formatarDiaCurto(DateTime data) {
   return '${diasSemana[data.weekday - 1]}, ${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}';
 }
 
-// MOTOR DE INTELIGÊNCIA: Preservado, mas inativo visualmente para uso futuro.
 String gerarDicaEstrategica(Cliente? cliente, Agendamento agendamento) {
   if (cliente == null || cliente.id == 'BLOQUEIO') return 'Dica IA: Confirme o horário com antecedência para evitar buracos na agenda.';
   
@@ -82,7 +81,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
     
-    // NOTIFICAÇÕES (Aniversários e Inativas)
     final aniversariantesProximos = clientes.where((c) {
       if (c.aniversario == null) return false;
       var niverEsteAno = DateTime(hoje.year, c.aniversario!.month, c.aniversario!.day);
@@ -111,7 +109,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
     final totalNotificacoes = aniversariantesProximos.length + inativas.length;
 
-    // CÁLCULOS COMPARATIVOS DOS PERÍODOS
     final ontemZerado = hojeZerado.subtract(const Duration(days: 1));
     final inicioSemanaAtual = hojeZerado.subtract(Duration(days: hojeZerado.weekday - 1));
     final inicioSemanaAnterior = inicioSemanaAtual.subtract(const Duration(days: 7));
@@ -133,21 +130,18 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       final d = a.data;
       final val = a.valor;
       
-      // Hoje vs Ontem
       if (d.year == hoje.year && d.month == hoje.month && d.day == hoje.day) {
         fatHoje += val; qtdHoje++;
       } else if (d.year == ontemZerado.year && d.month == ontemZerado.month && d.day == ontemZerado.day) {
         fatOntem += val; qtdOntem++;
       }
 
-      // Semana vs Semana Passada
       if (!d.isBefore(inicioSemanaAtual)) {
         fatSemana += val; qtdSemana++;
       } else if (!d.isBefore(inicioSemanaAnterior) && !d.isAfter(fimSemanaAnterior)) {
         fatSemanaAnt += val; qtdSemanaAnt++;
       }
 
-      // Mês vs Mês Passado
       if (!d.isBefore(inicioMesAtual)) {
         fatMes += val; qtdMes++;
       } else if (!d.isBefore(inicioMesAnterior) && !d.isAfter(fimMesAnterior)) {
@@ -155,7 +149,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       }
     }
 
-    // Calculando Ticket Médio
     final tmHoje = qtdHoje > 0 ? fatHoje / qtdHoje : 0.0;
     final tmOntem = qtdOntem > 0 ? fatOntem / qtdOntem : 0.0;
     final tmSemana = qtdSemana > 0 ? fatSemana / qtdSemana : 0.0;
@@ -163,13 +156,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final tmMes = qtdMes > 0 ? fatMes / qtdMes : 0.0;
     final tmMesAnt = qtdMesAnt > 0 ? fatMesAnt / qtdMesAnt : 0.0;
 
-    // Resoluções de acordo com os filtros escolhidos
     final valFatAtual = _periodoFaturamento == 'Hoje' ? fatHoje : (_periodoFaturamento == 'Semana' ? fatSemana : fatMes);
     final valFatAnt = _periodoFaturamento == 'Hoje' ? fatOntem : (_periodoFaturamento == 'Semana' ? fatSemanaAnt : fatMesAnt);
     final valTMAtual = _periodoTM == 'Hoje' ? tmHoje : (_periodoTM == 'Semana' ? tmSemana : tmMes);
     final valTMAnt = _periodoTM == 'Hoje' ? tmOntem : (_periodoTM == 'Semana' ? tmSemanaAnt : tmMesAnt);
 
-    // LÓGICA DAS COMANDAS PENDENTES (Dias Anteriores)
     final comandasPendentes = todosAgendamentos.where((a) =>
         a.clienteId != 'BLOQUEIO' &&
         a.status == AgendamentoStatus.agendado &&
@@ -237,7 +228,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (m) {
-          // Filtragem da lista do "Plano de Voo"
           List<Agendamento> agendaFiltro = [];
           if (_filtroPlanoVoo == 'Hoje') {
             agendaFiltro = m.agendaHoje;
@@ -259,7 +249,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               Text('Painel Estratégico de Desempenho.', style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(height: 20),
               
-              // GRID DE MÉTRICAS
               GridView.count(
                 crossAxisCount: larguraTela > 800 ? 4 : (larguraTela < 360 ? 1 : 2),
                 shrinkWrap: true,
@@ -305,7 +294,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 24),
 
-              // NOVO MÓDULO: ALERTA DE COMANDAS PENDENTES
               if (comandasPendentes.isNotEmpty) ...[
                 Card(
                   color: Colors.orange.shade50,
@@ -340,7 +328,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 const SizedBox(height: 24),
               ],
 
-              // 1. LISTA ORIGINAL: AGENDA DE HOJE
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16),
@@ -409,9 +396,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 }
 
-// -----------------------------------------------------------------------------
-// NOVO MODAL: LISTAGEM DAS COMANDAS PENDENTES
-// -----------------------------------------------------------------------------
 class _ModalComandasPendentes extends ConsumerWidget {
   const _ModalComandasPendentes();
 
@@ -432,20 +416,32 @@ class _ModalComandasPendentes extends ConsumerWidget {
         nomeCliente: nomeCliente,
         onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) {
           final obsAtual = agendamento.observacao;
-          final novaObs = houveAtraso && !obsAtual.contains('[Cliente Atrasou]')
-              ? (obsAtual.isEmpty ? '[Cliente Atrasou]' : '$obsAtual | [Cliente Atrasou]')
-              : obsAtual;
-
-          FormaPagamento formaPrincipal = FormaPagamento.pix;
-          if (pagamentos.isNotEmpty) {
-            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
-            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+          String novaObs = obsAtual;
+          
+          if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
+            novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
           }
 
-          final pagamentosMistos = pagamentos.map((p) => {
-            'forma': (p['forma'] as FormaPagamento).name,
-            'valor': p['valor'],
-          }).toList();
+          FormaPagamento formaPrincipal = FormaPagamento.pix;
+          String detalhePagamentoStr = '';
+
+          if (pagamentos.isNotEmpty) {
+            // Define a forma principal baseada no maior valor
+            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
+            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+            
+            // Monta o Fallback Textual para o campo de observações
+            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+            final listaDetalhes = pagamentos.map((p) => '${(p['forma'] as FormaPagamento).rotulo}: ${formataMoeda(p['valor'] as double)}').join(' | ');
+            final dataBaixaStr = '${dataPagamento.day.toString().padLeft(2, '0')}/${dataPagamento.month.toString().padLeft(2, '0')}/${dataPagamento.year}';
+            
+            detalhePagamentoStr = '[Baixa Financeira: $dataBaixaStr -> $listaDetalhes]';
+          }
+
+          // Se houver múltiplas formas ou mudança de data, anota de forma inquebrável
+          if (detalhePagamentoStr.isNotEmpty) {
+             novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
+          }
 
           final atualizado = agendamento.copyWith(
             status: AgendamentoStatus.concluido,
@@ -453,11 +449,6 @@ class _ModalComandasPendentes extends ConsumerWidget {
             valor: valorFinal,
             observacao: novaObs,
           );
-
-          // Atualizamos no backend considerando os dados extras não oficiais da classe
-          final mapaAtualizado = atualizado.toMap();
-          mapaAtualizado['dataPagamento'] = dataPagamento.toIso8601String();
-          mapaAtualizado['pagamentosMistos'] = pagamentosMistos;
 
           ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
         },
@@ -577,10 +568,6 @@ class _ModalComandasPendentes extends ConsumerWidget {
     );
   }
 }
-
-// -----------------------------------------------------------------------------
-// COMPONENTES AUXILIARES (Modais e Cards)
-// -----------------------------------------------------------------------------
 
 class _ModalFecharComandaDashboard extends StatefulWidget {
   const _ModalFecharComandaDashboard({
