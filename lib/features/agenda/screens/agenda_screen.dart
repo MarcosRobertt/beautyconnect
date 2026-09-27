@@ -109,18 +109,39 @@ class AgendaScreen extends ConsumerWidget {
       builder: (context) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        onConfirmar: (forma, valorFinal, houveAtraso) {
+        onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) {
           final obsAtual = agendamento.observacao;
-          final novaObs = houveAtraso && !obsAtual.contains('[Cliente Atrasou]')
-              ? (obsAtual.isEmpty ? '[Cliente Atrasou]' : '$obsAtual | [Cliente Atrasou]')
-              : obsAtual;
+          String novaObs = obsAtual;
+          
+          if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
+            novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
+          }
+
+          FormaPagamento formaPrincipal = FormaPagamento.pix;
+          String detalhePagamentoStr = '';
+
+          if (pagamentos.isNotEmpty) {
+            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
+            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+            
+            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+            final listaDetalhes = pagamentos.map((p) => '${(p['forma'] as FormaPagamento).rotulo}: ${formataMoeda(p['valor'] as double)}').join(' | ');
+            final dataBaixaStr = '${dataPagamento.day.toString().padLeft(2, '0')}/${dataPagamento.month.toString().padLeft(2, '0')}/${dataPagamento.year}';
+            
+            detalhePagamentoStr = '[Baixa Financeira: $dataBaixaStr -> $listaDetalhes]';
+          }
+
+          if (detalhePagamentoStr.isNotEmpty) {
+             novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
+          }
 
           final atualizado = agendamento.copyWith(
             status: AgendamentoStatus.concluido,
-            formaPagamento: forma,
+            formaPagamento: formaPrincipal,
             valor: valorFinal,
             observacao: novaObs,
           );
+
           ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
         },
         onCancelarAtendimento: () {
@@ -260,7 +281,7 @@ class ModalFecharComanda extends StatefulWidget {
 
   final Agendamento agendamento;
   final String nomeCliente;
-  final void Function(FormaPagamento forma, double valorFinal, bool houveAtraso) onConfirmar;
+  final void Function(List<Map<String, dynamic>> pagamentos, DateTime dataPagamento, double valorFinal, bool houveAtraso) onConfirmar;
   final VoidCallback onCancelarAtendimento;
 
   @override
@@ -268,23 +289,55 @@ class ModalFecharComanda extends StatefulWidget {
 }
 
 class _ModalFecharComandaState extends State<ModalFecharComanda> {
-  late double _valorFinal;
-  FormaPagamento _formaSelecionada = FormaPagamento.pix;
+  late double _valorTotal;
   bool _houveAtraso = false;
+  
+  DateTime _dataPagamento = DateTime.now();
+  final List<Map<String, dynamic>> _pagamentos = [];
+  FormaPagamento _formaAtual = FormaPagamento.pix;
+  final TextEditingController _valorParcialController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _valorFinal = widget.agendamento.valor;
+    _valorTotal = widget.agendamento.valor;
+    _valorParcialController.text = _valorTotal.toStringAsFixed(2).replaceAll('.', ',');
+  }
+
+  double get _valorRestante {
+    final pago = _pagamentos.fold<double>(0, (soma, p) => soma + (p['valor'] as double));
+    return _valorTotal - pago;
+  }
+
+  void _adicionarPagamento() {
+    final valorDigitado = double.tryParse(_valorParcialController.text.replaceAll(',', '.')) ?? 0.0;
+    
+    if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
+      setState(() {
+        _pagamentos.add({
+          'forma': _formaAtual,
+          'valor': valorDigitado,
+        });
+        _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ',');
+      });
+    }
+  }
+
+  void _removerPagamento(int index) {
+    setState(() {
+      _pagamentos.removeAt(index);
+      _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ',');
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final valorPendente = _valorRestante;
+    final podeConfirmar = valorPendente <= 0.01;
+
     return Container(
       padding: EdgeInsets.only(
-        top: 20,
-        left: 20,
-        right: 20,
+        top: 20, left: 20, right: 20,
         bottom: MediaQuery.of(context).viewInsets.bottom + 20,
       ),
       child: SingleChildScrollView(
@@ -310,92 +363,166 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
             ),
             const SizedBox(height: 8),
             Text(
-              '${widget.agendamento.servico} — R\$ ${_valorFinal.toStringAsFixed(2).replaceAll('.', ',')}',
+              '${widget.agendamento.servico} — R\$ ${_valorTotal.toStringAsFixed(2).replaceAll('.', ',')}',
               style: const TextStyle(fontSize: 14, color: Colors.grey),
             ),
-            const SizedBox(height: 20),
-            const Text(
-              'Forma de Pagamento:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: FormaPagamento.values.map((forma) {
-                final selecionado = _formaSelecionada == forma;
-                return ChoiceChip(
-                  label: Text(forma.rotulo),
-                  selected: selecionado,
-                  selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                  onSelected: (bool selected) {
-                    if (selected) {
-                      setState(() => _formaSelecionada = forma);
-                    }
-                  },
+            const Divider(height: 32),
+
+            const Text('Data do Pagamento (Baixa):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 8),
+            InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _dataPagamento,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now(),
                 );
-              }).toList(),
+                if (picked != null) {
+                  setState(() => _dataPagamento = picked);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.purple),
+                    const SizedBox(width: 8),
+                    Text('${_dataPagamento.day.toString().padLeft(2, '0')}/${_dataPagamento.month.toString().padLeft(2, '0')}/${_dataPagamento.year}', style: const TextStyle(fontSize: 14)),
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+
+            const Text('Pagamentos Adicionados:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            if (_pagamentos.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('Nenhum pagamento registrado ainda.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ),
+            ..._pagamentos.asMap().entries.map((entry) {
+              final index = entry.key;
+              final p = entry.value;
+              final forma = p['forma'] as FormaPagamento;
+              final valor = p['valor'] as double;
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+                leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
+                title: Text(forma.rotulo),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                      onPressed: () => _removerPagamento(index),
+                    ),
+                  ],
+                ),
+              );
+            }),
+
+            if (valorPendente > 0.01) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                color: Colors.orange.shade50,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Falta Receber:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)),
+                    Text('R\$ ${valorPendente.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<FormaPagamento>(
+                      value: _formaAtual,
+                      decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)),
+                      items: FormaPagamento.values.where((f) => f != FormaPagamento.pendente).map((f) {
+                        return DropdownMenuItem(value: f, child: Text(f.rotulo, style: const TextStyle(fontSize: 12)));
+                      }).toList(),
+                      onChanged: (v) => setState(() => _formaAtual = v!),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _valorParcialController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(prefixText: 'R\$ ', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: FilledButton(
+                      style: FilledButton.styleFrom(padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+                      onPressed: _adicionarPagamento,
+                      child: const Icon(Icons.add),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 24),
             CheckboxListTile(
               value: _houveAtraso,
               contentPadding: EdgeInsets.zero,
-              title: const Text(
-                'Cliente chegou atrasada?',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-              subtitle: const Text(
-                'Registra o atraso no histórico para métricas futuras.',
-                style: TextStyle(fontSize: 11, color: Colors.grey),
-              ),
+              title: const Text('Cliente chegou atrasada?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+              subtitle: const Text('Registra o atraso no histórico para métricas futuras.', style: TextStyle(fontSize: 11, color: Colors.grey)),
               controlAffinity: ListTileControlAffinity.leading,
               onChanged: (val) => setState(() => _houveAtraso = val ?? false),
             ),
             const SizedBox(height: 20),
+
             Row(
               children: [
                 Expanded(
                   flex: 1,
                   child: OutlinedButton(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                      foregroundColor: Colors.red, side: const BorderSide(color: Colors.red),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onPressed: () {
                       Navigator.pop(context); 
                       widget.onCancelarAtendimento(); 
                     },
-                    child: const Text(
-                      'Cancelar\nAtendimento',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                    child: const Text('Cancelar\nAtendimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: FilledButton(
-                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12)),
-                    onPressed: () {
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      backgroundColor: podeConfirmar ? null : Colors.grey,
+                    ),
+                    onPressed: podeConfirmar ? () {
                       Navigator.pop(context);
-                      widget.onConfirmar(_formaSelecionada, _valorFinal, _houveAtraso);
-                    },
+                      widget.onConfirmar(_pagamentos, _dataPagamento, _valorTotal, _houveAtraso);
+                    } : null,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         const Icon(Icons.check_circle_outline, size: 18),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _formaSelecionada == FormaPagamento.pendente
-                                ? 'Manter Aberta'
-                                : 'Confirmar Recebimento',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(fontSize: 12),
-                            maxLines: 2,
-                          ),
+                        const Expanded(
+                          child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12), maxLines: 2),
                         ),
                       ],
                     ),
