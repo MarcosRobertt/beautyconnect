@@ -23,6 +23,24 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     final precoController = TextEditingController(text: insumoExistente?.precoPago.toStringAsFixed(2) ?? '0.00');
     DateTime dataCompra = insumoExistente?.dataCompra ?? DateTime.now();
 
+    // 🛡️ LISTA ATUALIZADA DE CATEGORIAS
+    final List<String> categorias = [
+      'Géis e Acrílicos',
+      'Preparadores',
+      'Esmaltes',
+      'Esmalte em Gel',      // NOVA CATEGORIA
+      'Descartáveis',
+      'Ferramentas',
+      'Móveis e Aparelhos',  // NOVA CATEGORIA
+      'Outros'
+    ];
+
+    // Trava de Segurança: Se o produto antigo tiver uma categoria que não está na lista, 
+    // nós adicionamos ela provisoriamente para a tela não quebrar.
+    if (!categorias.contains(categoriaController.text) && categoriaController.text.isNotEmpty) {
+      categorias.add(categoriaController.text);
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -54,11 +72,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: ['Géis e Acrílicos', 'Preparadores', 'Esmaltes', 'Descartáveis', 'Ferramentas', 'Outros'].contains(categoriaController.text)
-                          ? categoriaController.text
-                          : 'Géis e Acrílicos',
+                      value: categoriaController.text,
                       decoration: const InputDecoration(labelText: 'Categoria', border: OutlineInputBorder()),
-                      items: ['Géis e Acrílicos', 'Preparadores', 'Esmaltes', 'Descartáveis', 'Ferramentas', 'Outros']
+                      items: categorias
                           .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                           .toList(),
                       onChanged: (v) {
@@ -265,7 +281,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                               title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
                               subtitle: Text('${item.categoria} • Compra: ${fmtData.format(item.dataCompra)}'),
                               trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center, // CORREÇÃO EXATA AQUI!
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: item.emAlerta ? Colors.red : Colors.black87)),
