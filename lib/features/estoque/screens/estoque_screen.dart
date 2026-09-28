@@ -14,6 +14,8 @@ class EstoqueScreen extends ConsumerStatefulWidget {
 
 class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   String _filtroBusca = '';
+  int _abaSelecionada = 0; // 0 = Visão Geral, 1 = Valor de Estoque
+  String _categoriaSelecionada = 'Todas';
 
   void _abrirModalInsumo(BuildContext context, [Insumo? insumoExistente]) {
     final nomeController = TextEditingController(text: insumoExistente?.nome ?? '');
@@ -23,20 +25,17 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     final precoController = TextEditingController(text: insumoExistente?.precoPago.toStringAsFixed(2) ?? '0.00');
     DateTime dataCompra = insumoExistente?.dataCompra ?? DateTime.now();
 
-    // 🛡️ LISTA ATUALIZADA DE CATEGORIAS
     final List<String> categorias = [
       'Géis e Acrílicos',
       'Preparadores',
       'Esmaltes',
-      'Esmalte em Gel',      // NOVA CATEGORIA
+      'Esmalte em Gel',
       'Descartáveis',
       'Ferramentas',
-      'Móveis e Aparelhos',  // NOVA CATEGORIA
+      'Móveis e Aparelhos',
       'Outros'
     ];
 
-    // Trava de Segurança: Se o produto antigo tiver uma categoria que não está na lista, 
-    // nós adicionamos ela provisoriamente para a tela não quebrar.
     if (!categorias.contains(categoriaController.text) && categoriaController.text.isNotEmpty) {
       categorias.add(categoriaController.text);
     }
@@ -189,20 +188,42 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           double gastoMes = 0;
           int itensEmAlerta = 0;
 
+          // Processamento dinâmico e seguro de categorias
+          final Set<String> categoriasSet = {'Todas'};
           for (final i in insumos) {
             if (i.emAlerta) itensEmAlerta++;
             if (i.dataCompra.isAfter(inicioMes.subtract(const Duration(seconds: 1)))) {
               gastoMes += i.precoPago * i.quantidade;
             }
+            if (i.categoria.isNotEmpty) {
+              categoriasSet.add(i.categoria);
+            }
           }
 
-          final insumosFiltrados = insumos.where((i) {
+          final List<String> listaCategorias = categoriasSet.toList()..sort();
+          // Trava de segurança: Se a categoria escolhida sumiu, volta para 'Todas'
+          if (!listaCategorias.contains(_categoriaSelecionada)) {
+            _categoriaSelecionada = 'Todas';
+          }
+
+          // Lógica da Aba 0 (Visão Geral)
+          final insumosGeral = insumos.where((i) {
             return i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) ||
                 i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
           }).toList();
 
+          // Lógica da Aba 1 (Valor de Estoque)
+          final insumosFinanceiro = insumos.where((i) {
+            return _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
+          }).toList();
+          
+          final valorTotalEstoque = insumosFinanceiro.fold<double>(
+            0, (soma, item) => soma + (item.quantidade * item.precoPago)
+          );
+
           return Column(
             children: [
+              // CABEÇALHO SUPERIOR (Fixo)
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -246,58 +267,199 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      decoration: const InputDecoration(
-                        hintText: 'Buscar insumo por nome ou categoria...',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      onChanged: (v) => setState(() => _filtroBusca = v),
+                    const SizedBox(height: 16),
+                    
+                    // CONTROLE DAS ABAS
+                    SegmentedButton<int>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 0,
+                          label: Text('📦 Visão Geral', style: TextStyle(fontSize: 12)),
+                        ),
+                        ButtonSegment(
+                          value: 1,
+                          label: Text('💰 Valor de Estoque', style: TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                      selected: {_abaSelecionada},
+                      onSelectionChanged: (set) => setState(() => _abaSelecionada = set.first),
                     ),
                   ],
                 ),
               ),
+              
+              // CONTEÚDO DINÂMICO (Troca conforme a aba)
               Expanded(
-                child: insumosFiltrados.isEmpty
-                    ? const Center(child: Text('Nenhum insumo encontrado.', style: TextStyle(color: Colors.grey)))
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: insumosFiltrados.length,
-                        itemBuilder: (context, index) {
-                          final item = insumosFiltrados[index];
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: item.emAlerta ? Colors.red.shade100 : Colors.blue.shade100,
-                                child: Icon(
-                                  item.emAlerta ? Icons.warning_amber : Icons.inventory_2,
-                                  color: item.emAlerta ? Colors.red.shade800 : Colors.blue.shade800,
-                                  size: 20,
-                                ),
-                              ),
-                              title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('${item.categoria} • Compra: ${fmtData.format(item.dataCompra)}'),
-                              trailing: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: item.emAlerta ? Colors.red : Colors.black87)),
-                                  Text('Mín: ${item.estoqueMinimo}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                ],
-                              ),
-                              onTap: () => _abrirModalInsumo(context, item),
-                            ),
-                          );
-                        },
-                      ),
+                child: _abaSelecionada == 0
+                    ? _buildAbaVisaoGeral(insumosGeral, fmtData)
+                    : _buildAbaValorEstoque(insumosFinanceiro, listaCategorias, valorTotalEstoque, fmtMoeda, fmtData),
               ),
             ],
           );
         },
       ),
+    );
+  }
+
+  // =========================================================
+  // ABA 0: VISÃO GERAL (Busca e Listagem Simples)
+  // =========================================================
+  Widget _buildAbaVisaoGeral(List<Insumo> insumosFiltrados, DateFormat fmtData) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          child: TextField(
+            decoration: const InputDecoration(
+              hintText: 'Buscar insumo por nome ou categoria...',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            onChanged: (v) => setState(() => _filtroBusca = v),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: insumosFiltrados.isEmpty
+              ? const Center(child: Text('Nenhum insumo encontrado.', style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: insumosFiltrados.length,
+                  itemBuilder: (context, index) {
+                    final item = insumosFiltrados[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: item.emAlerta ? Colors.red.shade100 : Colors.blue.shade100,
+                          child: Icon(
+                            item.emAlerta ? Icons.warning_amber : Icons.inventory_2,
+                            color: item.emAlerta ? Colors.red.shade800 : Colors.blue.shade800,
+                            size: 20,
+                          ),
+                        ),
+                        title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('${item.categoria} • Compra: ${fmtData.format(item.dataCompra)}'),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: item.emAlerta ? Colors.red : Colors.black87)),
+                            Text('Mín: ${item.estoqueMinimo}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                          ],
+                        ),
+                        onTap: () => _abrirModalInsumo(context, item),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // =========================================================
+  // ABA 1: VALOR DE ESTOQUE (Filtro e Total Financeiro)
+  // =========================================================
+  Widget _buildAbaValorEstoque(List<Insumo> insumosFinanceiro, List<String> listaCategorias, double valorTotalEstoque, NumberFormat fmtMoeda, DateFormat fmtData) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            children: [
+              DropdownButtonFormField<String>(
+                value: _categoriaSelecionada,
+                decoration: const InputDecoration(
+                  labelText: 'Filtrar por Categoria',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.category_outlined),
+                ),
+                items: listaCategorias.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 14)))).toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => _categoriaSelecionada = v);
+                },
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.green.shade300),
+                ),
+                child: Column(
+                  children: [
+                    Text(
+                      _categoriaSelecionada == 'Todas' ? 'SOMA DE TODOS OS ATIVOS' : 'SOMA DOS ATIVOS NESTA CATEGORIA',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green.shade800),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      fmtMoeda.format(valorTotalEstoque),
+                      style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.green.shade900),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('LISTA DE PATRIMÔNIO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+        Expanded(
+          child: insumosFinanceiro.isEmpty
+              ? const Center(child: Text('Nenhum patrimônio registrado nesta categoria.', style: TextStyle(color: Colors.grey)))
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: insumosFinanceiro.length,
+                  itemBuilder: (context, index) {
+                    final item = insumosFinanceiro[index];
+                    final valorTotalItem = item.quantidade * item.precoPago;
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 4),
+                            Text('${item.quantidade} unidade(s) x ${fmtMoeda.format(item.precoPago)}', style: const TextStyle(fontSize: 12, color: Colors.black87)),
+                            Text('Compra: ${fmtData.format(item.dataCompra)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                          ],
+                        ),
+                        trailing: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Total:', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                            Text(
+                              fmtMoeda.format(valorTotalItem),
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.green),
+                            ),
+                          ],
+                        ),
+                        onTap: () => _abrirModalInsumo(context, item),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 }
