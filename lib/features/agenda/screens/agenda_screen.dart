@@ -190,16 +190,49 @@ class AgendaScreen extends ConsumerWidget {
                 Row(
                   children: [
                     IconButton(onPressed: notifier.voltar, icon: const Icon(Icons.chevron_left)),
+                    
+                    // --- CÓDIGO ATUALIZADO: CABEÇALHO CLICÁVEL DO CALENDÁRIO ---
                     Expanded(
-                      child: Text(
-                        _rotulo(estado),
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: isHoje ? Theme.of(context).colorScheme.primary : null,
-                          fontWeight: isHoje ? FontWeight.bold : null,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () async {
+                          final dataSelecionada = await showDatePicker(
+                            context: context,
+                            initialDate: estado.dataReferencia,
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2035),
+                            helpText: 'IR PARA A DATA',
+                          );
+                          if (dataSelecionada != null) {
+                            notifier.mudarData(dataSelecionada);
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                _rotulo(estado),
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: isHoje ? Theme.of(context).colorScheme.primary : null,
+                                  fontWeight: isHoje ? FontWeight.bold : null,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_drop_down,
+                                size: 20,
+                                color: isHoje ? Theme.of(context).colorScheme.primary : Colors.grey.shade600,
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
+                    // -----------------------------------------------------------
+
                     IconButton(onPressed: notifier.avancar, icon: const Icon(Icons.chevron_right)),
                   ],
                 ),
