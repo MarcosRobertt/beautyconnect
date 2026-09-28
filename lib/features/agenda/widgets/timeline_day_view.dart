@@ -108,7 +108,7 @@ class TimelineDayView extends ConsumerWidget {
       case AgendamentoStatus.confirmado:
         return Colors.green.shade300;
       case AgendamentoStatus.concluido:
-        return Colors.grey.shade400;
+        return Colors.blue.shade800;
       case AgendamentoStatus.cancelado:
         return Colors.red.shade300;
     }
