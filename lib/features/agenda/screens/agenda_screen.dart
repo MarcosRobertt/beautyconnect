@@ -94,6 +94,52 @@ class AgendaScreen extends ConsumerWidget {
     );
   }
 
+  // 🛡️ FUNÇÃO QUE FALTAVA: REABRIR COMANDA COM SEGURANÇA
+  void _confirmarReabertura(BuildContext context, WidgetRef ref, Agendamento agendamento) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800),
+            const SizedBox(width: 8),
+            Text('Reabrir Comanda?', style: TextStyle(color: Colors.orange.shade900, fontSize: 18)),
+          ],
+        ),
+        content: const Text('Atenção: Ao reabrir, o valor desta comanda será removido do seu caixa atual (Realizado) e ela voltará a ficar "Pendente".\n\nVocê poderá editá-la e fechá-la novamente sem problemas. Deseja continuar?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800),
+            onPressed: () {
+              Navigator.pop(ctx);
+              
+              // Remove apenas a tag de Baixa Financeira
+              final regexLimpeza = RegExp(r'\n?\[Baixa Financeira:.*?\]');
+              final novaObs = agendamento.observacao.replaceAll(regexLimpeza, '').trim();
+              
+              final atualizado = agendamento.copyWith(
+                status: AgendamentoStatus.agendado,
+                formaPagamento: FormaPagamento.pendente,
+                observacao: novaObs,
+              );
+              
+              ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+              
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Comanda reaberta. O valor foi estornado temporariamente.'), backgroundColor: Colors.blue),
+              );
+            },
+            child: const Text('Sim, Reabrir'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _abrirModalComanda(
     BuildContext context,
     WidgetRef ref,
@@ -191,7 +237,6 @@ class AgendaScreen extends ConsumerWidget {
                   children: [
                     IconButton(onPressed: notifier.voltar, icon: const Icon(Icons.chevron_left)),
                     
-                    // --- CÓDIGO ATUALIZADO: CABEÇALHO CLICÁVEL DO CALENDÁRIO ---
                     Expanded(
                       child: InkWell(
                         borderRadius: BorderRadius.circular(8),
@@ -231,7 +276,6 @@ class AgendaScreen extends ConsumerWidget {
                         ),
                       ),
                     ),
-                    // -----------------------------------------------------------
 
                     IconButton(onPressed: notifier.avancar, icon: const Icon(Icons.chevron_right)),
                   ],
@@ -274,6 +318,11 @@ class AgendaScreen extends ConsumerWidget {
                           onCancelar: (id) {
                             final agendamento = estado.lista.firstWhere((a) => a.id == id);
                             _abrirModalCancelamento(context, ref, agendamento);
+                          },
+                          // 🛡️ O PARÂMETRO QUE FALTAVA (CORREÇÃO DO ERRO)
+                          onReabrir: (id) {
+                            final agendamento = estado.lista.firstWhere((a) => a.id == id);
+                            _confirmarReabertura(context, ref, agendamento);
                           },
                         )
                       : estado.visao == VisaoAgenda.semana
