@@ -1,4 +1,3 @@
-
 class Despesa {
   final String id;
   final String descricao;
@@ -11,6 +10,8 @@ class Despesa {
   final int? parcelaAtual;
   final int? totalParcelas;
   final String? idAgrupador;
+  // 🛡️ NOVO CAMPO: Pode ser nulo para não quebrar o histórico antigo
+  final String? formaPagamento; 
 
   Despesa({
     required this.id,
@@ -24,6 +25,7 @@ class Despesa {
     this.parcelaAtual,
     this.totalParcelas,
     this.idAgrupador,
+    this.formaPagamento,
   });
 
   Map<String, dynamic> toMap() {
@@ -39,6 +41,7 @@ class Despesa {
       'parcelaAtual': parcelaAtual,
       'totalParcelas': totalParcelas,
       'idAgrupador': idAgrupador,
+      'formaPagamento': formaPagamento, // Salva no Firebase
     };
   }
 
@@ -55,6 +58,8 @@ class Despesa {
       parcelaAtual: map['parcelaAtual'],
       totalParcelas: map['totalParcelas'],
       idAgrupador: map['idAgrupador'],
+      // 🛡️ LÊ COM SEGURANÇA: Se não existir no banco, assume nulo automaticamente
+      formaPagamento: map['formaPagamento'], 
     );
   }
 }
