@@ -16,6 +16,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   String _filtroBusca = '';
   int _abaSelecionada = 0; // 0 = Visão Geral, 1 = Valor de Estoque
   String _categoriaSelecionada = 'Todas';
+  
+  // NOVA VARIÁVEL: Controle do filtro de alertas
+  bool _mostrarApenasAlertas = false;
 
   void _abrirModalInsumo(BuildContext context, [Insumo? insumoExistente]) {
     final nomeController = TextEditingController(text: insumoExistente?.nome ?? '');
@@ -188,7 +191,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           double gastoMes = 0;
           int itensEmAlerta = 0;
 
-          // Processamento dinâmico e seguro de categorias
           final Set<String> categoriasSet = {'Todas'};
           for (final i in insumos) {
             if (i.emAlerta) itensEmAlerta++;
@@ -201,20 +203,22 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           }
 
           final List<String> listaCategorias = categoriasSet.toList()..sort();
-          // Trava de segurança: Se a categoria escolhida sumiu, volta para 'Todas'
           if (!listaCategorias.contains(_categoriaSelecionada)) {
             _categoriaSelecionada = 'Todas';
           }
 
-          // Lógica da Aba 0 (Visão Geral)
+          // Lógica da Aba 0 (Visão Geral) aplicando o filtro do Botão de Alerta
           final insumosGeral = insumos.where((i) {
-            return i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) ||
-                i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
+            final condicaoBusca = i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) || i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
+            final condicaoAlerta = _mostrarApenasAlertas ? i.emAlerta : true;
+            return condicaoBusca && condicaoAlerta;
           }).toList();
 
-          // Lógica da Aba 1 (Valor de Estoque)
+          // Lógica da Aba 1 (Valor de Estoque) aplicando o filtro do Botão de Alerta
           final insumosFinanceiro = insumos.where((i) {
-            return _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
+            final condicaoCategoria = _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
+            final condicaoAlerta = _mostrarApenasAlertas ? i.emAlerta : true;
+            return condicaoCategoria && condicaoAlerta;
           }).toList();
           
           final valorTotalEstoque = insumosFinanceiro.fold<double>(
@@ -223,7 +227,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
 
           return Column(
             children: [
-              // CABEÇALHO SUPERIOR (Fixo)
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -248,28 +251,57 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        
+                        // --- CARD CLICÁVEL DE ALERTAS ---
                         Expanded(
                           child: Card(
-                            elevation: 0,
+                            elevation: _mostrarApenasAlertas ? 2 : 0, // Dá destaque quando ativado
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(
+                                color: _mostrarApenasAlertas ? Colors.red.shade400 : Colors.transparent,
+                                width: _mostrarApenasAlertas ? 2 : 0,
+                              ),
+                            ),
                             color: itensEmAlerta > 0 ? Colors.red.shade50 : Colors.green.shade50,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Alertas de Reposição', style: TextStyle(fontSize: 11, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 4),
-                                  Text('$itensEmAlerta produto(s)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900)),
-                                ],
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(12),
+                              onTap: () {
+                                setState(() {
+                                  _mostrarApenasAlertas = !_mostrarApenasAlertas;
+                                  // Mitigação: Se ativar o filtro, força a visualização para a aba "Visão Geral"
+                                  if (_mostrarApenasAlertas) _abaSelecionada = 0;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Alertas de Reposição', 
+                                          style: TextStyle(fontSize: 11, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900, fontWeight: FontWeight.bold)
+                                        ),
+                                        if (_mostrarApenasAlertas)
+                                          Icon(Icons.filter_alt, size: 14, color: Colors.red.shade900),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text('$itensEmAlerta produto(s)', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900)),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
                         ),
+                        // --------------------------------
                       ],
                     ),
                     const SizedBox(height: 16),
                     
-                    // CONTROLE DAS ABAS
                     SegmentedButton<int>(
                       segments: const [
                         ButtonSegment(
@@ -288,7 +320,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                 ),
               ),
               
-              // CONTEÚDO DINÂMICO (Troca conforme a aba)
               Expanded(
                 child: _abaSelecionada == 0
                     ? _buildAbaVisaoGeral(insumosGeral, fmtData)
@@ -301,9 +332,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 
-  // =========================================================
-  // ABA 0: VISÃO GERAL (Busca e Listagem Simples)
-  // =========================================================
   Widget _buildAbaVisaoGeral(List<Insumo> insumosFiltrados, DateFormat fmtData) {
     return Column(
       children: [
@@ -319,6 +347,11 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
             onChanged: (v) => setState(() => _filtroBusca = v),
           ),
         ),
+        if (_mostrarApenasAlertas)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Text('Exibindo apenas produtos com estoque baixo', style: TextStyle(fontSize: 12, color: Colors.red.shade800, fontWeight: FontWeight.bold)),
+          ),
         const SizedBox(height: 8),
         Expanded(
           child: insumosFiltrados.isEmpty
@@ -359,9 +392,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 
-  // =========================================================
-  // ABA 1: VALOR DE ESTOQUE (Filtro e Total Financeiro)
-  // =========================================================
   Widget _buildAbaValorEstoque(List<Insumo> insumosFinanceiro, List<String> listaCategorias, double valorTotalEstoque, NumberFormat fmtMoeda, DateFormat fmtData) {
     return Column(
       children: [
