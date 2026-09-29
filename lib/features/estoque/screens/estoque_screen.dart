@@ -17,14 +17,20 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   int _abaSelecionada = 0; // 0 = Visão Geral, 1 = Valor de Estoque
   String _categoriaSelecionada = 'Todas';
   
-  // NOVA VARIÁVEL: Controle do filtro de alertas
   bool _mostrarApenasAlertas = false;
 
   void _abrirModalInsumo(BuildContext context, [Insumo? insumoExistente]) {
     final nomeController = TextEditingController(text: insumoExistente?.nome ?? '');
     final categoriaController = TextEditingController(text: insumoExistente?.categoria ?? 'Géis e Acrílicos');
     final quantidadeController = TextEditingController(text: insumoExistente?.quantidade.toString() ?? '1');
-    final estoqueMinimoController = TextEditingController(text: insumoExistente?.estoqueMinimo.toString() ?? '1');
+    
+    // 🛡️ MITIGAÇÃO DE ERROS: Se for < 0 (ex: -1), significa que a usuária marcou "Sem Estoque Mínimo"
+    bool semEstoqueMinimo = (insumoExistente?.estoqueMinimo ?? 1) < 0;
+    
+    final estoqueMinimoController = TextEditingController(
+      text: semEstoqueMinimo ? '0' : (insumoExistente?.estoqueMinimo.toString() ?? '1')
+    );
+    
     final precoController = TextEditingController(text: insumoExistente?.precoPago.toStringAsFixed(2) ?? '0.00');
     DateTime dataCompra = insumoExistente?.dataCompra ?? DateTime.now();
 
@@ -83,7 +89,29 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                         if (v != null) setModalState(() => categoriaController.text = v);
                       },
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
+                    
+                    // --- NOVA OPÇÃO: NÃO EXIGE ESTOQUE MÍNIMO ---
+                    CheckboxListTile(
+                      value: semEstoqueMinimo,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Não exige estoque mínimo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      subtitle: const Text('Oculta os alertas de reposição (Ideal p/ esmaltes)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      controlAffinity: ListTileControlAffinity.leading,
+                      onChanged: (val) {
+                        setModalState(() {
+                          semEstoqueMinimo = val ?? false;
+                          if (semEstoqueMinimo) {
+                            estoqueMinimoController.text = '0';
+                          } else {
+                            estoqueMinimoController.text = '1';
+                          }
+                        });
+                      },
+                    ),
+                    // --------------------------------------------
+                    
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         Expanded(
@@ -98,7 +126,13 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           child: TextField(
                             controller: estoqueMinimoController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(labelText: 'Qtd. Mínima', border: OutlineInputBorder()),
+                            enabled: !semEstoqueMinimo, // Bloqueia o campo se a caixinha estiver marcada
+                            decoration: InputDecoration(
+                              labelText: 'Qtd. Mínima',
+                              border: const OutlineInputBorder(),
+                              filled: semEstoqueMinimo,
+                              fillColor: Colors.grey.shade100,
+                            ),
                           ),
                         ),
                       ],
@@ -147,7 +181,8 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           nome: nomeController.text.trim(),
                           categoria: categoriaController.text,
                           quantidade: int.tryParse(quantidadeController.text) ?? 1,
-                          estoqueMinimo: int.tryParse(estoqueMinimoController.text) ?? 1,
+                          // 🛡️ MITIGAÇÃO: Salva -1 no banco se a usuária não quiser alertas
+                          estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
                           precoPago: double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0,
                           dataCompra: dataCompra,
                         );
@@ -193,7 +228,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
 
           final Set<String> categoriasSet = {'Todas'};
           for (final i in insumos) {
-            if (i.emAlerta) itensEmAlerta++;
+            // Um item salvo com -1 no estoque mínimo vai ignorar esse contador automaticamente
+            if (i.emAlerta && i.estoqueMinimo >= 0) itensEmAlerta++;
+            
             if (i.dataCompra.isAfter(inicioMes.subtract(const Duration(seconds: 1)))) {
               gastoMes += i.precoPago * i.quantidade;
             }
@@ -207,17 +244,16 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
             _categoriaSelecionada = 'Todas';
           }
 
-          // Lógica da Aba 0 (Visão Geral) aplicando o filtro do Botão de Alerta
           final insumosGeral = insumos.where((i) {
             final condicaoBusca = i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) || i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
-            final condicaoAlerta = _mostrarApenasAlertas ? i.emAlerta : true;
+            // Mostra no alerta apenas itens que não estão isentos (estoqueMinimo >= 0)
+            final condicaoAlerta = _mostrarApenasAlertas ? (i.emAlerta && i.estoqueMinimo >= 0) : true;
             return condicaoBusca && condicaoAlerta;
           }).toList();
 
-          // Lógica da Aba 1 (Valor de Estoque) aplicando o filtro do Botão de Alerta
           final insumosFinanceiro = insumos.where((i) {
             final condicaoCategoria = _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
-            final condicaoAlerta = _mostrarApenasAlertas ? i.emAlerta : true;
+            final condicaoAlerta = _mostrarApenasAlertas ? (i.emAlerta && i.estoqueMinimo >= 0) : true;
             return condicaoCategoria && condicaoAlerta;
           }).toList();
           
@@ -251,11 +287,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        
-                        // --- CARD CLICÁVEL DE ALERTAS ---
                         Expanded(
                           child: Card(
-                            elevation: _mostrarApenasAlertas ? 2 : 0, // Dá destaque quando ativado
+                            elevation: _mostrarApenasAlertas ? 2 : 0, 
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                               side: BorderSide(
@@ -269,7 +303,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                               onTap: () {
                                 setState(() {
                                   _mostrarApenasAlertas = !_mostrarApenasAlertas;
-                                  // Mitigação: Se ativar o filtro, força a visualização para a aba "Visão Geral"
                                   if (_mostrarApenasAlertas) _abaSelecionada = 0;
                                 });
                               },
@@ -297,7 +330,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                             ),
                           ),
                         ),
-                        // --------------------------------
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -361,14 +393,16 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                   itemCount: insumosFiltrados.length,
                   itemBuilder: (context, index) {
                     final item = insumosFiltrados[index];
+                    final isAlerta = item.emAlerta && item.estoqueMinimo >= 0;
+                    
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: item.emAlerta ? Colors.red.shade100 : Colors.blue.shade100,
+                          backgroundColor: isAlerta ? Colors.red.shade100 : Colors.blue.shade100,
                           child: Icon(
-                            item.emAlerta ? Icons.warning_amber : Icons.inventory_2,
-                            color: item.emAlerta ? Colors.red.shade800 : Colors.blue.shade800,
+                            isAlerta ? Icons.warning_amber : Icons.inventory_2,
+                            color: isAlerta ? Colors.red.shade800 : Colors.blue.shade800,
                             size: 20,
                           ),
                         ),
@@ -378,8 +412,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: item.emAlerta ? Colors.red : Colors.black87)),
-                            Text('Mín: ${item.estoqueMinimo}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                            Text('Qtd: ${item.quantidade}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isAlerta ? Colors.red : Colors.black87)),
+                            // 🛡️ EXIBIÇÃO INTELIGENTE: Muda visualmente se for -1
+                            Text(item.estoqueMinimo < 0 ? 'Mín: Não exige' : 'Mín: ${item.estoqueMinimo}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
                           ],
                         ),
                         onTap: () => _abrirModalInsumo(context, item),
