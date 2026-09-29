@@ -85,6 +85,92 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
     );
   }
 
+  // 🛡️ NOVA FUNÇÃO INTELIGENTE: Controla o botão rápido de pagamento na lista
+  void _alternarStatusPagamentoRapido(Despesa d) {
+    if (d.status == 'PAGO') {
+      // Reverte para Pendente e limpa a forma de pagamento de forma segura
+      final atualizada = Despesa(
+        id: d.id, descricao: d.descricao, valor: d.valor, categoria: d.categoria,
+        tipo: d.tipo, dataVencimento: d.dataVencimento, 
+        dataPagamento: null, status: 'PENDENTE', 
+        parcelaAtual: d.parcelaAtual, totalParcelas: d.totalParcelas, 
+        idAgrupador: d.idAgrupador, formaPagamento: null,
+      );
+      ref.read(despesaControllerProvider.notifier).salvarDespesa(atualizada).then((_) {
+        ref.read(despesaControllerProvider.notifier).carregarDespesasMes(_mesSelecionado);
+      });
+    } else {
+      // Abre o alerta para escolher a forma de pagamento ANTES de confirmar
+      String formaSelecionada = 'Pix';
+      final List<String> formas = ['Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Outros'];
+
+      showDialog(
+        context: context,
+        builder: (ctx) {
+          return StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return AlertDialog(
+                title: Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Colors.green),
+                    const SizedBox(width: 8),
+                    const Text('Confirmar Baixa', style: TextStyle(fontSize: 18)),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Como a despesa "${d.descricao}" foi paga?'),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(
+                        labelText: 'Forma de Pagamento', 
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.payments_outlined),
+                      ),
+                      value: formaSelecionada,
+                      items: formas.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+                      onChanged: (val) => setStateDialog(() => formaSelecionada = val!),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Cancelar'),
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      
+                      final atualizada = Despesa(
+                        id: d.id, descricao: d.descricao, valor: d.valor, categoria: d.categoria,
+                        tipo: d.tipo, dataVencimento: d.dataVencimento, 
+                        dataPagamento: DateTime.now(), // Atualiza a data de pagamento para hoje
+                        status: 'PAGO', 
+                        parcelaAtual: d.parcelaAtual, totalParcelas: d.totalParcelas, 
+                        idAgrupador: d.idAgrupador, 
+                        formaPagamento: formaSelecionada, // Salva a forma escolhida
+                      );
+                      
+                      ref.read(despesaControllerProvider.notifier).salvarDespesa(atualizada).then((_) {
+                        ref.read(despesaControllerProvider.notifier).carregarDespesasMes(_mesSelecionado);
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Despesa paga com sucesso!'), backgroundColor: Colors.green));
+                      });
+                    },
+                    child: const Text('Confirmar'),
+                  ),
+                ],
+              );
+            }
+          );
+        }
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF8A2463);
@@ -203,7 +289,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                           final subtipo = d.tipo == 'PARCELADA' ? 'PARCELADA (${d.parcelaAtual}/${d.totalParcelas})' : d.tipo;
                           final pago = d.status == 'PAGO';
                           
-                          // 🛡️ MITIGAÇÃO VISUAL: Se não tiver forma de pagamento no banco, mostra "Não informado"
                           final txtFormaPgto = pago ? ' • 💳 ${d.formaPagamento ?? "Não informado"}' : '';
 
                           return Card(
@@ -235,8 +320,9 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                         Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                         const Spacer(),
                                         
+                                        // 🛡️ BOTÃO ATUALIZADO: Agora chama nossa função inteligente que exibe o Pop-Up!
                                         InkWell(
-                                          onTap: () => ref.read(despesaControllerProvider.notifier).alternarStatusDespesa(d, _mesSelecionado),
+                                          onTap: () => _alternarStatusPagamentoRapido(d),
                                           child: Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                             decoration: BoxDecoration(color: pago ? Colors.green.shade50 : Colors.orange.shade50, borderRadius: BorderRadius.circular(6)),
@@ -310,7 +396,6 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
   bool _salvando = false;
   late DateTime _dataSelecionada;
 
-  // 🛡️ ESTADO: Inicializa as opções de pagamento
   String _formaPagamento = 'Pix';
   final List<String> _formasDePagamentoDisponiveis = [
     'Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Outros'
@@ -332,7 +417,6 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
         _parcelasController.text = d.totalParcelas.toString();
       }
       
-      // 🛡️ MITIGAÇÃO: Se a despesa editada já tinha uma forma que não está na lista, adiciona ela para evitar quebra no Dropdown
       if (d.formaPagamento != null) {
         if (!_formasDePagamentoDisponiveis.contains(d.formaPagamento)) {
           _formasDePagamentoDisponiveis.add(d.formaPagamento!);
@@ -367,7 +451,6 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
       totalParcelas: widget.despesaEdit?.totalParcelas ?? (_tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null),
       parcelaAtual: widget.despesaEdit?.parcelaAtual,
       idAgrupador: widget.despesaEdit?.idAgrupador,
-      // 🛡️ SEGURANÇA: Só salva a forma se a despesa foi dada como PAGA. Senão salva Nulo.
       formaPagamento: _pago ? _formaPagamento : null,
     );
 
@@ -507,7 +590,6 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
             contentPadding: EdgeInsets.zero,
           ),
           
-          // 🛡️ REGRINHA DE UX: O Dropdown de forma de pagamento só aparece se a despesa estiver dada como PAGA
           if (_pago) ...[
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
