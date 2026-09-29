@@ -202,13 +202,15 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                           final d = despesasFiltradas[index];
                           final subtipo = d.tipo == 'PARCELADA' ? 'PARCELADA (${d.parcelaAtual}/${d.totalParcelas})' : d.tipo;
                           final pago = d.status == 'PAGO';
+                          
+                          // 🛡️ MITIGAÇÃO VISUAL: Se não tiver forma de pagamento no banco, mostra "Não informado"
+                          final txtFormaPgto = pago ? ' • 💳 ${d.formaPagamento ?? "Não informado"}' : '';
 
                           return Card(
                             margin: const EdgeInsets.only(bottom: 12),
                             elevation: 0,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
                             child: ListTile(
-                              // AQUI É ONDE O TOQUE NA DESPESA ABRE A EDIÇÃO
                               onTap: () => _abrirModalEdicao(d),
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                               trailing: const Icon(Icons.edit_outlined, color: Colors.grey, size: 20),
@@ -224,7 +226,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text('🏷️ $subtipo • ${d.categoria}', style: const TextStyle(fontSize: 11)),
+                                    Text('🏷️ $subtipo • ${d.categoria}$txtFormaPgto', style: const TextStyle(fontSize: 11)),
                                     const SizedBox(height: 6),
                                     Row(
                                       children: [
@@ -233,7 +235,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                         Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                         const Spacer(),
                                         
-                                        // BOTÕES DE LIXEIRA E COPIAR REMOVIDOS DAQUI! Fica só o Marcar Pago.
                                         InkWell(
                                           onTap: () => ref.read(despesaControllerProvider.notifier).alternarStatusDespesa(d, _mesSelecionado),
                                           child: Container(
@@ -309,6 +310,12 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
   bool _salvando = false;
   late DateTime _dataSelecionada;
 
+  // 🛡️ ESTADO: Inicializa as opções de pagamento
+  String _formaPagamento = 'Pix';
+  final List<String> _formasDePagamentoDisponiveis = [
+    'Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Outros'
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -323,6 +330,14 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
       _dataSelecionada = d.dataVencimento;
       if (d.totalParcelas != null) {
         _parcelasController.text = d.totalParcelas.toString();
+      }
+      
+      // 🛡️ MITIGAÇÃO: Se a despesa editada já tinha uma forma que não está na lista, adiciona ela para evitar quebra no Dropdown
+      if (d.formaPagamento != null) {
+        if (!_formasDePagamentoDisponiveis.contains(d.formaPagamento)) {
+          _formasDePagamentoDisponiveis.add(d.formaPagamento!);
+        }
+        _formaPagamento = d.formaPagamento!;
       }
     } else {
       final hoje = DateTime.now();
@@ -352,6 +367,8 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
       totalParcelas: widget.despesaEdit?.totalParcelas ?? (_tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null),
       parcelaAtual: widget.despesaEdit?.parcelaAtual,
       idAgrupador: widget.despesaEdit?.idAgrupador,
+      // 🛡️ SEGURANÇA: Só salva a forma se a despesa foi dada como PAGA. Senão salva Nulo.
+      formaPagamento: _pago ? _formaPagamento : null,
     );
 
     await ref.read(despesaControllerProvider.notifier).salvarDespesa(despesa);
@@ -487,7 +504,24 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
             value: _pago,
             onChanged: (val) => setState(() => _pago = val),
             activeColor: const Color(0xFF8A2463),
+            contentPadding: EdgeInsets.zero,
           ),
+          
+          // 🛡️ REGRINHA DE UX: O Dropdown de forma de pagamento só aparece se a despesa estiver dada como PAGA
+          if (_pago) ...[
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Forma de Pagamento', 
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.payments_outlined),
+              ),
+              value: _formaPagamento,
+              items: _formasDePagamentoDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
+              onChanged: (val) => setState(() => _formaPagamento = val!),
+            ),
+          ],
+
           const SizedBox(height: 24),
           
           Row(
