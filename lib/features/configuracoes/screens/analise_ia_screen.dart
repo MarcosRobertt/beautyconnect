@@ -20,6 +20,75 @@ class AnaliseIaScreen extends ConsumerStatefulWidget {
 
 class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
   DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  final NumberFormat _fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+  // ============================================================================
+  // 🧠 O CÉREBRO DA IA: ALGORITMO PREDITIVO DE FATURAMENTO
+  // ============================================================================
+  Map<String, dynamic> _processarInteligenciaArtificial(List<Agendamento> todosAgendamentos, DateTime mesAlvo) {
+    final hoje = DateTime.now();
+    final ehMesAtual = mesAlvo.year == hoje.year && mesAlvo.month == hoje.month;
+    final diasNoMes = DateUtils.getDaysInMonth(mesAlvo.year, mesAlvo.month);
+    
+    // Se for mês passado, o dia atual é o último do mês (não há dias restantes)
+    final int diaAtual = ehMesAtual ? hoje.day : diasNoMes;
+    final int diasRestantes = ehMesAtual ? (diasNoMes - diaAtual) : 0;
+
+    double realizado = 0.0;
+    double agendadoFuturo = 0.0;
+
+    for (final a in todosAgendamentos) {
+      if (a.status == AgendamentoStatus.cancelado || a.clienteId == 'BLOQUEIO') continue;
+      if (a.data.year != mesAlvo.year || a.data.month != mesAlvo.month) continue;
+
+      if (!ehMesAtual) {
+        // Se é mês passado, TUDO é realizado
+        realizado += a.valor;
+      } else {
+        // Se é o mês atual, divide entre passado e futuro
+        if (a.data.isBefore(DateTime(hoje.year, hoje.month, hoje.day)) || 
+           (a.data.day == hoje.day && a.status == AgendamentoStatus.concluido)) {
+          realizado += a.valor;
+        } else {
+          agendadoFuturo += a.valor;
+        }
+      }
+    }
+
+    final baseGarantida = realizado + agendadoFuturo;
+
+    // Se o mês já fechou, não tem previsão
+    if (!ehMesAtual || diasRestantes <= 0) {
+      return {
+        'realizado': realizado,
+        'agendadoFuturo': 0.0,
+        'previsaoIA': realizado,
+        'tendencia': 'Mês Fechado Consolidado',
+      };
+    }
+
+    // Análise de Ritmo e Previsão
+    final mediaDiariaRealizada = realizado / (diaAtual == 1 && realizado == 0 ? 1 : diaAtual);
+    final projecaoMatematica = realizado + (mediaDiariaRealizada * diasRestantes);
+
+    double previsaoIA = 0.0;
+    String tendencia = '';
+
+    if (projecaoMatematica > baseGarantida) {
+      previsaoIA = (projecaoMatematica * 0.6) + (baseGarantida * 0.4);
+      tendencia = 'Alta (Forte captação de clientes de última hora)';
+    } else {
+      previsaoIA = baseGarantida;
+      tendencia = 'Consolidada (Agenda futura superando o ritmo atual)';
+    }
+
+    return {
+      'realizado': realizado,
+      'agendadoFuturo': agendadoFuturo,
+      'previsaoIA': previsaoIA,
+      'tendencia': tendencia,
+    };
+  }
 
   void _abrirModalTreinarIA(BuildContext context, WidgetRef ref, Cliente cliente) {
     final profController = TextEditingController(text: cliente.profissao ?? '');
@@ -95,6 +164,16 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
     );
   }
 
+  String _gerarDicaEstrategica(double realizado, double agendado, double previsao, int diaAtual) {
+    if (diaAtual < 10 && agendado < realizado) {
+      return 'Dica IA: Início de mês! Sua base garantida futura está baixa. Acione clientes inativas para lotar as próximas semanas.';
+    } else if (diaAtual >= 20 && agendado > (realizado * 0.5)) {
+      return 'Dica IA: Fim de mês espetacular! Sua agenda futura está muito forte. Foco em não atrasar horários e tentar fazer upsell na cadeira (oferecer Spa de Mãos).';
+    } else {
+      return 'Dica IA: O ritmo financeiro do salão está estável. A IA está considerando seu histórico de agendamentos de última hora para gerar essa previsão. Continue divulgando espaços vagos no Instagram!';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final clientesAsync = ref.watch(clienteControllerProvider);
@@ -122,6 +201,13 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
 
               final ehMesAtual = _mesSelecionado.year == hoje.year && _mesSelecionado.month == hoje.month;
 
+              // Processamento da IA Preditiva
+              final dadosIA = _processarInteligenciaArtificial(todos, _mesSelecionado);
+              final double previsaoRealizada = dadosIA['realizado'];
+              final double previsaoAgendado = dadosIA['agendadoFuturo'];
+              final double previsaoFinal = dadosIA['previsaoIA'];
+              final String tendenciaStr = dadosIA['tendencia'];
+
               double receitaMes = 0, receitaMesAnterior = 0;
               int procedimentosMes = 0, procedimentosMesAnterior = 0;
               int minutosMes = 0, minutosMesAnterior = 0;
@@ -136,7 +222,6 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
               final Set<String> clientesAtendidosMesAnterior = {};
               final Map<String, DateTime> primeiraVisitaCliente = {};
 
-              // Mapeia a primeira visita histórica de cada cliente
               for (final a in todos) {
                 if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
                 if (!primeiraVisitaCliente.containsKey(a.clienteId) || a.data.isBefore(primeiraVisitaCliente[a.clienteId]!)) {
@@ -144,7 +229,6 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                 }
               }
 
-              // Processa faturamento e contagens do mês selecionado e anterior
               for (final a in todos) {
                 if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
 
@@ -168,7 +252,6 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                 }
               }
 
-              // Determina clientes novas para cada período específico
               int clientesNovasMes = 0;
               for (String cid in clientesAtendidosMes) {
                 final pv = primeiraVisitaCliente[cid];
@@ -251,60 +334,138 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                           ),
                         ],
                       ),
-                      if (ehMesAtual) ...[
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Icon(Icons.auto_awesome, size: 14, color: Colors.purple.shade700),
-                            const SizedBox(width: 4),
-                            Text(
-                              'PREVISÃO (Mês em Aberto)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.purple.shade700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ],
                   ),
                   const SizedBox(height: 12),
                   
-                  // CARDS FINANCEIROS
+                  // =========================================================
+                  // PAINEL DE INTELIGÊNCIA ARTIFICIAL (SE FOR MÊS ATUAL)
+                  // =========================================================
+                  if (ehMesAtual) ...[
+                    Card(
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: Colors.purple.shade200, width: 2),
+                      ),
+                      color: Colors.purple.shade50,
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.auto_awesome, color: Colors.purple.shade700, size: 20),
+                                const SizedBox(width: 8),
+                                Text('PREVISÃO DE FECHAMENTO (IA)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade800, fontSize: 12)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _fmtMoeda.format(previsaoFinal),
+                              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.purple.shade900),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tendência detectada: $tendenciaStr',
+                              style: TextStyle(fontSize: 11, color: Colors.purple.shade700, fontStyle: FontStyle.italic),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Já Realizado', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
+                                Text(_fmtMoeda.format(previsaoRealizada), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Futuro Garantido', style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
+                                Text(_fmtMoeda.format(previsaoAgendado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Card(
+                      color: Colors.amber.shade50,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.amber.shade300)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.lightbulb_outline, color: Colors.amber.shade900, size: 20),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _gerarDicaEstrategica(previsaoRealizada, previsaoAgendado, previsaoFinal, hoje.day),
+                                style: TextStyle(color: Colors.amber.shade900, fontSize: 12, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 48),
+                  ],
+                  // =========================================================
+
+                  // CARDS FINANCEIROS PADRÕES
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _CardMetricaIA(titulo: 'Faturamento', valorAtual: receitaMes, valorAnterior: receitaMesAnterior, ehMoeda: true, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Faturamento Realizado', valorAtual: receitaMes, valorAnterior: receitaMesAnterior, ehMoeda: true),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Ticket Médio', valorAtual: tmMes, valorAnterior: tmMesAnterior, ehMoeda: true, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Ticket Médio', valorAtual: tmMes, valorAnterior: tmMesAnterior, ehMoeda: true),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Rentabilidade/Hora', valorAtual: rentabilidadeHora, valorAnterior: rentabilidadeHoraAnterior, ehMoeda: true, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Rentabilidade/Hora', valorAtual: rentabilidadeHora, valorAnterior: rentabilidadeHoraAnterior, ehMoeda: true),
                       ],
                     ),
                   ),
                   
                   const SizedBox(height: 24),
                   
-                  // CARDS DE PRODUTIVIDADE E ENGAJAMENTO (HISTÓRICO E ATUAL)
                   Text('Produtividade & Engajamento', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _CardMetricaIA(titulo: 'Atendimentos', valorAtual: procedimentosMes.toDouble(), valorAnterior: procedimentosMesAnterior.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Atendimentos', valorAtual: procedimentosMes.toDouble(), valorAnterior: procedimentosMesAnterior.toDouble(), ehMoeda: false),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Clientes Atendidas', valorAtual: clientesAtendidosMes.length.toDouble(), valorAnterior: clientesAtendidosMesAnterior.length.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Clientes Atendidas', valorAtual: clientesAtendidosMes.length.toDouble(), valorAnterior: clientesAtendidosMesAnterior.length.toDouble(), ehMoeda: false),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Clientes Novas ✨', valorAtual: clientesNovasMes.toDouble(), valorAnterior: clientesNovasMesAnterior.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Clientes Novas ✨', valorAtual: clientesNovasMes.toDouble(), valorAnterior: clientesNovasMesAnterior.toDouble(), ehMoeda: false),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Horas Trabalhadas', valorAtual: horasMes, valorAnterior: horasMesAnterior, ehMoeda: false, isDecimal: true, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Horas Trabalhadas', valorAtual: horasMes, valorAnterior: horasMesAnterior, ehMoeda: false, isDecimal: true),
                         const SizedBox(width: 12),
-                        _CardMetricaIA(titulo: 'Dias Trabalhados', valorAtual: diasTrabalhadosMes.toDouble(), valorAnterior: diasTrabalhadosMesAnterior.toDouble(), ehMoeda: false, ehPrevisao: ehMesAtual),
+                        _CardMetricaIA(titulo: 'Dias Trabalhados', valorAtual: diasTrabalhadosMes.toDouble(), valorAnterior: diasTrabalhadosMesAnterior.toDouble(), ehMoeda: false),
                       ],
                     ),
                   ),
@@ -363,7 +524,7 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                         Text('Treine sua IA', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                       ],
                     ),
-                    const Text('Complete os dados abaixo para a IA gerar dicas de vendas automáticas no Dashboard.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    const Text('Complete os dados abaixo para a IA gerar dicas de vendas automáticas.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 8),
                     ...clientesParaTreinar.map((c) => Card(
                       elevation: 1,
@@ -485,14 +646,12 @@ class _CardMetricaIA extends StatelessWidget {
     required this.valorAnterior,
     required this.ehMoeda,
     this.isDecimal = false,
-    this.ehPrevisao = false,
   });
 
   final String titulo;
   final double valorAtual, valorAnterior;
   final bool ehMoeda;
   final bool isDecimal;
-  final bool ehPrevisao;
 
   @override
   Widget build(BuildContext context) {
@@ -521,26 +680,6 @@ class _CardMetricaIA extends StatelessWidget {
           Text(titulo, style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.w600), maxLines: 1),
           const SizedBox(height: 4),
           Text(exibicaoValor, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87), maxLines: 1),
-          
-          if (ehPrevisao) ...[
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.purple.shade50,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Text(
-                '🏷️ PREVISÃO',
-                style: TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.purple.shade700,
-                ),
-              ),
-            ),
-          ],
-
           const SizedBox(height: 8),
           Container(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2), decoration: BoxDecoration(color: corBadge.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(iconeSeta, size: 12, color: corBadge), const SizedBox(width: 2), Text(txtEvolucao, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: corBadge))])),
         ],
