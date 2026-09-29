@@ -31,7 +31,6 @@ class FeriadosHelper {
     final m = data.month;
     final y = data.year;
 
-    // Fixos Nacionais e SP
     if (d == 1 && m == 1) return 'Confraternização Universal';
     if (d == 21 && m == 4) return 'Tiradentes';
     if (d == 1 && m == 5) return 'Dia do Trabalhador';
@@ -43,7 +42,6 @@ class FeriadosHelper {
     if (d == 20 && m == 11) return 'Consciência Negra';
     if (d == 25 && m == 12) return 'Natal';
 
-    // Móveis
     final pascoa = _calcularPascoa(y);
     final carnaval = pascoa.subtract(const Duration(days: 47));
     final sextaSanta = pascoa.subtract(const Duration(days: 2));
@@ -69,6 +67,7 @@ class TimelineDayView extends ConsumerWidget {
     required this.onConfirmar,
     required this.onConcluir,
     required this.onCancelar,
+    required this.onReabrir, // NOVO: Gatilho para reabrir
   });
 
   final List<Agendamento> agendamentos;
@@ -80,6 +79,7 @@ class TimelineDayView extends ConsumerWidget {
   final Function(String id) onConfirmar;
   final Function(String id) onConcluir;
   final Function(String id) onCancelar;
+  final Function(String id) onReabrir; // NOVO
 
   static const double _pixelsPorMinuto = 2.0;
   static const double _larguraHorarios = 60.0;
@@ -101,14 +101,18 @@ class TimelineDayView extends ConsumerWidget {
     return (minFim - minInicio) * _pixelsPorMinuto;
   }
 
-  Color _obterCorStatus(AgendamentoStatus status) {
+  Color _obterCorStatus(AgendamentoStatus status, bool isBloqueio) {
+    if (isBloqueio) {
+      return Colors.grey.shade300;
+    }
+
     switch (status) {
       case AgendamentoStatus.agendado:
         return Colors.blue.shade300;
       case AgendamentoStatus.confirmado:
         return Colors.green.shade300;
       case AgendamentoStatus.concluido:
-        return Colors.blue.shade800;
+        return Colors.blue.shade800; 
       case AgendamentoStatus.cancelado:
         return Colors.red.shade300;
     }
@@ -170,7 +174,7 @@ class TimelineDayView extends ConsumerWidget {
     switch (status) {
       case AgendamentoStatus.agendado: return Colors.blue.shade100;
       case AgendamentoStatus.confirmado: return Colors.green.shade100;
-      case AgendamentoStatus.concluido: return Colors.grey.shade200;
+      case AgendamentoStatus.concluido: return Colors.blue.shade100;
       case AgendamentoStatus.cancelado: return Colors.red.shade100;
     }
   }
@@ -213,7 +217,6 @@ class TimelineDayView extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // INJEÇÃO DO ALERTA DE FERIADO
           if (nomeFeriado != null)
             Container(
               margin: const EdgeInsets.only(bottom: 16),
@@ -303,7 +306,7 @@ class TimelineDayView extends ConsumerWidget {
                           final isBloqueio = a.clienteId == 'BLOQUEIO';
                           final nomeCliente = isBloqueio ? 'Compromisso Pessoal' : (clientesPorId[a.clienteId] ?? 'Cliente removido');
                           final telefoneCliente = telefonesPorId[a.clienteId] ?? '';
-                          final cor = _obterCorStatus(a.status);
+                          final cor = _obterCorStatus(a.status, isBloqueio);
 
                           return Positioned(
                             top: topPx,
@@ -330,20 +333,25 @@ class TimelineDayView extends ConsumerWidget {
                                         _buildStatusBadge(a.status, isBloqueio),
                                         const Spacer(),
                                         if (!isBloqueio) ...[
-                                          GestureDetector(
-                                            behavior: HitTestBehavior.opaque,
-                                            onTap: () {
-                                              WhatsAppService.enviarConfirmacao(
-                                                telefone: telefoneCliente,
-                                                nomeCliente: nomeCliente,
-                                                agendamento: a,
-                                              );
-                                            },
-                                            child: Padding(
-                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                              child: Icon(Icons.chat_bubble_outline, size: 24, color: Colors.green.shade900), 
+                                          
+                                          // Se NÃO estiver concluído, mostra o botão de WhatsApp
+                                          if (a.status != AgendamentoStatus.concluido)
+                                            GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () {
+                                                WhatsAppService.enviarConfirmacao(
+                                                  telefone: telefoneCliente,
+                                                  nomeCliente: nomeCliente,
+                                                  agendamento: a,
+                                                );
+                                              },
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                child: Icon(Icons.chat_bubble_outline, size: 24, color: Colors.green.shade900), 
+                                              ),
                                             ),
-                                          ),
+
+                                          // Lógica de status
                                           if (a.status == AgendamentoStatus.agendado)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
@@ -360,6 +368,17 @@ class TimelineDayView extends ConsumerWidget {
                                               child: Padding(
                                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                                 child: Icon(Icons.check_circle_outline, size: 24, color: Colors.grey.shade900),
+                                              ),
+                                            ),
+                                            
+                                          // 🛡️ NOVO: BOTÃO DE REABRIR COMANDA (Apenas para Concluídos)
+                                          if (a.status == AgendamentoStatus.concluido)
+                                            GestureDetector(
+                                              behavior: HitTestBehavior.opaque,
+                                              onTap: () => onReabrir(a.id),
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                child: Icon(Icons.settings_backup_restore, size: 24, color: Colors.blue.shade100),
                                               ),
                                             ),
                                         ],
