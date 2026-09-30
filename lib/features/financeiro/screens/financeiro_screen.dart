@@ -11,6 +11,7 @@ class FinanceiroScreen extends ConsumerStatefulWidget {
 
 class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final _formatMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+  final Color _primaryColor = const Color(0xFF8A2463);
 
   @override
   void initState() {
@@ -43,8 +44,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF8A2463);
-
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -52,10 +51,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         appBar: AppBar(
           title: const Text('Resultados Financeiros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-          bottom: const TabBar(
-            labelColor: primaryColor,
-            indicatorColor: primaryColor,
-            tabs: [
+          bottom: TabBar(
+            labelColor: _primaryColor,
+            indicatorColor: _primaryColor,
+            tabs: const [
               Tab(icon: Icon(Icons.pie_chart_outline), text: 'Visão Geral'),
               Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Caixa Diário'),
               Tab(icon: Icon(Icons.bar_chart), text: 'Anual'),
@@ -63,14 +62,14 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           ),
         ),
         body: ref.watch(financeiroControllerProvider).when(
-          loading: () => const Center(child: CircularProgressIndicator(color: primaryColor)),
+          loading: () => Center(child: CircularProgressIndicator(color: _primaryColor)),
           error: (err, stack) => Center(child: Text('Erro ao carregar: $err')),
           data: (state) {
             return TabBarView(
               children: [
-                _buildVisaoGeral(state, primaryColor),
+                _buildVisaoGeral(state),
                 _buildCaixaDiario(state),
-                _buildVisaoAnual(state, primaryColor),
+                _buildVisaoAnual(state),
               ],
             );
           },
@@ -79,6 +78,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
+  // 🛡️ NOVO SELETOR DE MÊS INTELIGENTE E CLICÁVEL
   Widget _buildSeletorMes(FinanceiroState state) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -87,7 +87,47 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           icon: const Icon(Icons.chevron_left), 
           onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(state.mesReferencia.year, state.mesReferencia.month - 1))
         ),
-        Text(DateFormat('MMMM yyyy', 'pt_BR').format(state.mesReferencia).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: () async {
+            final dataSelecionada = await showDatePicker(
+              context: context,
+              initialDate: state.mesReferencia,
+              firstDate: DateTime(2020),
+              lastDate: DateTime(2035),
+              helpText: 'IR PARA O MÊS (Escolha qualquer dia)',
+              builder: (context, child) {
+                return Theme(
+                  data: Theme.of(context).copyWith(
+                    colorScheme: ColorScheme.light(primary: _primaryColor),
+                  ),
+                  child: child!,
+                );
+              },
+            );
+            
+            if (dataSelecionada != null) {
+              // MITIGAÇÃO: Força sempre o dia 1 para não quebrar a lógica do banco
+              ref.read(financeiroControllerProvider.notifier).carregarDados(
+                mes: DateTime(dataSelecionada.year, dataSelecionada.month, 1)
+              );
+            }
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  DateFormat('MMMM yyyy', 'pt_BR').format(state.mesReferencia).toUpperCase(), 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.arrow_drop_down, color: _primaryColor),
+              ],
+            ),
+          ),
+        ),
         IconButton(
           icon: const Icon(Icons.chevron_right), 
           onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(state.mesReferencia.year, state.mesReferencia.month + 1))
@@ -96,7 +136,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
-  Widget _buildVisaoGeral(FinanceiroState state, Color primaryColor) {
+  Widget _buildVisaoGeral(FinanceiroState state) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -168,7 +208,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         // Lucro Líquido
         Container(
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: primaryColor, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: _primaryColor, borderRadius: BorderRadius.circular(16)),
           child: Column(
             children: [
               const Text('LUCRO LÍQUIDO DO MÊS', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
@@ -246,7 +286,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 16.0),
-          child: _buildSeletorMes(state), // Adicionado o seletor aqui!
+          child: _buildSeletorMes(state), 
         ),
         Expanded(
           child: diasMovimentados.isEmpty
@@ -298,12 +338,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
-  Widget _buildVisaoAnual(FinanceiroState state, Color primaryColor) {
+  // 🛡️ BÔNUS: O SELETOR DE ANO NA ABA ANUAL AGORA TAMBÉM É CLICÁVEL!
+  Widget _buildVisaoAnual(FinanceiroState state) {
     final meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     double maxValor = state.faturamentoAnual.reduce((a, b) => a > b ? a : b);
     if (maxValor == 0) maxValor = 1;
 
-    // Função de formatação para K (evita a quebra de linha chata)
     String formatK(double valor) {
       if (valor == 0) return '';
       if (valor >= 1000) {
@@ -320,7 +360,46 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(ano: state.anoReferencia - 1)),
-              Text('Faturamento ${state.anoReferencia}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              
+              // SELETOR NATIVO DE ANO
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: const Text("Selecione o Ano"),
+                        content: SizedBox(
+                          width: 300,
+                          height: 300,
+                          child: YearPicker(
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2035),
+                            selectedDate: DateTime(state.anoReferencia, 1),
+                            onChanged: (DateTime dateTime) {
+                              Navigator.pop(context);
+                              ref.read(financeiroControllerProvider.notifier).carregarDados(ano: dateTime.year);
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Faturamento ${state.anoReferencia}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)),
+                      const SizedBox(width: 4),
+                      Icon(Icons.arrow_drop_down, color: _primaryColor),
+                    ],
+                  ),
+                ),
+              ),
+
               IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(ano: state.anoReferencia + 1)),
             ],
           ),
@@ -340,7 +419,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       if (valor > 0)
                         Padding(
                           padding: const EdgeInsets.only(bottom: 4),
-                          // Texto que não quebra a linha
                           child: Text(
                             formatK(valor), 
                             style: const TextStyle(fontSize: 10, color: Colors.blueGrey, fontWeight: FontWeight.bold), 
@@ -353,7 +431,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                         margin: const EdgeInsets.symmetric(horizontal: 2),
                         height: 200 * alturaPercent,
                         decoration: BoxDecoration(
-                          color: primaryColor.withOpacity(valor > 0 ? 0.8 : 0.1),
+                          color: _primaryColor.withOpacity(valor > 0 ? 0.8 : 0.1),
                           borderRadius: const BorderRadius.vertical(top: Radius.circular(4))
                         ),
                       ),
