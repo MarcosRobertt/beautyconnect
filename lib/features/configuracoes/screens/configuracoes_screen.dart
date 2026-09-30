@@ -4,6 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:html' as html; 
 
+// 🛡️ IMPORTS NOVOS NECESSÁRIOS PARA O BOTÃO VERMELHO FUNCIONAR
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../clientes/controllers/cliente_controller.dart'; 
+
 import 'analise_ia_screen.dart';
 import '../../financeiro/screens/despesas_screen.dart';
 import '../../financeiro/controllers/despesa_controller.dart';
@@ -234,12 +238,17 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App'),
-                  trailing: const Text('v1.0.1', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  trailing: const Text('v1.0.2', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   onTap: () {},
                 ),
               ],
             ),
           ),
+          const SizedBox(height: 24),
+
+          // 🛡️️ O BOTÃO VERMELHO VOLTOU PARA CÁ!
+          const BotaoManutencaoFirebase(),
+
           const SizedBox(height: 32),
 
           TextButton.icon(
@@ -248,6 +257,120 @@ class ConfiguracoesScreen extends ConsumerWidget {
             label: const Text('Sair da Conta', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 🛡️ MÓDULO DE MANUTENÇÃO DE DADOS (Limpeza Inteligente APENAS de Abertas)
+// ============================================================================
+class BotaoManutencaoFirebase extends ConsumerStatefulWidget {
+  const BotaoManutencaoFirebase({super.key});
+
+  @override
+  ConsumerState<BotaoManutencaoFirebase> createState() => _BotaoManutencaoFirebaseState();
+}
+
+class _BotaoManutencaoFirebaseState extends ConsumerState<BotaoManutencaoFirebase> {
+  bool _executandoLimpeza = false;
+
+  Future<void> _executarLimpezaFantasmas() async {
+    setState(() => _executandoLimpeza = true);
+
+    try {
+      final clientesVivos = ref.read(clienteControllerProvider).value ?? [];
+      final List<String> idsValidos = clientesVivos.map((c) => c.id).toList();
+
+      if (idsValidos.isEmpty) {
+        throw Exception("A lista de clientes está vazia. Abortando por segurança.");
+      }
+
+      final firestore = FirebaseFirestore.instance;
+      final snapshot = await firestore.collection('agendamentos').get();
+
+      final batch = firestore.batch();
+      int orfaosEncontrados = 0;
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final clienteId = data['clienteId'] as String?;
+        final status = data['status'] as String?; 
+
+        if (clienteId != null && clienteId != 'BLOQUEIO') {
+          if (!idsValidos.contains(clienteId)) {
+            // 🛡️ MITIGAÇÃO: Apaga APENAS se a comanda NÃO estiver fechada (concluída)
+            if (status != 'concluido') {
+              batch.delete(doc.reference);
+              orfaosEncontrados++;
+            }
+          }
+        }
+      }
+
+      if (orfaosEncontrados > 0) {
+        await batch.commit();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Limpeza concluída! $orfaosEncontrados agendamentos fantasmas em aberto foram apagados. Seu histórico financeiro foi preservado.'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 8),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Tudo limpo! Nenhum fantasma em aberto travando a agenda.'), backgroundColor: Colors.blue),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro na faxina: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _executandoLimpeza = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.red.shade50,
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.red.shade200, width: 2)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade800),
+                const SizedBox(width: 8),
+                Text('Ferramenta de Desenvolvedor', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Varre a agenda e apaga APENAS os agendamentos ABERTOS/PENDENTES de clientes removidas. As comandas fechadas são mantidas.', style: TextStyle(fontSize: 12, color: Colors.red.shade900)),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                onPressed: _executandoLimpeza ? null : _executarLimpezaFantasmas,
+                icon: _executandoLimpeza ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.delete_sweep),
+                label: Text(_executandoLimpeza ? 'Limpando Banco...' : 'Apagar Comandas Travadas'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
