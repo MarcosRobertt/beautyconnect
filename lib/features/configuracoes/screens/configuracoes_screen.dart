@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 👈 NOVO: Importação do Firebase
 import 'dart:html' as html; 
 
 import 'analise_ia_screen.dart';
@@ -10,6 +11,7 @@ import '../../financeiro/controllers/despesa_controller.dart';
 import '../../financeiro/screens/financeiro_screen.dart';
 import '../../estoque/screens/estoque_screen.dart';
 import '../controllers/backup_controller.dart';
+import '../../clientes/controllers/cliente_controller.dart'; // 👈 NOVO: Necessário para a limpeza de clientes
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -202,7 +204,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const FinanceiroScreen())),
                 ),
                 const Divider(height: 1, indent: 56),
-                // NOVO BOTÃO: Estoque de Insumos
                 ListTile(
                   leading: const Icon(Icons.inventory_2_outlined, color: Colors.deepOrange),
                   title: const Text('Estoque de Insumos', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -213,6 +214,12 @@ class ConfiguracoesScreen extends ConsumerWidget {
               ],
             ),
           ),
+          const SizedBox(height: 16),
+
+          // 🛡️ FERRAMENTA DE MANUTENÇÃO INSERIDA AQUI (Abaixo do Estoque)
+          const BotaoManutencaoFirebase(),
+          // -----------------------------------------------------------
+          
           const SizedBox(height: 24),
 
           const Padding(
@@ -235,7 +242,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App'),
-                  trailing: const Text('v1.0.1', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  trailing: const Text('v1.0.1', style: TextStyle(color: Colors.grey, fontSize: 12)), // 👈 VERSÃO ATUALIZADA
                   onTap: () {},
                 ),
               ],
@@ -249,6 +256,131 @@ class ConfiguracoesScreen extends ConsumerWidget {
             label: const Text('Sair da Conta', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// 🛡️ MÓDULO DE MANUTENÇÃO DE DADOS (Limpeza de Órfãos)
+// ============================================================================
+class BotaoManutencaoFirebase extends ConsumerStatefulWidget {
+  const BotaoManutencaoFirebase({super.key});
+
+  @override
+  ConsumerState<BotaoManutencaoFirebase> createState() => _BotaoManutencaoFirebaseState();
+}
+
+class _BotaoManutencaoFirebaseState extends ConsumerState<BotaoManutencaoFirebase> {
+  bool _executandoLimpeza = false;
+
+  Future<void> _executarLimpezaFantasmas() async {
+    setState(() => _executandoLimpeza = true);
+
+    try {
+      // 1. Coleta os clientes que realmente existem hoje no sistema
+      final clientesVivos = ref.read(clienteControllerProvider).value ?? [];
+      final List<String> idsValidos = clientesVivos.map((c) => c.id).toList();
+
+      if (idsValidos.isEmpty) {
+        throw Exception("A lista de clientes está vazia. Abortando por segurança para não apagar a agenda toda.");
+      }
+
+      // 2. Conecta ao Firebase
+      final firestore = FirebaseFirestore.instance;
+      final snapshot = await firestore.collection('agendamentos').get();
+
+      final batch = firestore.batch();
+      int orfaosEncontrados = 0;
+
+      // 3. Varredura Cruzada
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final clienteId = data['clienteId'] as String?;
+
+        if (clienteId != null && clienteId != 'BLOQUEIO') {
+          if (!idsValidos.contains(clienteId)) {
+            batch.delete(doc.reference);
+            orfaosEncontrados++;
+          }
+        }
+      }
+
+      // 4. Executa a deleção
+      if (orfaosEncontrados > 0) {
+        await batch.commit();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✅ Limpeza concluída! $orfaosEncontrados agendamentos fantasmas foram apagados.'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tudo limpo! Nenhum agendamento fantasma foi encontrado.'),
+              backgroundColor: Colors.blue,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro na faxina: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _executandoLimpeza = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.red.shade50,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.red.shade200, width: 2),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade800),
+                const SizedBox(width: 8),
+                Text('Ferramenta de Desenvolvedor', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Use este botão para varrer o banco de dados e excluir definitivamente os agendamentos que pertenciam a clientes que já foram apagadas (Liberando a Agenda).',
+              style: TextStyle(fontSize: 12, color: Colors.red.shade900),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                onPressed: _executandoLimpeza ? null : _executarLimpezaFantasmas,
+                icon: _executandoLimpeza 
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Icon(Icons.delete_sweep),
+                label: Text(_executandoLimpeza ? 'Limpando Banco de Dados...' : 'Apagar Agendamentos Fantasmas'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
