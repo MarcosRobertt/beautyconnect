@@ -118,7 +118,10 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     await carregar();
   }
 
-  // 🛡️ MITIGAÇÃO: Remove a falha silenciosa. Se der erro no Firebase, a tela vai saber e avisar!
+  // =========================================================================
+  // 🛡️ MODO DIAGNÓSTICO: Captura os erros e devolve como Relatório de Texto
+  // =========================================================================
+  
   Future<String?> salvar(Agendamento agendamento, {required bool novo}) async {
     try {
       if (novo) {
@@ -127,12 +130,25 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
         await _repository.editar(agendamento);
       }
       await carregar();
-      return null;
-    } catch (e) {
-      // Repassa o erro diretamente para a tela para não morrer em silêncio.
-      throw Exception(e.toString()); 
+      return null; // Retorna nulo se deu tudo certo (Sucesso)
+    } catch (e, stackTrace) {
+      // Devolve o relatório brutal de erros para o pop-up da tela
+      return "🔥 ERRO FIREBASE (Salvar):\n\n$e\n\n🛠️ RASTREIO TÉCNICO:\n$stackTrace";
     }
   }
+
+  Future<String?> cancelar(String id) async {
+    try {
+      await _repository.cancelar(id);
+      await carregar();
+      return null; // Retorna nulo se deu tudo certo (Sucesso)
+    } catch (e, stackTrace) {
+      // Devolve o relatório brutal de erros para o pop-up da tela
+      return "🔥 ERRO FIREBASE (Excluir):\n\n$e\n\n🛠️️ RASTREIO TÉCNICO:\n$stackTrace";
+    }
+  }
+
+  // =========================================================================
 
   // Mantivemos o método antigo intocado para não quebrar telas que ainda o usam.
   Future<void> confirmar(String id) async {
@@ -146,23 +162,16 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     await carregar();
   }
 
-  // --- NOVO MÉTODO PARA FECHAR COMANDAS COM MATEMÁTICA DE TAXAS ---
-  Future<void> concluirComanda(Agendamento agendamento, FormaPagamento pagamento) async {
+  // --- MODO DIAGNÓSTICO APLICADO TAMBÉM AO FECHAR COMANDAS COM TAXAS ---
+  Future<String?> concluirComanda(Agendamento agendamento, FormaPagamento pagamento) async {
     try {
-      // O próprio modelo aplica os descontos e gera o objeto pronto
       final agendamentoFechado = agendamento.fecharComanda(pagamento);
-      
-      // Usa o editar do repositório porque estamos alterando vários campos de um doc que já existe
       await _repository.editar(agendamentoFechado); 
       await carregar();
-    } catch (e) {
-      throw Exception('Erro ao fechar comanda com taxas: $e');
+      return null; // Sucesso
+    } catch (e, stackTrace) {
+      return "🔥 ERRO FIREBASE (Fechar Comanda com Taxa):\n\n$e\n\n🛠️ RASTREIO TÉCNICO:\n$stackTrace";
     }
-  }
-
-  Future<void> cancelar(String id) async {
-    await _repository.cancelar(id);
-    await carregar();
   }
 
   Future<List<Agendamento>> todos() => _repository.listarTodos();
