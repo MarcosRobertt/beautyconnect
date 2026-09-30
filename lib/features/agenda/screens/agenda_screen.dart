@@ -94,7 +94,6 @@ class AgendaScreen extends ConsumerWidget {
     );
   }
 
-  // 🛡️ FUNÇÃO QUE FALTAVA: REABRIR COMANDA COM SEGURANÇA
   void _confirmarReabertura(BuildContext context, WidgetRef ref, Agendamento agendamento) {
     showDialog<void>(
       context: context,
@@ -117,7 +116,6 @@ class AgendaScreen extends ConsumerWidget {
             onPressed: () {
               Navigator.pop(ctx);
               
-              // Remove apenas a tag de Baixa Financeira
               final regexLimpeza = RegExp(r'\n?\[Baixa Financeira:.*?\]');
               final novaObs = agendamento.observacao.replaceAll(regexLimpeza, '').trim();
               
@@ -155,40 +153,61 @@ class AgendaScreen extends ConsumerWidget {
       builder: (context) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) {
-          final obsAtual = agendamento.observacao;
-          String novaObs = obsAtual;
-          
-          if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
-            novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
-          }
-
-          FormaPagamento formaPrincipal = FormaPagamento.pix;
-          String detalhePagamentoStr = '';
-
-          if (pagamentos.isNotEmpty) {
-            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
-            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+        // 🛡️ MITIGAÇÃO 1: async adicionado para permitir o TRY-CATCH
+        onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) async {
+          try {
+            final obsAtual = agendamento.observacao;
+            String novaObs = obsAtual;
             
-            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
-            final listaDetalhes = pagamentos.map((p) => '${(p['forma'] as FormaPagamento).rotulo}: ${formataMoeda(p['valor'] as double)}').join(' | ');
-            final dataBaixaStr = '${dataPagamento.day.toString().padLeft(2, '0')}/${dataPagamento.month.toString().padLeft(2, '0')}/${dataPagamento.year}';
+            if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
+              novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
+            }
+
+            FormaPagamento formaPrincipal = FormaPagamento.pix;
+            String detalhePagamentoStr = '';
+
+            if (pagamentos.isNotEmpty) {
+              final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
+              formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+              
+              final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+              final listaDetalhes = pagamentos.map((p) => '${(p['forma'] as FormaPagamento).rotulo}: ${formataMoeda(p['valor'] as double)}').join(' | ');
+              final dataBaixaStr = '${dataPagamento.day.toString().padLeft(2, '0')}/${dataPagamento.month.toString().padLeft(2, '0')}/${dataPagamento.year}';
+              
+              detalhePagamentoStr = '[Baixa Financeira: $dataBaixaStr -> $listaDetalhes]';
+            }
+
+            if (detalhePagamentoStr.isNotEmpty) {
+               novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
+            }
+
+            final atualizado = agendamento.copyWith(
+              status: AgendamentoStatus.concluido,
+              formaPagamento: formaPrincipal,
+              valor: valorFinal,
+              observacao: novaObs,
+            );
+
+            // 🛡️ MITIGAÇÃO 2: await adicionado para garantir o salvamento no Firebase
+            await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
             
-            detalhePagamentoStr = '[Baixa Financeira: $dataBaixaStr -> $listaDetalhes]';
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('✅ Comanda fechada com sucesso!'), backgroundColor: Colors.green)
+              );
+            }
+          } catch (e) {
+            // 🛡️ MITIGAÇÃO 3: Fim da falha silenciosa. Se der erro, mostra na tela.
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('🚨 Erro ao fechar: $e'), 
+                  backgroundColor: Colors.red,
+                  duration: const Duration(seconds: 8)
+                )
+              );
+            }
           }
-
-          if (detalhePagamentoStr.isNotEmpty) {
-             novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
-          }
-
-          final atualizado = agendamento.copyWith(
-            status: AgendamentoStatus.concluido,
-            formaPagamento: formaPrincipal,
-            valor: valorFinal,
-            observacao: novaObs,
-          );
-
-          ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
         },
         onCancelarAtendimento: () {
           _abrirModalCancelamento(context, ref, agendamento);
@@ -319,7 +338,6 @@ class AgendaScreen extends ConsumerWidget {
                             final agendamento = estado.lista.firstWhere((a) => a.id == id);
                             _abrirModalCancelamento(context, ref, agendamento);
                           },
-                          // 🛡️ O PARÂMETRO QUE FALTAVA (CORREÇÃO DO ERRO)
                           onReabrir: (id) {
                             final agendamento = estado.lista.firstWhere((a) => a.id == id);
                             _confirmarReabertura(context, ref, agendamento);
@@ -384,6 +402,15 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
     super.initState();
     _valorTotal = widget.agendamento.valor;
     _valorParcialController.text = _valorTotal.toStringAsFixed(2).replaceAll('.', ',');
+    
+    // 🛡️ MITIGAÇÃO 4: Atualiza a tela automaticamente se você digitar valores
+    _valorParcialController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _valorParcialController.dispose();
+    super.dispose();
   }
 
   double get _valorRestante {
@@ -391,8 +418,19 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
     return _valorTotal - pago;
   }
 
+  double get _valorDigitado => double.tryParse(_valorParcialController.text.replaceAll(',', '.')) ?? 0.0;
+
+  // 🛡️ MITIGAÇÃO 5: CÉREBRO INTELIGENTE - O botão de confirmar quase sempre estará verde!
+  bool get _podeConfirmar {
+    if (_valorTotal <= 0.01) return true; // Serviço gratuito
+    if (_valorRestante <= 0.01) return true; // A pessoa já adicionou pagamentos no botão [+]
+    if (_valorRestante > 0.01) return true; // Se tem saldo pra pagar, deixa verde para o Auto-Completar
+    
+    return false;
+  }
+
   void _adicionarPagamento() {
-    final valorDigitado = double.tryParse(_valorParcialController.text.replaceAll(',', '.')) ?? 0.0;
+    final valorDigitado = _valorDigitado;
     
     if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
       setState(() {
@@ -415,7 +453,6 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
   @override
   Widget build(BuildContext context) {
     final valorPendente = _valorRestante;
-    final podeConfirmar = valorPendente <= 0.01;
 
     return Container(
       padding: EdgeInsets.only(
@@ -592,19 +629,27 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 12),
-                      backgroundColor: podeConfirmar ? null : Colors.grey,
+                      backgroundColor: _podeConfirmar ? Colors.green.shade700 : Colors.grey,
                     ),
-                    onPressed: podeConfirmar ? () {
+                    onPressed: _podeConfirmar ? () {
+                      // 🛡️ MITIGAÇÃO 6: AUTO-COMPLETAR. Se clicar direto em Confirmar, ele adiciona o pagamento sozinho!
+                      if (_valorRestante > 0.01) {
+                        _pagamentos.add({
+                          'forma': _formaAtual,
+                          'valor': _valorRestante, // Usa o saldo real do sistema (ignora falhas de centavos no teclado)
+                        });
+                      }
+                      
                       Navigator.pop(context);
                       widget.onConfirmar(_pagamentos, _dataPagamento, _valorTotal, _houveAtraso);
                     } : null,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.check_circle_outline, size: 18),
+                        const Icon(Icons.check_circle_outline, size: 18, color: Colors.white),
                         const SizedBox(width: 6),
                         const Expanded(
-                          child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12), maxLines: 2),
+                          child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white), maxLines: 2),
                         ),
                       ],
                     ),
