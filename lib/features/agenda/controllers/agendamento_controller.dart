@@ -118,6 +118,7 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
     await carregar();
   }
 
+  // 🛡️ MITIGAÇÃO: Remove a falha silenciosa. Se der erro no Firebase, a tela vai saber e avisar!
   Future<String?> salvar(Agendamento agendamento, {required bool novo}) async {
     try {
       if (novo) {
@@ -127,8 +128,9 @@ class AgendamentoController extends StateNotifier<AsyncValue<AgendaState>> {
       }
       await carregar();
       return null;
-    } on StateError catch (e) {
-      return e.message;
+    } catch (e) {
+      // Repassa o erro diretamente para a tela para não morrer em silêncio.
+      throw Exception(e.toString()); 
     }
   }
 
