@@ -17,6 +17,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
 
   final List<String> _categorias = [
     'Insumos de Atendimento',
+     'Insumos Studio',
     'Estrutura & Ocupação',
     'Equipamentos & Manutenção',
     'Taxas & Tarifas Financeiras',
