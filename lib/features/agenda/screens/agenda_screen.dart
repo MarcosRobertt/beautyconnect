@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // 🛡️ IMPORT NOVO: Permite usar o "Copiar"
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -32,7 +33,7 @@ class AgendaScreen extends ConsumerWidget {
     }
   }
 
-  // 🛡️ POP-UP DE DIAGNÓSTICO (O que vai mostrar o erro do banco para você não ficar no escuro)
+  // 🛡️ POP-UP DE DIAGNÓSTICO (Agora com botão de Copiar)
   void _mostrarRelatorioDeErro(BuildContext context, String erroRaw) {
     showDialog(
       context: context,
@@ -42,7 +43,7 @@ class AgendaScreen extends ConsumerWidget {
           children: [
             Icon(Icons.bug_report, color: Colors.red, size: 28),
             SizedBox(width: 8),
-            Expanded(child: Text('Diagnóstico de Erro', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))),
+            Expanded(child: Text('Diagnóstico de Erro', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16))),
           ],
         ),
         content: SizedBox(
@@ -55,10 +56,21 @@ class AgendaScreen extends ConsumerWidget {
           ),
         ),
         actions: [
+          // 🛡️ BOTÃO NOVO: Copiar para a área de transferência
+          OutlinedButton.icon(
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('Copiar Erro'),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: erroRaw));
+              ScaffoldMessenger.of(ctx).showSnackBar(
+                const SnackBar(content: Text('Relatório copiado! Cole no chat da IA.'), backgroundColor: Colors.blue),
+              );
+            },
+          ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Fechar Diagnóstico'),
+            child: const Text('Fechar'),
           ),
         ],
       ),
@@ -172,11 +184,9 @@ class AgendaScreen extends ConsumerWidget {
 
   void _abrirModalComanda(BuildContext context, WidgetRef ref, Agendamento agendamento, String nomeCliente) {
     showModalBottomSheet<void>(
-      context: context, // O contexto da tela, que precisamos manter vivo!
+      context: context, 
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      
-      // 🛡️ AQUI ESTÁ A CORREÇÃO DE OURO (modalContext):
       builder: (modalContext) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
@@ -213,12 +223,10 @@ class AgendaScreen extends ConsumerWidget {
             observacao: novaObs,
           );
 
-          // Tenta salvar e pega a resposta do banco
           final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
           
           if (context.mounted) {
             if (relatorioDeErro != null) {
-              // Se deu erro no Firebase, exibe o diagnóstico completo!
               _mostrarRelatorioDeErro(context, relatorioDeErro);
             } else {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Comanda fechada com sucesso!'), backgroundColor: Colors.green));
