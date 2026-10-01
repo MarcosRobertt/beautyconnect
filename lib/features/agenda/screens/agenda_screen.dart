@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart'; 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ import '../models/agendamento.dart';
 import '../widgets/timeline_day_view.dart';
 import '../widgets/timeline_week_view.dart';
 import '../widgets/calendar_month_view.dart';
+import '../../dashboard/controllers/dashboard_controller.dart'; 
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -123,6 +125,8 @@ class AgendaScreen extends ConsumerWidget {
                 if (relatorioDeErro != null) {
                   _mostrarRelatorioDeErro(context, relatorioDeErro);
                 } else {
+                  ref.invalidate(todosAgendamentosProvider);
+                  ref.invalidate(dashboardMetricsProvider);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Ação realizada com sucesso!'), backgroundColor: Colors.green));
                 }
               }
@@ -167,6 +171,8 @@ class AgendaScreen extends ConsumerWidget {
                 if (relatorioDeErro != null) {
                   _mostrarRelatorioDeErro(context, relatorioDeErro);
                 } else {
+                  ref.invalidate(todosAgendamentosProvider);
+                  ref.invalidate(dashboardMetricsProvider);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comanda reaberta.'), backgroundColor: Colors.blue));
                 }
               }
@@ -187,6 +193,50 @@ class AgendaScreen extends ConsumerWidget {
         agendamento: agendamento,
         nomeCliente: nomeCliente,
         onConfirmar: (pagamentos, valorFinal, houveAtraso) async {
+          
+          try {
+            final docVerificacao = await FirebaseFirestore.instance
+                .collection('agendamentos')
+                .doc(agendamento.id)
+                .get(const GetOptions(source: Source.server));
+                
+            if (docVerificacao.exists) {
+              final statusBanco = docVerificacao.data()?['status']?.toString().toLowerCase() ?? '';
+              
+              if (statusBanco.contains('concluido') && agendamento.status != AgendamentoStatus.concluido) {
+                if (context.mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Row(
+                        children: [
+                          Icon(Icons.gpp_bad_rounded, color: Colors.orange.shade800, size: 28),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text('Duplicidade Evitada!', style: TextStyle(color: Colors.orange.shade900, fontSize: 18))),
+                        ],
+                      ),
+                      content: const Text('O sistema interceptou esta ação porque a comanda já consta como FECHADA no banco de dados.\n\nA ação foi bloqueada e nenhum valor extra foi lançado.'),
+                      actions: [
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            ref.invalidate(todosAgendamentosProvider);
+                            ref.invalidate(dashboardMetricsProvider);
+                          },
+                          child: const Text('Entendi, Atualizar Tela'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return; 
+              }
+            }
+          } catch (e) {
+            // Ignora falha de verificação para seguir o fluxo principal
+          }
+
           final obsAtual = agendamento.observacao;
           String novaObs = obsAtual;
           
@@ -203,7 +253,6 @@ class AgendaScreen extends ConsumerWidget {
             
             final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
             
-            // Monta o detalhamento incluindo a DATA ESPECÍFICA de cada pagamento
             final listaDetalhes = pagamentos.map((p) {
               final d = p['data'] as DateTime;
               final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
@@ -232,6 +281,8 @@ class AgendaScreen extends ConsumerWidget {
             if (relatorioDeErro != null) {
               _mostrarRelatorioDeErro(context, relatorioDeErro);
             } else {
+              ref.invalidate(todosAgendamentosProvider);
+              ref.invalidate(dashboardMetricsProvider);
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Comanda fechada com sucesso!'), backgroundColor: Colors.green));
             }
           }
@@ -325,7 +376,7 @@ class AgendaScreen extends ConsumerWidget {
                           onConfirmar: (id) => notifier.confirmar(id),
                           onConcluir: (id) {
                             final agendamento = estado.lista.firstWhere((a) => a.id == id);
-                            final nomeCliente = clientesPorId[agendamento.clienteId] ?? (agendamento.clienteId == 'BLOQUEIO' ? 'Compromisso Pessoal' : 'Cliente');
+                            final nomeCliente = clientesPorId[agendamento.clienteId] ?? (agendamento.clienteId == 'BLOQUEIO' ? 'Compromisso Pessoal' : 'Cliente removido');
                             _abrirModalComanda(context, ref, agendamento, nomeCliente);
                           },
                           onCancelar: (id) {
@@ -350,14 +401,10 @@ class AgendaScreen extends ConsumerWidget {
   }
 }
 
-// =====================================================================
-// WIDGET DO MODAL (Com Múltiplas Datas Inteligentes)
-// =====================================================================
 class ModalFecharComanda extends StatefulWidget {
   const ModalFecharComanda({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
   final Agendamento agendamento;
   final String nomeCliente;
-  // 🛡️ A assinatura mudou: Agora a data está DENTRO da lista de pagamentos!
   final void Function(List<Map<String, dynamic>> pagamentos, double valorFinal, bool houveAtraso) onConfirmar;
   final VoidCallback onCancelarAtendimento;
   @override
@@ -368,7 +415,7 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
   late double _valorTotal;
   bool _houveAtraso = false;
   
-  DateTime _dataPagamentoAtual = DateTime.now(); // A data escolhida para o pagamento sendo adicionado
+  DateTime _dataPagamentoAtual = DateTime.now(); 
   final List<Map<String, dynamic>> _pagamentos = [];
   FormaPagamento _formaAtual = FormaPagamento.pix;
   final TextEditingController _valorParcialController = TextEditingController();
@@ -405,10 +452,10 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
         _pagamentos.add({
           'forma': _formaAtual, 
           'valor': valorDigitado,
-          'data': _dataPagamentoAtual // Guarda a data exata em que este valor entrou!
+          'data': _dataPagamentoAtual 
         }); 
         _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); 
-        _dataPagamentoAtual = DateTime.now(); // Reseta o picker para hoje
+        _dataPagamentoAtual = DateTime.now(); 
       });
     }
   }
@@ -451,7 +498,7 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
               return ListTile(
                 contentPadding: EdgeInsets.zero, dense: true,
                 leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
-                title: Text('${forma.rotulo} ($dataStr)'), // Mostra a data do lado da forma!
+                title: Text('${forma.rotulo} ($dataStr)'), 
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _removerPagamento(index))]),
               );
             }),
@@ -496,7 +543,7 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
             ],
 
             const SizedBox(height: 24),
-            CheckboxListTile(value: _houveAtraso, contentPadding: EdgeInsets.zero, title: const Text('Cliente chegou atrasada?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)), subtitle: const Text('Registra o atraso no histórico para métricas futuras.', style: TextStyle(fontSize: 11, color: Colors.grey)), controlAffinity: ListTileControlAffinity.leading, onChanged: (val) => setState(() => _houveAtraso = val ?? false)),
+            CheckboxListTile(value: _houveAtraso, contentPadding: EdgeInsets.zero, title: const Text('Cliente chegou atrasada?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)), subtitle: const Text('Registra o atraso no histórico para métricas.', style: TextStyle(fontSize: 11, color: Colors.grey)), controlAffinity: ListTileControlAffinity.leading, onChanged: (val) => setState(() => _houveAtraso = val ?? false)),
             const SizedBox(height: 20),
 
             Row(
@@ -512,7 +559,6 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
                     style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: _podeConfirmar ? Colors.green.shade700 : Colors.grey),
                     onPressed: _podeConfirmar ? () {
                       if (_valorRestante > 0.01) { 
-                        // Adiciona automaticamente o valor final usando a data selecionada no picker atual
                         _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual}); 
                       }
                       Navigator.pop(context);
