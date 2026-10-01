@@ -16,7 +16,6 @@ class AgendamentoRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<List<Agendamento>> listarTodos() async {
-    // 🛡️ MITIGAÇÃO: Força a leitura do servidor para evitar fantasmas no cache do celular
     final snapshot = await _firestore.collection('agendamentos').get(const GetOptions(source: Source.serverAndCache));
     return snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
   }
@@ -82,24 +81,39 @@ class AgendamentoRepository {
     await _firestore.collection('agendamentos').doc(agendamento.id).set(agendamento.toJson());
   }
 
-  Future<void> editar(Agendamento agendamento) async {
-    final conflito = await existeConflito(agendamento, ignorarId: agendamento.id);
-    if (conflito) {
-      throw Exception('BLOQUEIO DE CONFLITO: Já existe outra agenda bloqueando esse mesmo horário.');
-    }
-    await _firestore.collection('agendamentos').doc(agendamento.id).update(agendamento.toJson());
-  }
-
   Future<Agendamento?> _buscarNaNuvem(String id) async {
-    // 🛡️ Força buscar na nuvem real
     final doc = await _firestore.collection('agendamentos').doc(id).get(const GetOptions(source: Source.server));
     if (!doc.exists || doc.data() == null) return null;
     return Agendamento.fromJson(doc.data()!);
   }
 
+  Future<void> editar(Agendamento agendamento) async {
+    // 🛡️ MITIGAÇÃO: Inteligência Artificial no conflito
+    final atual = await _buscarNaNuvem(agendamento.id);
+    
+    bool mudouHorario = true;
+    if (atual != null) {
+      // Se a Data, a Hora Inicial e a Hora Final forem iguais, a comanda não mudou de lugar!
+      if (_mesmoDia(atual.data, agendamento.data) && 
+          atual.horaInicio == agendamento.horaInicio && 
+          atual.horaFim == agendamento.horaFim) {
+        mudouHorario = false; // Como não mudou o horário, desliga a checagem de conflitos.
+      }
+    }
+
+    // Só barra a operação se o usuário estiver tentando trocar a hora para um horário ocupado
+    if (mudouHorario) {
+      final conflito = await existeConflito(agendamento, ignorarId: agendamento.id);
+      if (conflito) {
+        throw Exception('BLOQUEIO DE CONFLITO: Já existe outra agenda bloqueando esse mesmo horário.');
+      }
+    }
+    
+    await _firestore.collection('agendamentos').doc(agendamento.id).update(agendamento.toJson());
+  }
+
   Future<void> cancelar(String id) async {
     final atual = await _buscarNaNuvem(id);
-    // 🛡️ MITIGAÇÃO: Fim do erro silencioso. Se não achar, GRITA!
     if (atual == null) throw Exception("Comanda Fantasma! O agendamento não foi encontrado no servidor.");
     final alterado = atual.copyWith(status: AgendamentoStatus.cancelado, updatedAt: DateTime.now());
     await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
