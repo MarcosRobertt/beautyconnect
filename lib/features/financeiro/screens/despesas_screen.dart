@@ -103,7 +103,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
     } else {
       // Abre o alerta para escolher a forma de pagamento ANTES de confirmar
       String formaSelecionada = 'Pix';
-      final List<String> formas = ['Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Outros'];
+      final List<String> formas = ['Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito','Boleto', 'Outros'];
 
       showDialog(
         context: context,
@@ -399,7 +399,7 @@ class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
 
   String _formaPagamento = 'Pix';
   final List<String> _formasDePagamentoDisponiveis = [
-    'Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Outros'
+    'Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Boleto', 'Outros'
   ];
 
   @override
