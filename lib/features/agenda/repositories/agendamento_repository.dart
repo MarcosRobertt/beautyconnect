@@ -88,20 +88,17 @@ class AgendamentoRepository {
   }
 
   Future<void> editar(Agendamento agendamento) async {
-    // 🛡️ MITIGAÇÃO: Inteligência Artificial no conflito
     final atual = await _buscarNaNuvem(agendamento.id);
     
     bool mudouHorario = true;
     if (atual != null) {
-      // Se a Data, a Hora Inicial e a Hora Final forem iguais, a comanda não mudou de lugar!
       if (_mesmoDia(atual.data, agendamento.data) && 
           atual.horaInicio == agendamento.horaInicio && 
           atual.horaFim == agendamento.horaFim) {
-        mudouHorario = false; // Como não mudou o horário, desliga a checagem de conflitos.
+        mudouHorario = false; 
       }
     }
 
-    // Só barra a operação se o usuário estiver tentando trocar a hora para um horário ocupado
     if (mudouHorario) {
       final conflito = await existeConflito(agendamento, ignorarId: agendamento.id);
       if (conflito) {
