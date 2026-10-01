@@ -2,16 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/services/storage/storage_service.dart';
 import '../models/agendamento.dart';
 
-bool _mesmoDia(DateTime a, DateTime b) =>
-    a.year == b.year && a.month == b.month && a.day == b.day;
+bool _mesmoDia(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
 
 DateTime _inicioDaSemana(DateTime data) {
   final d = DateTime(data.year, data.month, data.day);
-  return d.subtract(Duration(days: d.weekday % 7)); // domingo como início
+  return d.subtract(Duration(days: d.weekday % 7)); 
 }
 
-/// Repository de Agendamento. Concentra as regras de negócio da Agenda.
-/// Agora conectado ao Firebase Cloud Firestore em tempo real.
 class AgendamentoRepository {
   AgendamentoRepository(this._storage);
 
@@ -19,7 +16,8 @@ class AgendamentoRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<List<Agendamento>> listarTodos() async {
-    final snapshot = await _firestore.collection('agendamentos').get();
+    // 🛡️ MITIGAÇÃO: Força a leitura do servidor para evitar fantasmas no cache do celular
+    final snapshot = await _firestore.collection('agendamentos').get(const GetOptions(source: Source.serverAndCache));
     return snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
   }
 
@@ -59,12 +57,7 @@ class AgendamentoRepository {
     return int.parse(partes[0]) * 60 + int.parse(partes[1]);
   }
 
-  bool _temSobreposicao(
-    String inicio1,
-    String fim1,
-    String inicio2,
-    String fim2,
-  ) {
+  bool _temSobreposicao(String inicio1, String fim1, String inicio2, String fim2) {
     final min1 = _horaParaMinutos(inicio1);
     final min2 = _horaParaMinutos(fim1);
     final min3 = _horaParaMinutos(inicio2);
@@ -72,7 +65,6 @@ class AgendamentoRepository {
     return min1 < min4 && min3 < min2;
   }
 
-  // ATENÇÃO: Convertida para Future<bool> pois agora checa conflitos na nuvem
   Future<bool> existeConflito(Agendamento novo, {String? ignorarId}) async {
     final todos = await listarTodos();
     return todos.any((a) =>
@@ -85,9 +77,7 @@ class AgendamentoRepository {
   Future<void> novo(Agendamento agendamento) async {
     final conflito = await existeConflito(agendamento);
     if (conflito) {
-      throw StateError(
-        'Já existe um agendamento não cancelado nesse dia e horário.',
-      );
+      throw Exception('Já existe um agendamento não cancelado nesse dia e horário.');
     }
     await _firestore.collection('agendamentos').doc(agendamento.id).set(agendamento.toJson());
   }
@@ -95,37 +85,36 @@ class AgendamentoRepository {
   Future<void> editar(Agendamento agendamento) async {
     final conflito = await existeConflito(agendamento, ignorarId: agendamento.id);
     if (conflito) {
-      throw StateError(
-        'Já existe um agendamento não cancelado nesse dia e horário.',
-      );
+      throw Exception('BLOQUEIO DE CONFLITO: Já existe outra agenda bloqueando esse mesmo horário.');
     }
     await _firestore.collection('agendamentos').doc(agendamento.id).update(agendamento.toJson());
   }
 
-  // Método auxiliar interno para buscar um único agendamento na nuvem
   Future<Agendamento?> _buscarNaNuvem(String id) async {
-    final doc = await _firestore.collection('agendamentos').doc(id).get();
+    // 🛡️ Força buscar na nuvem real
+    final doc = await _firestore.collection('agendamentos').doc(id).get(const GetOptions(source: Source.server));
     if (!doc.exists || doc.data() == null) return null;
     return Agendamento.fromJson(doc.data()!);
   }
 
   Future<void> cancelar(String id) async {
     final atual = await _buscarNaNuvem(id);
-    if (atual == null) return;
+    // 🛡️ MITIGAÇÃO: Fim do erro silencioso. Se não achar, GRITA!
+    if (atual == null) throw Exception("Comanda Fantasma! O agendamento não foi encontrado no servidor.");
     final alterado = atual.copyWith(status: AgendamentoStatus.cancelado, updatedAt: DateTime.now());
     await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
   }
 
   Future<void> confirmar(String id) async {
     final atual = await _buscarNaNuvem(id);
-    if (atual == null) return;
+    if (atual == null) throw Exception("Comanda Fantasma! O agendamento não foi encontrado no servidor.");
     final alterado = atual.copyWith(status: AgendamentoStatus.confirmado, updatedAt: DateTime.now());
     await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
   }
 
   Future<void> concluir(String id) async {
     final atual = await _buscarNaNuvem(id);
-    if (atual == null) return;
+    if (atual == null) throw Exception("Comanda Fantasma! O agendamento não foi encontrado no servidor.");
     final alterado = atual.copyWith(status: AgendamentoStatus.concluido, updatedAt: DateTime.now());
     await _firestore.collection('agendamentos').doc(id).update(alterado.toJson());
   }
@@ -133,13 +122,7 @@ class AgendamentoRepository {
   Future<void> substituirTudo(List<Agendamento> novos) async {
     final batch = _firestore.batch();
     final snapshot = await _firestore.collection('agendamentos').get();
-    
-    // Limpa a nuvem atual
-    for (final doc in snapshot.docs) {
-      batch.delete(doc.reference);
-    }
-    
-    // Adiciona os dados do backup
+    for (final doc in snapshot.docs) { batch.delete(doc.reference); }
     for (final a in novos) {
       final docRef = _firestore.collection('agendamentos').doc(a.id);
       batch.set(docRef, a.toJson());
