@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // 🛡️ IMPORT NOVO: Permite usar o "Copiar"
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -33,7 +33,6 @@ class AgendaScreen extends ConsumerWidget {
     }
   }
 
-  // 🛡️ POP-UP DE DIAGNÓSTICO (Agora com botão de Copiar)
   void _mostrarRelatorioDeErro(BuildContext context, String erroRaw) {
     showDialog(
       context: context,
@@ -56,7 +55,6 @@ class AgendaScreen extends ConsumerWidget {
           ),
         ),
         actions: [
-          // 🛡️ BOTÃO NOVO: Copiar para a área de transferência
           OutlinedButton.icon(
             icon: const Icon(Icons.copy, size: 16),
             label: const Text('Copiar Erro'),
@@ -111,13 +109,11 @@ class AgendaScreen extends ConsumerWidget {
             onPressed: () async {
               Navigator.pop(ctx);
               final motivo = motivoController.text.trim();
-              
               String? relatorioDeErro; 
 
               if (motivo.isNotEmpty) {
                 final novaObs = agendamento.observacao.isEmpty ? '[Cancelado: $motivo]' : '${agendamento.observacao} | [Cancelado: $motivo]';
                 final atualizado = agendamento.copyWith(status: AgendamentoStatus.cancelado, observacao: novaObs);
-                
                 relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
               } else {
                 relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).cancelar(agendamento.id);
@@ -190,7 +186,7 @@ class AgendaScreen extends ConsumerWidget {
       builder: (modalContext) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) async {
+        onConfirmar: (pagamentos, valorFinal, houveAtraso) async {
           final obsAtual = agendamento.observacao;
           String novaObs = obsAtual;
           
@@ -206,10 +202,17 @@ class AgendaScreen extends ConsumerWidget {
             formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
             
             final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
-            final listaDetalhes = pagamentos.map((p) => '${(p['forma'] as FormaPagamento).rotulo}: ${formataMoeda(p['valor'] as double)}').join(' | ');
-            final dataBaixaStr = '${dataPagamento.day.toString().padLeft(2, '0')}/${dataPagamento.month.toString().padLeft(2, '0')}/${dataPagamento.year}';
             
-            detalhePagamentoStr = '[Baixa Financeira: $dataBaixaStr -> $listaDetalhes]';
+            // Monta o detalhamento incluindo a DATA ESPECÍFICA de cada pagamento
+            final listaDetalhes = pagamentos.map((p) {
+              final d = p['data'] as DateTime;
+              final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+              final f = (p['forma'] as FormaPagamento).rotulo;
+              final v = formataMoeda(p['valor'] as double);
+              return '[$dStr] $f: $v';
+            }).join(' | ');
+            
+            detalhePagamentoStr = '[Baixa Financeira: $listaDetalhes]';
           }
 
           if (detalhePagamentoStr.isNotEmpty) {
@@ -244,10 +247,7 @@ class AgendaScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final estadoAsync = ref.watch(agendamentoControllerProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
-    final clientesPorId = clientesAsync.maybeWhen(
-      data: (lista) => {for (final c in lista) c.id: c.nome},
-      orElse: () => <String, String>{},
-    );
+    final clientesPorId = clientesAsync.maybeWhen(data: (lista) => {for (final c in lista) c.id: c.nome}, orElse: () => <String, String>{});
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
     return Scaffold(
@@ -351,13 +351,14 @@ class AgendaScreen extends ConsumerWidget {
 }
 
 // =====================================================================
-// WIDGET DO MODAL (AUTO-COMPLETAR INTELIGENTE)
+// WIDGET DO MODAL (Com Múltiplas Datas Inteligentes)
 // =====================================================================
 class ModalFecharComanda extends StatefulWidget {
   const ModalFecharComanda({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
   final Agendamento agendamento;
   final String nomeCliente;
-  final void Function(List<Map<String, dynamic>> pagamentos, DateTime dataPagamento, double valorFinal, bool houveAtraso) onConfirmar;
+  // 🛡️ A assinatura mudou: Agora a data está DENTRO da lista de pagamentos!
+  final void Function(List<Map<String, dynamic>> pagamentos, double valorFinal, bool houveAtraso) onConfirmar;
   final VoidCallback onCancelarAtendimento;
   @override
   State<ModalFecharComanda> createState() => _ModalFecharComandaState();
@@ -366,7 +367,8 @@ class ModalFecharComanda extends StatefulWidget {
 class _ModalFecharComandaState extends State<ModalFecharComanda> {
   late double _valorTotal;
   bool _houveAtraso = false;
-  DateTime _dataPagamento = DateTime.now();
+  
+  DateTime _dataPagamentoAtual = DateTime.now(); // A data escolhida para o pagamento sendo adicionado
   final List<Map<String, dynamic>> _pagamentos = [];
   FormaPagamento _formaAtual = FormaPagamento.pix;
   final TextEditingController _valorParcialController = TextEditingController();
@@ -399,7 +401,15 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
   void _adicionarPagamento() {
     final valorDigitado = _valorDigitado;
     if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
-      setState(() { _pagamentos.add({'forma': _formaAtual, 'valor': valorDigitado}); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
+      setState(() { 
+        _pagamentos.add({
+          'forma': _formaAtual, 
+          'valor': valorDigitado,
+          'data': _dataPagamentoAtual // Guarda a data exata em que este valor entrou!
+        }); 
+        _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); 
+        _dataPagamentoAtual = DateTime.now(); // Reseta o picker para hoje
+      });
     }
   }
 
@@ -429,45 +439,51 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
             Text('${widget.agendamento.servico} — R\$ ${_valorTotal.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
             const Divider(height: 32),
 
-            const Text('Data do Pagamento (Baixa):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            const SizedBox(height: 8),
-            InkWell(
-              onTap: () async {
-                final picked = await showDatePicker(context: context, initialDate: _dataPagamento, firstDate: DateTime(2020), lastDate: DateTime.now());
-                if (picked != null) setState(() => _dataPagamento = picked);
-              },
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-                child: Row(
-                  children: [
-                    const Icon(Icons.calendar_today, size: 16, color: Colors.purple),
-                    const SizedBox(width: 8),
-                    Text('${_dataPagamento.day.toString().padLeft(2, '0')}/${_dataPagamento.month.toString().padLeft(2, '0')}/${_dataPagamento.year}', style: const TextStyle(fontSize: 14)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            const Text('Pagamentos Adicionados:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text('Pagamentos Registrados:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             if (_pagamentos.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nenhum pagamento registrado ainda.', style: TextStyle(fontSize: 12, color: Colors.grey))),
             ..._pagamentos.asMap().entries.map((entry) {
-              final index = entry.key; final p = entry.value; final forma = p['forma'] as FormaPagamento; final valor = p['valor'] as double;
+              final index = entry.key; final p = entry.value; 
+              final forma = p['forma'] as FormaPagamento; 
+              final valor = p['valor'] as double;
+              final dataP = p['data'] as DateTime;
+              final dataStr = '${dataP.day.toString().padLeft(2,'0')}/${dataP.month.toString().padLeft(2,'0')}';
+
               return ListTile(
                 contentPadding: EdgeInsets.zero, dense: true,
                 leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
-                title: Text(forma.rotulo),
+                title: Text('${forma.rotulo} ($dataStr)'), // Mostra a data do lado da forma!
                 trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _removerPagamento(index))]),
               );
             }),
 
             if (valorPendente > 0.01) ...[
+              const SizedBox(height: 16),
               Container(
                 padding: const EdgeInsets.all(12), color: Colors.orange.shade50,
                 child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Falta Receber:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)), Text('R\$ ${valorPendente.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16))]),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
+              
+              const Text('Registrar Entrada / Recebimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now());
+                  if (picked != null) setState(() => _dataPagamentoAtual = picked);
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today, size: 16, color: Colors.purple),
+                      const SizedBox(width: 8),
+                      Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(flex: 2, child: DropdownButtonFormField<FormaPagamento>(value: _formaAtual, decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)), items: FormaPagamento.values.where((f) => f != FormaPagamento.pendente).map((f) => DropdownMenuItem(value: f, child: Text(f.rotulo, style: const TextStyle(fontSize: 12)))).toList(), onChanged: (v) => setState(() => _formaAtual = v!))),
@@ -495,9 +511,12 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
                   child: FilledButton(
                     style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: _podeConfirmar ? Colors.green.shade700 : Colors.grey),
                     onPressed: _podeConfirmar ? () {
-                      if (_valorRestante > 0.01) { _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante}); }
+                      if (_valorRestante > 0.01) { 
+                        // Adiciona automaticamente o valor final usando a data selecionada no picker atual
+                        _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual}); 
+                      }
                       Navigator.pop(context);
-                      widget.onConfirmar(_pagamentos, _dataPagamento, _valorTotal, _houveAtraso);
+                      widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso);
                     } : null,
                     child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.check_circle_outline, size: 18, color: Colors.white), SizedBox(width: 6), Expanded(child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white), maxLines: 2))]),
                   ),
