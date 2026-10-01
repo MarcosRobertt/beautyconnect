@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:html' as html; 
 
-// 🛡️ IMPORTS NECESSÁRIOS
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../clientes/controllers/cliente_controller.dart'; 
 
@@ -238,7 +237,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App'),
-                  trailing: const Text('v1.0.4', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  trailing: const Text('v1.0.6 (Sync Automático)', style: TextStyle(color: Colors.grey, fontSize: 12)),
                   onTap: () {},
                 ),
               ],
@@ -246,7 +245,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // 🛡 O BOTÃO DE LIMPEZA DE BANCO
           const BotaoManutencaoFirebase(),
 
           const SizedBox(height: 32),
@@ -262,9 +260,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
   }
 }
 
-// ============================================================================
-// 🛡️ MÓDULO DE MANUTENÇÃO DE DADOS (Limpeza ROOT Direto no Banco)
-// ============================================================================
 class BotaoManutencaoFirebase extends ConsumerStatefulWidget {
   const BotaoManutencaoFirebase({super.key});
 
