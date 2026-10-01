@@ -67,6 +67,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🛡️ A PONTE: Obriga o Dashboard a escutar as alterações feitas na Agenda!
+    ref.watch(agendamentoControllerProvider);
+
     final metricas = ref.watch(dashboardMetricsProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
     final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
@@ -414,7 +417,8 @@ class _ModalComandasPendentes extends ConsumerWidget {
       builder: (context) => _ModalFecharComandaDashboard(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) {
+        // 🛡️ MITIGAÇÃO: Função async para esperar o salvamento e forçar a atualização (F5)
+        onConfirmar: (pagamentos, dataPagamento, valorFinal, houveAtraso) async {
           final obsAtual = agendamento.observacao;
           String novaObs = obsAtual;
           
@@ -426,11 +430,9 @@ class _ModalComandasPendentes extends ConsumerWidget {
           String detalhePagamentoStr = '';
 
           if (pagamentos.isNotEmpty) {
-            // Define a forma principal baseada no maior valor
             final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
             formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
             
-            // Monta o Fallback Textual para o campo de observações
             final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
             final listaDetalhes = pagamentos.map((p) => '${(p['forma'] as FormaPagamento).rotulo}: ${formataMoeda(p['valor'] as double)}').join(' | ');
             final dataBaixaStr = '${dataPagamento.day.toString().padLeft(2, '0')}/${dataPagamento.month.toString().padLeft(2, '0')}/${dataPagamento.year}';
@@ -438,7 +440,6 @@ class _ModalComandasPendentes extends ConsumerWidget {
             detalhePagamentoStr = '[Baixa Financeira: $dataBaixaStr -> $listaDetalhes]';
           }
 
-          // Se houver múltiplas formas ou mudança de data, anota de forma inquebrável
           if (detalhePagamentoStr.isNotEmpty) {
              novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
           }
@@ -450,14 +451,33 @@ class _ModalComandasPendentes extends ConsumerWidget {
             observacao: novaObs,
           );
 
-          ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          // 🛡️ Salva aguardando e invalida os caches do sistema!
+          await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          ref.invalidate(todosAgendamentosProvider);
+          ref.invalidate(dashboardMetricsProvider);
+
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('✅ Comanda fechada e sistema sincronizado!'), backgroundColor: Colors.green)
+            );
+          }
         },
-        onCancelarAtendimento: () {
+        onCancelarAtendimento: () async {
           final atualizado = agendamento.copyWith(
             status: AgendamentoStatus.cancelado,
             observacao: agendamento.observacao.isEmpty ? '[Cancelado pelo Dashboard]' : '${agendamento.observacao} | [Cancelado pelo Dashboard]',
           );
-          ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          
+          // 🛡️ Salva aguardando e invalida os caches do sistema!
+          await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          ref.invalidate(todosAgendamentosProvider);
+          ref.invalidate(dashboardMetricsProvider);
+
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('✅ Agendamento cancelado!'), backgroundColor: Colors.blue)
+            );
+          }
         },
       ),
     );
@@ -811,6 +831,13 @@ class _ModalFecharComandaDashboardState extends State<_ModalFecharComandaDashboa
                       backgroundColor: podeConfirmar ? null : Colors.grey,
                     ),
                     onPressed: podeConfirmar ? () {
+                      if (_valorRestante > 0.01) {
+                        _pagamentos.add({
+                          'forma': _formaAtual,
+                          'valor': _valorRestante, 
+                        });
+                      }
+                      
                       Navigator.pop(context);
                       widget.onConfirmar(_pagamentos, _dataPagamento, _valorTotal, _houveAtraso);
                     } : null,
