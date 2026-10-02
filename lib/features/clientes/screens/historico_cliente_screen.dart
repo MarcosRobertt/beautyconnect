@@ -8,7 +8,9 @@ import '../../agenda/controllers/agendamento_controller.dart';
 import '../../agenda/models/agendamento.dart';
 import '../controllers/cliente_controller.dart';
 
-// Provedor que busca TODO o histórico do banco de dados sempre que houver alteração
+// 🛡️ IMPORT NOVO: Permite atualizar o painel geral ao apagar a duplicidade
+import '../../dashboard/controllers/dashboard_controller.dart'; 
+
 final _todosAgendamentosHistoricoProvider = FutureProvider.autoDispose<List<Agendamento>>((ref) async {
   ref.watch(agendamentoControllerProvider); 
   return await ref.read(agendamentoControllerProvider.notifier).todos();
@@ -19,7 +21,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
 
   final String clienteId;
 
-  // --- Helpers para a Etiqueta Dinâmica de Status ---
   String _obterTextoStatus(AgendamentoStatus status) {
     switch (status) {
       case AgendamentoStatus.agendado: return 'Agendado';
@@ -47,6 +48,61 @@ class HistoricoClienteScreen extends ConsumerWidget {
     }
   }
 
+  // 🛡️ NOVO MÉTODO: O Alerta de Segurança Anti-Desastre
+  void _confirmarExclusao(BuildContext context, WidgetRef ref, Agendamento agendamento) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red.shade800, size: 28),
+            const SizedBox(width: 8),
+            Expanded(child: Text('Excluir Comanda?', style: TextStyle(color: Colors.red.shade900, fontSize: 18))),
+          ],
+        ),
+        content: const Text(
+          'Tem certeza que deseja apagar este agendamento do histórico?\n\n'
+          'Ao fazer isso, o status mudará para Cancelado e qualquer valor atrelado a ele será removido do seu faturamento.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Voltar', style: TextStyle(color: Colors.grey))
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () async {
+              Navigator.pop(ctx); 
+              
+              // Muda o status para cancelado e injeta uma observação de rastreio
+              final novaObs = agendamento.observacao.isEmpty 
+                  ? '[Excluído pelo Histórico]' 
+                  : '${agendamento.observacao} | [Excluído pelo Histórico]';
+              
+              final atualizado = agendamento.copyWith(
+                status: AgendamentoStatus.cancelado,
+                observacao: novaObs,
+              );
+
+              // 🛡️ Salva no banco e força o "F5" geral no sistema
+              await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+              ref.invalidate(_todosAgendamentosHistoricoProvider); // Atualiza esta tela
+              ref.invalidate(todosAgendamentosProvider);           // Atualiza a Agenda
+              ref.invalidate(dashboardMetricsProvider);            // Atualiza o Financeiro
+
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('✅ Comanda removida do histórico!'), backgroundColor: Colors.green)
+                );
+              }
+            },
+            child: const Text('Sim, Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final clienteAsync = ref.watch(clienteControllerProvider);
@@ -70,10 +126,8 @@ class HistoricoClienteScreen extends ConsumerWidget {
                   .toList()
                 ..sort((a, b) => b.data.compareTo(a.data));
 
-              // Identifica o último agendamento da cliente (o mais recente da lista ordenada)
               final ultimoAgendamento = historicoCliente.isNotEmpty ? historicoCliente.first : null;
 
-              // CÁLCULO DAS MÉTRICAS TOTAIS
               int totalCancelamentos = 0;
               int totalReagendamentos = 0;
               final regExpReagendado = RegExp(r'\[Reagendado:\s*(\d+)x\]');
@@ -93,7 +147,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // QUADRANTE SUPERIOR REFINADO (Nome, Última Data, Procedimento + Métricas)
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -113,7 +166,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                             
                             const Divider(height: 24),
                             
-                            // PAINEL DE TOTALIZADORES
                             Row(
                               children: [
                                 Expanded(
@@ -168,6 +220,7 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   clipBehavior: Clip.antiAlias,
+                                  color: isCancelado ? Colors.grey.shade50 : Colors.white, // Se for cancelado, fica cinza claro
                                   child: InkWell(
                                     onTap: () {
                                       ref.read(agendamentoControllerProvider.notifier).mudarData(ag.data);
@@ -183,42 +236,74 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                           size: 20,
                                         ),
                                       ),
-                                      title: Text(ag.servico, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                      // 🛡️ Se for cancelado, o texto fica riscado!
+                                      title: Text(
+                                        ag.servico, 
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold, 
+                                          decoration: isCancelado ? TextDecoration.lineThrough : null,
+                                          color: isCancelado ? Colors.grey : Colors.black87,
+                                        )
+                                      ),
                                       subtitle: Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text('${DateFormat('dd/MM/yyyy').format(ag.data)} às ${ag.horaInicio}'),
+                                          Text(
+                                            '${DateFormat('dd/MM/yyyy').format(ag.data)} às ${ag.horaInicio}',
+                                            style: TextStyle(
+                                              decoration: isCancelado ? TextDecoration.lineThrough : null,
+                                              color: isCancelado ? Colors.grey : Colors.black54,
+                                            ),
+                                          ),
                                           if (ag.observacao.isNotEmpty)
-                                            Text('Obs: ${ag.observacao}', style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+                                            Text('Obs: ${ag.observacao}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: isCancelado ? Colors.grey : Colors.black54)),
                                         ],
                                       ),
-                                      trailing: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                      trailing: Row(
+                                        mainAxisSize: MainAxisSize.min, // Mantém os botões apertadinhos à direita
                                         children: [
-                                          Text(moeda.format(ag.valor), style: const TextStyle(fontWeight: FontWeight.bold)),
-                                          const SizedBox(height: 4),
-                                          Wrap(
-                                            spacing: 4,
+                                          // 🛡️ O BOTÃO DA LIXEIRA MÁGICA
+                                          if (!isCancelado) // Só aparece a lixeira se a comanda estiver viva
+                                            IconButton(
+                                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                              tooltip: 'Excluir / Cancelar Comanda',
+                                              onPressed: () => _confirmarExclusao(context, ref, ag),
+                                            ),
+                                          
+                                          Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            crossAxisAlignment: CrossAxisAlignment.end,
                                             children: [
-                                              // ETIQUETA DE REAGENDAMENTO
-                                              if (qtdReagendado != null)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                  decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
-                                                  child: Text('🔄 $qtdReagendado x', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
-                                                ),
-                                              // ETIQUETA DINÂMICA DE STATUS
-                                              Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                decoration: BoxDecoration(
-                                                  color: _obterCorFundoStatus(ag.status), 
-                                                  borderRadius: BorderRadius.circular(4)
-                                                ),
-                                                child: Text(
-                                                  _obterTextoStatus(ag.status), 
-                                                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _obterCorTextoStatus(ag.status))
-                                                ),
+                                              Text(
+                                                moeda.format(ag.valor), 
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  decoration: isCancelado ? TextDecoration.lineThrough : null,
+                                                  color: isCancelado ? Colors.grey : Colors.black87,
+                                                )
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Wrap(
+                                                spacing: 4,
+                                                children: [
+                                                  if (qtdReagendado != null)
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                      decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(4)),
+                                                      child: Text('🔄 $qtdReagendado x', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900)),
+                                                    ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: _obterCorFundoStatus(ag.status), 
+                                                      borderRadius: BorderRadius.circular(4)
+                                                    ),
+                                                    child: Text(
+                                                      _obterTextoStatus(ag.status), 
+                                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _obterCorTextoStatus(ag.status))
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
