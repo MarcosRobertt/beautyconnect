@@ -67,7 +67,7 @@ class TimelineDayView extends ConsumerWidget {
     required this.onConfirmar,
     required this.onConcluir,
     required this.onCancelar,
-    required this.onReabrir, // NOVO: Gatilho para reabrir
+    required this.onReabrir, 
   });
 
   final List<Agendamento> agendamentos;
@@ -79,7 +79,7 @@ class TimelineDayView extends ConsumerWidget {
   final Function(String id) onConfirmar;
   final Function(String id) onConcluir;
   final Function(String id) onCancelar;
-  final Function(String id) onReabrir; // NOVO
+  final Function(String id) onReabrir; 
 
   static const double _pixelsPorMinuto = 2.0;
   static const double _larguraHorarios = 60.0;
@@ -214,6 +214,8 @@ class TimelineDayView extends ConsumerWidget {
 
     return SingleChildScrollView(
       key: const PageStorageKey('agenda_scroll_dia_global'), 
+      // 🛡️ A MÁGICA DE UX AQUI: 120 pixels de espaço vazio no final da tela para o botão flutuar
+      padding: const EdgeInsets.only(bottom: 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -270,6 +272,8 @@ class TimelineDayView extends ConsumerWidget {
                 child: SingleChildScrollView(
                   key: const PageStorageKey('agenda_scroll_dia_interno'), 
                   scrollDirection: Axis.vertical,
+                  // 🛡️️ GARANTIA DUPLA: Adicionando o respiro na rolagem interna também
+                  padding: const EdgeInsets.only(bottom: 120),
                   child: GestureDetector(
                     onTapUp: (details) {
                       final yRelativa = details.localPosition.dy;
@@ -334,7 +338,6 @@ class TimelineDayView extends ConsumerWidget {
                                         const Spacer(),
                                         if (!isBloqueio) ...[
                                           
-                                          // Se NÃO estiver concluído, mostra o botão de WhatsApp
                                           if (a.status != AgendamentoStatus.concluido)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
@@ -351,7 +354,6 @@ class TimelineDayView extends ConsumerWidget {
                                               ),
                                             ),
 
-                                          // Lógica de status
                                           if (a.status == AgendamentoStatus.agendado)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
@@ -371,7 +373,6 @@ class TimelineDayView extends ConsumerWidget {
                                               ),
                                             ),
                                             
-                                          // 🛡️ NOVO: BOTÃO DE REABRIR COMANDA (Apenas para Concluídos)
                                           if (a.status == AgendamentoStatus.concluido)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
