@@ -38,7 +38,6 @@ class FinanceiroState {
   double get lucro => receitas - despesas;
   double get lucroMesAnterior => receitasMesAnterior - despesasMesAnterior;
 
-  // Cálculos de variação percentual
   double _calcVariacao(double atual, double anterior) {
     if (anterior == 0) return atual > 0 ? 100.0 : 0.0;
     return ((atual - anterior) / anterior) * 100;
@@ -63,31 +62,14 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   DateTime _mesAtual = DateTime.now();
   int _anoAtual = DateTime.now().year;
 
-  // =========================================================================
-  // ⚙️ CONFIGURAÇÃO DE TAXAS DA MAQUININHA (Ajustado para suas taxas exatas)
-  // =========================================================================
   static double calcularTaxa(String forma, double valorBruto) {
     final f = forma.trim().toLowerCase();
-    
-    // Pix e Dinheiro não têm taxa
-    if (f == 'dinheiro' || f == 'pix') {
-      return 0.0;
-    } 
-    // 💳 Taxa do Cartão de Crédito (3,15% -> 0.0315)
-    else if (f.contains('crédito') || f.contains('credito')) {
-      return valorBruto * 0.0315; 
-    } 
-    // 💳 Taxa do Cartão de Débito (0,89% -> 0.0089)
-    else if (f.contains('débito') || f.contains('debito')) {
-      return valorBruto * 0.0089; 
-    }
-    
-    // Padrão para Outros / Pendente
+    if (f == 'dinheiro' || f == 'pix') return 0.0;
+    if (f.contains('crédito') || f.contains('credito')) return valorBruto * 0.0315; 
+    if (f.contains('débito') || f.contains('debito')) return valorBruto * 0.0089; 
     return 0.0;
   }
-  // =========================================================================
 
-  /// NORMALIZADOR: Padroniza o nome vindo do banco de dados para evitar duplicações no gráfico
   String _normalizarFormaPagamento(String formaOriginal) {
     final f = formaOriginal.trim().toLowerCase();
     if (f == 'pix') return 'Pix';
@@ -100,7 +82,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     return formaOriginal[0].toUpperCase() + formaOriginal.substring(1).toLowerCase();
   }
 
-  // Função auxiliar para buscar totais comparativos com cálculo retroativo
   Future<Map<String, double>> _buscarTotaisPeriodo(DateTime inicio, DateTime fim, GetOptions options) async {
     double rec = 0; double des = 0;
     
@@ -112,13 +93,15 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         
     for (var doc in agendamentos.docs) {
       final data = doc.data();
+      // 🛡️ IGNORA COMANDAS CANCELADAS NA BUSCA DE COMPARAÇÃO
+      if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+      
       final bruto = (data['valor'] ?? 0).toDouble();
       final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
       
       final taxa = calcularTaxa(formaRaw, bruto);
       final liquido = bruto - taxa;
-      
-      rec += liquido; // Soma apenas o que realmente entrou
+      rec += liquido; 
     }
 
     final despesas = await _db.collection('despesas')
@@ -140,11 +123,9 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
 
       final options = forcarServidor ? const GetOptions(source: Source.server) : const GetOptions(source: Source.serverAndCache);
 
-      // 1. LIMITES DO MÊS ATUAL
       final inicioMes = DateTime(_mesAtual.year, _mesAtual.month, 1);
       final fimMes = DateTime(_mesAtual.year, _mesAtual.month + 1, 0, 23, 59, 59);
 
-      // 2. BUSCAR DADOS DO MÊS ATUAL
       final agendamentosSnap = await _db.collection('agendamentos')
           .where('status', isEqualTo: 'concluido')
           .where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String())
@@ -170,24 +151,23 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       Map<int, Map<String, double>> fluxoDiario = {};
       for (int i = 1; i <= fimMes.day; i++) fluxoDiario[i] = {'receita': 0.0, 'despesa': 0.0};
 
-      // Processar Receitas do Mês (Com Mitigação de Taxas)
       for (var doc in agendamentosSnap.docs) {
         final data = doc.data();
+        
+        // 🛡️ A MÁGICA: Protege o Caixa Diário e a Visão Geral de ler comandas "Fantasmas/Canceladas"
+        if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+
         final valorBruto = (data['valor'] ?? 0).toDouble();
         final servico = data['servico'] ?? 'Outros';
-        
         final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
         final formaNormalizada = _normalizarFormaPagamento(formaRaw);
-        
         final dataAgenda = DateTime.parse(data['data']);
 
-        // 🛡️ O MILAGRE ACONTECE AQUI: Separa o que é Taxa do que é Receita Líquida
         final taxaCalculada = calcularTaxa(formaRaw, valorBruto);
         final valorLiquido = valorBruto - taxaCalculada;
 
         totalReceitasLiquidas += valorLiquido;
         totalTaxasRetidas += taxaCalculada;
-        
         topServicosMap[servico] = (topServicosMap[servico] ?? 0) + valorLiquido;
         
         if (formasPgtoMap.containsKey(formaNormalizada)) {
@@ -199,7 +179,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         fluxoDiario[dataAgenda.day]!['receita'] = fluxoDiario[dataAgenda.day]!['receita']! + valorLiquido;
       }
 
-      // Processar Despesas do Mês
       double totalDespesas = 0;
       for (var doc in despesasSnap.docs) {
         final data = doc.data();
@@ -212,7 +191,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         }
       }
 
-      // 3. COMPARATIVOS (Mês Anterior e Ano Anterior)
       final inicioMesAnt = DateTime(_mesAtual.year, _mesAtual.month - 1, 1);
       final fimMesAnt = DateTime(_mesAtual.year, _mesAtual.month, 0, 23, 59, 59);
       final totaisMesAnt = await _buscarTotaisPeriodo(inicioMesAnt, fimMesAnt, options);
@@ -221,7 +199,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       final fimAnoAnt = DateTime(_mesAtual.year - 1, _mesAtual.month + 1, 0, 23, 59, 59);
       final totaisAnoAnt = await _buscarTotaisPeriodo(inicioAnoAnt, fimAnoAnt, options);
 
-      // 4. FATURAMENTO ANUAL (Com Mitigação de Taxas)
       final inicioAno = DateTime(_anoAtual, 1, 1);
       final fimAno = DateTime(_anoAtual, 12, 31, 23, 59, 59);
       final anualSnap = await _db.collection('agendamentos')
@@ -233,6 +210,10 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       List<double> faturamentoMeses = List.filled(12, 0.0);
       for (var doc in anualSnap.docs) {
         final data = doc.data();
+        
+        // 🛡️️ A MÁGICA: Protege o Gráfico Anual de ler comandas Canceladas
+        if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+
         final bruto = (data['valor'] ?? 0).toDouble();
         final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
         
@@ -240,10 +221,9 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         final liquido = bruto - taxa;
 
         final dt = DateTime.parse(data['data']);
-        faturamentoMeses[dt.month - 1] += liquido; // Gráfico Anual mostra o Líquido
+        faturamentoMeses[dt.month - 1] += liquido; 
       }
 
-      // Ordenar Top Serviços
       var topServicosSorted = Map.fromEntries(
         topServicosMap.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value))
       );
