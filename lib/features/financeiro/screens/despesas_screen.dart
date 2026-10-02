@@ -15,9 +15,10 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
   String _filtroStatus = 'TODAS'; 
   String _filtroCategoria = 'TODAS';
 
+  // 🛡️ A NOVA CATEGORIA ESTÁ AQUI
   final List<String> _categorias = [
+    'Insumos Studio',
     'Insumos de Atendimento',
-     'Insumos Studio',
     'Estrutura & Ocupação',
     'Equipamentos & Manutenção',
     'Taxas & Tarifas Financeiras',
@@ -86,10 +87,8 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
     );
   }
 
-  // 🛡️ NOVA FUNÇÃO INTELIGENTE: Controla o botão rápido de pagamento na lista
   void _alternarStatusPagamentoRapido(Despesa d) {
     if (d.status == 'PAGO') {
-      // Reverte para Pendente e limpa a forma de pagamento de forma segura
       final atualizada = Despesa(
         id: d.id, descricao: d.descricao, valor: d.valor, categoria: d.categoria,
         tipo: d.tipo, dataVencimento: d.dataVencimento, 
@@ -101,7 +100,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
         ref.read(despesaControllerProvider.notifier).carregarDespesasMes(_mesSelecionado);
       });
     } else {
-      // Abre o alerta para escolher a forma de pagamento ANTES de confirmar
       String formaSelecionada = 'Pix';
       final List<String> formas = ['Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito','Boleto', 'Outros'];
 
@@ -149,11 +147,11 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                       final atualizada = Despesa(
                         id: d.id, descricao: d.descricao, valor: d.valor, categoria: d.categoria,
                         tipo: d.tipo, dataVencimento: d.dataVencimento, 
-                        dataPagamento: DateTime.now(), // Atualiza a data de pagamento para hoje
+                        dataPagamento: DateTime.now(), 
                         status: 'PAGO', 
                         parcelaAtual: d.parcelaAtual, totalParcelas: d.totalParcelas, 
                         idAgrupador: d.idAgrupador, 
-                        formaPagamento: formaSelecionada, // Salva a forma escolhida
+                        formaPagamento: formaSelecionada, 
                       );
                       
                       ref.read(despesaControllerProvider.notifier).salvarDespesa(atualizada).then((_) {
@@ -321,7 +319,6 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                                         Text(DateFormat('dd/MM').format(d.dataVencimento), style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                                         const Spacer(),
                                         
-                                        // 🛡️ BOTÃO ATUALIZADO: Agora chama nossa função inteligente que exibe o Pop-Up!
                                         InkWell(
                                           onTap: () => _alternarStatusPagamentoRapido(d),
                                           child: Container(
