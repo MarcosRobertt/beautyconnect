@@ -26,6 +26,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
     'Sistemas & Operacional',
     'Retirada & Pró-Labore',
     'Despesas Gerais',
+    'Ajuste de Caixa / Estorno', // caso aconteça algum lançamento errado no saldo.
   ];
 
   @override
