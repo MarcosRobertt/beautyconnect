@@ -20,19 +20,32 @@ class AgendamentoRepository {
     return snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
   }
 
+  // 🚀 OTIMIZAÇÃO: Busca apenas o dia selecionado (Ultra-rápido)
   Future<List<Agendamento>> listarDia(DateTime dia) async {
-    final todos = await listarTodos();
-    final lista = todos.where((a) => _mesmoDia(a.data, dia)).toList();
+    final inicioDia = DateTime(dia.year, dia.month, dia.day);
+    final fimDia = DateTime(dia.year, dia.month, dia.day, 23, 59, 59);
+
+    final snapshot = await _firestore.collection('agendamentos')
+        .where('data', isGreaterThanOrEqualTo: inicioDia.toIso8601String())
+        .where('data', isLessThanOrEqualTo: fimDia.toIso8601String())
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final lista = snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
     lista.sort((a, b) => a.horaInicio.compareTo(b.horaInicio));
     return lista;
   }
 
+  // 🚀 OTIMIZAÇÃO: Busca apenas a semana selecionada
   Future<List<Agendamento>> listarSemana(DateTime referencia) async {
     final inicio = _inicioDaSemana(referencia);
-    final fim = inicio.add(const Duration(days: 6));
-    final todos = await listarTodos();
-    final lista = todos.where((a) => !a.data.isBefore(inicio) && !a.data.isAfter(fim)).toList();
+    final fim = inicio.add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
     
+    final snapshot = await _firestore.collection('agendamentos')
+        .where('data', isGreaterThanOrEqualTo: inicio.toIso8601String())
+        .where('data', isLessThanOrEqualTo: fim.toIso8601String())
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final lista = snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
     lista.sort((a, b) {
       final cmpData = a.data.compareTo(b.data);
       return cmpData != 0 ? cmpData : a.horaInicio.compareTo(b.horaInicio);
@@ -40,10 +53,17 @@ class AgendamentoRepository {
     return lista;
   }
 
+  // 🚀 OTIMIZAÇÃO: Busca apenas o mês selecionado
   Future<List<Agendamento>> listarMes(DateTime referencia) async {
-    final todos = await listarTodos();
-    final lista = todos.where((a) => a.data.year == referencia.year && a.data.month == referencia.month).toList();
-    
+    final inicio = DateTime(referencia.year, referencia.month, 1);
+    final fim = DateTime(referencia.year, referencia.month + 1, 0, 23, 59, 59);
+
+    final snapshot = await _firestore.collection('agendamentos')
+        .where('data', isGreaterThanOrEqualTo: inicio.toIso8601String())
+        .where('data', isLessThanOrEqualTo: fim.toIso8601String())
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final lista = snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
     lista.sort((a, b) {
       final cmpData = a.data.compareTo(b.data);
       return cmpData != 0 ? cmpData : a.horaInicio.compareTo(b.horaInicio);
@@ -64,12 +84,21 @@ class AgendamentoRepository {
     return min1 < min4 && min3 < min2;
   }
 
+  // 🚀 OTIMIZAÇÃO: O "Cão de Guarda" agora varre apenas os agendamentos do dia exato, deixando a criação instantânea!
   Future<bool> existeConflito(Agendamento novo, {String? ignorarId}) async {
-    final todos = await listarTodos();
-    return todos.any((a) =>
+    final inicioDia = DateTime(novo.data.year, novo.data.month, novo.data.day);
+    final fimDia = DateTime(novo.data.year, novo.data.month, novo.data.day, 23, 59, 59);
+
+    final snapshot = await _firestore.collection('agendamentos')
+        .where('data', isGreaterThanOrEqualTo: inicioDia.toIso8601String())
+        .where('data', isLessThanOrEqualTo: fimDia.toIso8601String())
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final agendamentosDoDia = snapshot.docs.map((doc) => Agendamento.fromJson(doc.data())).toList();
+
+    return agendamentosDoDia.any((a) =>
         a.id != ignorarId &&
         a.status != AgendamentoStatus.cancelado &&
-        _mesmoDia(a.data, novo.data) &&
         _temSobreposicao(a.horaInicio, a.horaFim, novo.horaInicio, novo.horaFim));
   }
 
@@ -82,6 +111,7 @@ class AgendamentoRepository {
   }
 
   Future<Agendamento?> _buscarNaNuvem(String id) async {
+    // ⚡ Busca precisa e direta de apenas 1 documento (Milisegundos)
     final doc = await _firestore.collection('agendamentos').doc(id).get(const GetOptions(source: Source.server));
     if (!doc.exists || doc.data() == null) return null;
     return Agendamento.fromJson(doc.data()!);
