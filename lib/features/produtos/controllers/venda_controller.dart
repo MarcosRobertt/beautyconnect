@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/venda_produto.dart';
 import '../models/produto.dart';
-import 'produto_controller.dart'; // Para avisar a vitrine que o estoque baixou
+import 'produto_controller.dart';
 
 final vendaControllerProvider = StateNotifierProvider<VendaController, AsyncValue<List<VendaProduto>>>((ref) {
   return VendaController(ref);
@@ -16,7 +16,6 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
 
   final _db = FirebaseFirestore.instance;
 
-  // 🚀 OTIMIZAÇÃO: Busca apenas as vendas do mês atual para não gastar Firebase à toa
   Future<void> carregarVendasMes(DateTime mes) async {
     try {
       state = const AsyncValue.loading();
@@ -29,7 +28,7 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
           .get(const GetOptions(source: Source.serverAndCache));
       
       final vendas = snap.docs.map((doc) => VendaProduto.fromMap(doc.data(), doc.id)).toList();
-      vendas.sort((a, b) => b.dataVenda.compareTo(a.dataVenda)); // Mais recentes no topo
+      vendas.sort((a, b) => b.dataVenda.compareTo(a.dataVenda)); 
 
       state = AsyncValue.data(vendas);
     } catch (e) {
@@ -37,15 +36,14 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
     }
   }
 
-  // 🛡️ MÁGICA DUPLA: Registra o recibo da venda E dá baixa no estoque na mesma tacada
   Future<void> registrarVendaAvulsa(Produto produto, int quantidadeSelecionada, String nomeCliente) async {
     final novaVenda = VendaProduto(
       id: '',
       produtoId: produto.id,
       produtoNome: produto.nome,
       emoji: produto.emoji,
-      custoHistorico: produto.custo,     // "Foto" do custo hoje
-      precoVendido: produto.precoVenda,  // "Foto" da venda hoje
+      custoHistorico: produto.custo,     
+      precoVendido: produto.precoVenda,  
       quantidade: quantidadeSelecionada,
       clienteNome: nomeCliente.isEmpty ? 'Avulso (Balcão)' : nomeCliente,
       dataVenda: DateTime.now(),
@@ -53,19 +51,34 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
 
     final batch = _db.batch();
 
-    // 1. Cria o recibo da venda
     final docVenda = _db.collection('loja_vendas').doc();
     batch.set(docVenda, novaVenda.toMap());
 
-    // 2. Deduz o estoque do produto (Mão invisível do sistema)
     final docProduto = _db.collection('loja_produtos').doc(produto.id);
     final novoEstoque = produto.estoque - quantidadeSelecionada;
     batch.update(docProduto, {'estoque': novoEstoque < 0 ? 0 : novoEstoque});
 
-    // Envia tudo pro Firebase de uma vez só (Economiza requisições)
     await batch.commit();
 
-    // Atualiza a tela de vendas e a tela de vitrine
+    await carregarVendasMes(DateTime.now());
+    ref.read(produtoControllerProvider.notifier).carregarProdutos();
+  }
+
+  // 🛡️ NOVO: O Estorno Perfeito (Apaga a venda e devolve ao stock)
+  Future<void> cancelarVenda(VendaProduto venda) async {
+    final batch = _db.batch();
+
+    // 1. Apaga o recibo do Histórico
+    final docVenda = _db.collection('loja_vendas').doc(venda.id);
+    batch.delete(docVenda);
+
+    // 2. Devolve o produto à Vitrine usando incremento seguro do Firebase
+    final docProduto = _db.collection('loja_produtos').doc(venda.produtoId);
+    batch.update(docProduto, {'estoque': FieldValue.increment(venda.quantidade)});
+
+    await batch.commit();
+
+    // Atualiza as duas abas
     await carregarVendasMes(DateTime.now());
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
