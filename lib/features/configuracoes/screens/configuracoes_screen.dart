@@ -13,6 +13,7 @@ import '../../financeiro/controllers/despesa_controller.dart';
 import '../../financeiro/screens/financeiro_screen.dart';
 import '../../estoque/screens/estoque_screen.dart';
 import '../controllers/backup_controller.dart';
+import '../../produtos/screens/produtos_screen.dart'; // 🛡️ Import da futura Loja
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -212,6 +213,18 @@ class ConfiguracoesScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueScreen())),
                 ),
+                // =========================================================
+                // 🛍️ MÓDULO DE LOJA E REVENDA
+                // =========================================================
+                const Divider(height: 1, indent: 56),
+                ListTile(
+                  leading: const Icon(Icons.shopping_bag_outlined, color: Colors.pink),
+                  title: const Text('Loja & Revenda', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Joias, Cosméticos e Vendas Avulsas', style: TextStyle(fontSize: 12)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProdutosScreen())),
+                ),
+                // =========================================================
               ],
             ),
           ),
@@ -237,16 +250,13 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App'),
-                  trailing: const Text('v1.0.6 (Sync Automático)', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  trailing: const Text('v1.0.8 (Sync Automático)', style: TextStyle(color: Colors.grey, fontSize: 12)), // Aproveitei e subi a versão!
                   onTap: () {},
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-
-          const BotaoManutencaoFirebase(),
-
+          
           const SizedBox(height: 32),
 
           TextButton.icon(
@@ -254,117 +264,8 @@ class ConfiguracoesScreen extends ConsumerWidget {
             icon: const Icon(Icons.logout, color: Colors.redAccent),
             label: const Text('Sair da Conta', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
+          const SizedBox(height: 24),
         ],
-      ),
-    );
-  }
-}
-
-class BotaoManutencaoFirebase extends ConsumerStatefulWidget {
-  const BotaoManutencaoFirebase({super.key});
-
-  @override
-  ConsumerState<BotaoManutencaoFirebase> createState() => _BotaoManutencaoFirebaseState();
-}
-
-class _BotaoManutencaoFirebaseState extends ConsumerState<BotaoManutencaoFirebase> {
-  bool _executandoLimpeza = false;
-
-  Future<void> _executarLimpezaFantasmas() async {
-    setState(() => _executandoLimpeza = true);
-
-    try {
-      final firestore = FirebaseFirestore.instance;
-
-      final clientesSnap = await firestore.collection('clientes').get();
-      final List<String> idsValidos = clientesSnap.docs.map((doc) => doc.id).toList();
-
-      if (idsValidos.isEmpty) {
-        throw Exception("Nenhum cliente encontrado no banco de dados. Abortando por segurança.");
-      }
-
-      final agendamentosSnap = await firestore.collection('agendamentos').get();
-      final batch = firestore.batch();
-      int orfaosEncontrados = 0;
-
-      for (final doc in agendamentosSnap.docs) {
-        final data = doc.data();
-        final clienteId = data['clienteId']?.toString() ?? '';
-        final status = data['status']?.toString().toLowerCase() ?? ''; 
-
-        if (clienteId != 'BLOQUEIO' && clienteId.isNotEmpty) {
-          if (!idsValidos.contains(clienteId)) {
-            if (!status.contains('concluido')) {
-              batch.delete(doc.reference);
-              orfaosEncontrados++;
-            }
-          }
-        }
-      }
-
-      if (orfaosEncontrados > 0) {
-        await batch.commit();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ SUCESSO! $orfaosEncontrados agendamentos fantasmas foram apagados direto do banco.'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 8),
-            ),
-          );
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Nenhuma comanda fantasma aberta encontrada no banco.'), backgroundColor: Colors.blue),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('🚨 Erro na faxina: $e'), backgroundColor: Colors.red, duration: const Duration(seconds: 8)),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _executandoLimpeza = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.red.shade50,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.red.shade200, width: 2)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.local_fire_department, color: Colors.red.shade800),
-                const SizedBox(width: 8),
-                Text('Limpeza ROOT (Banco de Dados)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Comunicação direta com o servidor para apagar agendamentos ABERTOS de clientes excluídas.', style: TextStyle(fontSize: 12, color: Colors.red.shade900)),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                onPressed: _executandoLimpeza ? null : _executarLimpezaFantasmas,
-                icon: _executandoLimpeza ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.delete_sweep),
-                label: Text(_executandoLimpeza ? 'Acessando Banco...' : 'Apagar Comandas Travadas'),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
