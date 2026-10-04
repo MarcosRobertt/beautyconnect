@@ -26,7 +26,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     );
   }
 
-  // 🛍️ NOVO: Modal de Venda Expressa
   void _abrirModalVenda(Produto p) {
     showModalBottomSheet(
       context: context,
@@ -41,7 +40,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir Produto'),
-        content: Text('Tem certeza que deseja apagar "${p.nome}" da loja?'),
+        content: Text('Tem a certeza que deseja apagar "${p.nome}" da loja?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           FilledButton(
@@ -51,6 +50,35 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
               ref.read(produtoControllerProvider.notifier).excluirProduto(p.id);
             },
             child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🛡️ NOVO: Pop-up de Segurança para Estorno
+  void _confirmarExclusaoVenda(VendaProduto v) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Estornar Venda'),
+          ],
+        ),
+        content: Text('Tem a certeza que deseja cancelar a venda de ${v.quantidade}x ${v.produtoNome}?\n\nO valor será removido do lucro e o produto voltará para o stock da vitrine.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar', style: TextStyle(color: Colors.grey))),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(vendaControllerProvider.notifier).cancelarVenda(v);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venda estornada e stock devolvido! 🔄'), backgroundColor: Colors.blue));
+            },
+            child: const Text('Sim, Estornar'),
           ),
         ],
       ),
@@ -89,7 +117,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
         body: TabBarView(
           children: [
             // ==========================================
-            // ABA 1: VITRINE (ESTOQUE)
+            // ABA 1: VITRINE
             // ==========================================
             produtosAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -98,7 +126,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                 if (produtos.isEmpty) {
                   return const Center(
                     child: Text(
-                      'Sua vitrine está vazia.\nClique no + para cadastrar o primeiro produto.', 
+                      'A sua vitrine está vazia.\nClique no + para cadastrar o primeiro produto.', 
                       textAlign: TextAlign.center, 
                       style: TextStyle(color: Colors.grey)
                     ),
@@ -142,7 +170,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                   Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                   const SizedBox(height: 4),
                                   Text(
-                                    semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', 
+                                    semEstoque ? '⚠️ SEM STOCK' : '📦 Stock: ${p.estoque} un', 
                                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)
                                   ),
                                   Text('Custo: ${_moeda.format(p.custo)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
@@ -162,7 +190,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 8),
-                                // 🛍️ NOVO: BOTÃO DE VENDER
                                 FilledButton.icon(
                                   style: FilledButton.styleFrom(
                                     backgroundColor: semEstoque ? Colors.grey.shade400 : Colors.green.shade600,
@@ -185,7 +212,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
             ),
             
             // ==========================================
-            // ABA 2: HISTÓRICO DE VENDAS (MOTOR LIGADO)
+            // ABA 2: HISTÓRICO DE VENDAS
             // ==========================================
             vendasAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -194,20 +221,18 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                 if (vendas.isEmpty) {
                   return const Center(
                     child: Text(
-                      'Nenhuma venda registrada neste mês.', 
+                      'Nenhuma venda registada neste mês.', 
                       textAlign: TextAlign.center, 
                       style: TextStyle(color: Colors.grey)
                     ),
                   );
                 }
 
-                // Cálculos do Mês
                 final totalVendido = vendas.fold(0.0, (sum, v) => sum + v.valorTotal);
                 final totalLucro = vendas.fold(0.0, (sum, v) => sum + v.lucroTotal);
 
                 return Column(
                   children: [
-                    // PAINEL DE RESUMO (DRE da Loja)
                     Container(
                       padding: const EdgeInsets.all(16),
                       color: Colors.white,
@@ -267,6 +292,24 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                 children: [
                                   Text(_moeda.format(v.valorTotal), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
                                   Text('Lucro: ${_moeda.format(v.lucroTotal)}', style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                                  
+                                  const SizedBox(height: 6),
+                                  // 🛡️ NOVO: Botão de Estornar a Venda
+                                  InkWell(
+                                    onTap: () => _confirmarExclusaoVenda(v),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.undo, size: 10, color: Colors.red.shade700),
+                                          const SizedBox(width: 4),
+                                          Text('ESTORNAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
@@ -313,7 +356,7 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ Venda de ${widget.produto.nome} registrada!'), backgroundColor: Colors.green),
+        SnackBar(content: Text('✅ Venda de ${widget.produto.nome} registada!'), backgroundColor: Colors.green),
       );
     }
   }
@@ -337,7 +380,7 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Registrar Venda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                    const Text('Registar Venda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
                     Text(p.nome, style: const TextStyle(fontSize: 14, color: Colors.grey)),
                   ],
                 ),
@@ -370,7 +413,7 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
           TextField(
             controller: _clienteController,
             decoration: const InputDecoration(
-              labelText: 'Nome da Cliente (Opcional)', 
+              labelText: 'Nome do Cliente (Opcional)', 
               hintText: 'Ex: Maria Silva ou "Balcão"',
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.person_outline),
@@ -411,9 +454,6 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
   }
 }
 
-// ==========================================
-// FORMULÁRIO DE CADASTRO/EDIÇÃO DE PRODUTO
-// ==========================================
 class _FormularioProduto extends ConsumerStatefulWidget {
   final Produto? produtoEdit;
   const _FormularioProduto({this.produtoEdit});
@@ -523,7 +563,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
               Expanded(
                 child: TextField(
                   controller: _custoController,
-                  decoration: const InputDecoration(labelText: 'Custo (R\$ pago)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Custo (Pago)', border: OutlineInputBorder()),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ),
@@ -531,7 +571,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
               Expanded(
                 child: TextField(
                   controller: _vendaController,
-                  decoration: const InputDecoration(labelText: 'Preço Venda (R\$)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Preço Venda', border: OutlineInputBorder()),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 ),
               ),
@@ -541,7 +581,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
           
           TextField(
             controller: _estoqueController,
-            decoration: const InputDecoration(labelText: 'Quantidade em Estoque', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'Quantidade em Stock', border: OutlineInputBorder()),
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 24),
