@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../controllers/produto_controller.dart';
+import '../controllers/venda_controller.dart';
 import '../models/produto.dart';
+import '../models/venda_produto.dart';
 
 class ProdutosScreen extends ConsumerStatefulWidget {
   const ProdutosScreen({super.key});
@@ -21,6 +23,16 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) => _FormularioProduto(produtoEdit: produto),
+    );
+  }
+
+  // 🛍️ NOVO: Modal de Venda Expressa
+  void _abrirModalVenda(Produto p) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => _ModalVendaProduto(produto: p),
     );
   }
 
@@ -49,6 +61,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
   Widget build(BuildContext context) {
     const primaryColor = Color(0xFF8A2463);
     final produtosAsync = ref.watch(produtoControllerProvider);
+    final vendasAsync = ref.watch(vendaControllerProvider);
 
     return DefaultTabController(
       length: 2,
@@ -106,48 +119,59 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                         borderRadius: BorderRadius.circular(12), 
                         side: BorderSide(color: semEstoque ? Colors.red.shade200 : Colors.grey.shade200)
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        leading: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: semEstoque ? Colors.red.shade50 : Colors.pink.shade50,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Center(
-                            child: Text(p.emoji, style: const TextStyle(fontSize: 24)),
-                          ),
-                        ),
-                        title: Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
                           children: [
-                            const SizedBox(height: 4),
-                            Text(
-                              semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', 
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)
+                            Container(
+                              width: 55,
+                              height: 55,
+                              decoration: BoxDecoration(
+                                color: semEstoque ? Colors.red.shade50 : Colors.pink.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Center(
+                                child: Text(p.emoji, style: const TextStyle(fontSize: 28)),
+                              ),
                             ),
-                            Text('Custo: ${_moeda.format(p.custo)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                          ],
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(_moeda.format(p.precoVenda), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
-                            const SizedBox(height: 4),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', 
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)
+                                  ),
+                                  Text('Custo: ${_moeda.format(p.custo)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                InkWell(
-                                  onTap: () => _abrirFormulario(produto: p),
-                                  child: const Icon(Icons.edit_outlined, size: 18, color: Colors.grey),
+                                Text(_moeda.format(p.precoVenda), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    InkWell(onTap: () => _abrirFormulario(produto: p), child: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey)),
+                                    const SizedBox(width: 12),
+                                    InkWell(onTap: () => _confirmarExclusao(p), child: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300)),
+                                  ],
                                 ),
-                                const SizedBox(width: 12),
-                                InkWell(
-                                  onTap: () => _confirmarExclusao(p),
-                                  child: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
+                                const SizedBox(height: 8),
+                                // 🛍️ NOVO: BOTÃO DE VENDER
+                                FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: semEstoque ? Colors.grey.shade400 : Colors.green.shade600,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                    minimumSize: const Size(0, 32),
+                                  ),
+                                  onPressed: semEstoque ? null : () => _abrirModalVenda(p),
+                                  icon: const Icon(Icons.point_of_sale, size: 16),
+                                  label: const Text('VENDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                                 ),
                               ],
                             ),
@@ -161,17 +185,227 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
             ),
             
             // ==========================================
-            // ABA 2: HISTÓRICO DE VENDAS (Etapa 2)
+            // ABA 2: HISTÓRICO DE VENDAS (MOTOR LIGADO)
             // ==========================================
-            const Center(
-              child: Text(
-                'Nenhuma venda registrada ainda.\n(O motor de vendas será ativado na próxima etapa!)', 
-                textAlign: TextAlign.center, 
-                style: TextStyle(color: Colors.grey)
-              ),
+            vendasAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(child: Text('Erro: $e')),
+              data: (vendas) {
+                if (vendas.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      'Nenhuma venda registrada neste mês.', 
+                      textAlign: TextAlign.center, 
+                      style: TextStyle(color: Colors.grey)
+                    ),
+                  );
+                }
+
+                // Cálculos do Mês
+                final totalVendido = vendas.fold(0.0, (sum, v) => sum + v.valorTotal);
+                final totalLucro = vendas.fold(0.0, (sum, v) => sum + v.lucroTotal);
+
+                return Column(
+                  children: [
+                    // PAINEL DE RESUMO (DRE da Loja)
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      color: Colors.white,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                              child: Column(
+                                children: [
+                                  const Text('Total Vendido', style: TextStyle(fontSize: 12, color: Colors.green)),
+                                  Text(_moeda.format(totalVendido), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                              child: Column(
+                                children: [
+                                  const Text('Lucro Líquido', style: TextStyle(fontSize: 12, color: Colors.blue)),
+                                  Text(_moeda.format(totalLucro), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: vendas.length,
+                        itemBuilder: (context, index) {
+                          final v = vendas[index];
+                          return Card(
+                            elevation: 0,
+                            margin: const EdgeInsets.only(bottom: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade200)),
+                            child: ListTile(
+                              leading: Text(v.emoji, style: const TextStyle(fontSize: 24)),
+                              title: Text('${v.quantidade}x ${v.produtoNome}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('👤 ${v.clienteNome}', style: const TextStyle(fontSize: 12)),
+                                  Text('📅 ${DateFormat('dd/MM/yyyy HH:mm').format(v.dataVenda)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                ],
+                              ),
+                              trailing: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(_moeda.format(v.valorTotal), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                                  Text('Lucro: ${_moeda.format(v.lucroTotal)}', style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ==========================================
+// MODAL DE VENDA EXPRESSA
+// ==========================================
+class _ModalVendaProduto extends ConsumerStatefulWidget {
+  final Produto produto;
+  const _ModalVendaProduto({required this.produto});
+
+  @override
+  ConsumerState<_ModalVendaProduto> createState() => _ModalVendaProdutoState();
+}
+
+class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
+  final _clienteController = TextEditingController();
+  int _quantidade = 1;
+  bool _salvando = false;
+
+  void _confirmarVenda() async {
+    setState(() => _salvando = true);
+    
+    await ref.read(vendaControllerProvider.notifier).registrarVendaAvulsa(
+      widget.produto, 
+      _quantidade, 
+      _clienteController.text.trim()
+    );
+
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('✅ Venda de ${widget.produto.nome} registrada!'), backgroundColor: Colors.green),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.produto;
+    final total = p.precoVenda * _quantidade;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Text(p.emoji, style: const TextStyle(fontSize: 32)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Registrar Venda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                    Text(p.nome, style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 24),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Quantidade:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+                    onPressed: _quantidade > 1 ? () => setState(() => _quantidade--) : null,
+                  ),
+                  Text('$_quantidade', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.green),
+                    onPressed: _quantidade < p.estoque ? () => setState(() => _quantidade++) : null,
+                  ),
+                ],
+              )
+            ],
+          ),
+          const SizedBox(height: 16),
+          
+          TextField(
+            controller: _clienteController,
+            decoration: const InputDecoration(
+              labelText: 'Nome da Cliente (Opcional)', 
+              hintText: 'Ex: Maria Silva ou "Balcão"',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person_outline),
+            ),
+            textCapitalization: TextCapitalization.words,
+          ),
+          const SizedBox(height: 24),
+          
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Total a Receber:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                Text(NumberFormat.simpleCurrency(locale: 'pt_BR').format(total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600),
+                onPressed: _salvando ? null : _confirmarVenda,
+                icon: _salvando ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.check),
+                label: Text(_salvando ? 'PROCESSANDO...' : 'CONFIRMAR VENDA'),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -259,7 +493,6 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
           
           Row(
             children: [
-              // Seletor de Emoji Enxuto
               Container(
                 width: 70,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -277,7 +510,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
               Expanded(
                 child: TextField(
                   controller: _nomeController,
-                  decoration: const InputDecoration(labelText: 'Nome do Produto (Ex: Óleo Hidratante)', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Nome do Produto', border: OutlineInputBorder()),
                   textCapitalization: TextCapitalization.words,
                 ),
               ),
