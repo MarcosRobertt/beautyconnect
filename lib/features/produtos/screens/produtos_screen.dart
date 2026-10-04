@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../clientes/controllers/cliente_controller.dart'; // 🛡️ NOVO: Import da lista de clientes
 import '../controllers/produto_controller.dart';
 import '../controllers/venda_controller.dart';
 import '../models/produto.dart';
@@ -40,7 +41,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Excluir Produto'),
-        content: Text('Tem a certeza que deseja apagar "${p.nome}" da loja?'),
+        content: Text('Tem certeza que deseja apagar "${p.nome}" da loja?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
           FilledButton(
@@ -56,7 +57,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     );
   }
 
-  // 🛡️ NOVO: Pop-up de Segurança para Estorno
   void _confirmarExclusaoVenda(VendaProduto v) {
     showDialog(
       context: context,
@@ -68,7 +68,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
             Text('Estornar Venda'),
           ],
         ),
-        content: Text('Tem a certeza que deseja cancelar a venda de ${v.quantidade}x ${v.produtoNome}?\n\nO valor será removido do lucro e o produto voltará para o stock da vitrine.'),
+        content: Text('Tem certeza que deseja cancelar a venda de ${v.quantidade}x ${v.produtoNome}?\n\nO valor será removido do lucro e o produto voltará para o estoque da vitrine.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar', style: TextStyle(color: Colors.grey))),
           FilledButton(
@@ -76,7 +76,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
             onPressed: () {
               Navigator.pop(ctx);
               ref.read(vendaControllerProvider.notifier).cancelarVenda(v);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venda estornada e stock devolvido! 🔄'), backgroundColor: Colors.blue));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venda estornada e estoque devolvido! 🔄'), backgroundColor: Colors.blue));
             },
             child: const Text('Sim, Estornar'),
           ),
@@ -126,7 +126,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                 if (produtos.isEmpty) {
                   return const Center(
                     child: Text(
-                      'A sua vitrine está vazia.\nClique no + para cadastrar o primeiro produto.', 
+                      'Sua vitrine está vazia.\nClique no + para cadastrar o primeiro produto.', 
                       textAlign: TextAlign.center, 
                       style: TextStyle(color: Colors.grey)
                     ),
@@ -170,7 +170,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                   Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                   const SizedBox(height: 4),
                                   Text(
-                                    semEstoque ? '⚠️ SEM STOCK' : '📦 Stock: ${p.estoque} un', 
+                                    semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', 
                                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)
                                   ),
                                   Text('Custo: ${_moeda.format(p.custo)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
@@ -221,7 +221,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                 if (vendas.isEmpty) {
                   return const Center(
                     child: Text(
-                      'Nenhuma venda registada neste mês.', 
+                      'Nenhuma venda registrada neste mês.', 
                       textAlign: TextAlign.center, 
                       style: TextStyle(color: Colors.grey)
                     ),
@@ -294,7 +294,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                   Text('Lucro: ${_moeda.format(v.lucroTotal)}', style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
                                   
                                   const SizedBox(height: 6),
-                                  // 🛡️ NOVO: Botão de Estornar a Venda
                                   InkWell(
                                     onTap: () => _confirmarExclusaoVenda(v),
                                     child: Container(
@@ -329,7 +328,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
 }
 
 // ==========================================
-// MODAL DE VENDA EXPRESSA
+// MODAL DE VENDA EXPRESSA COM AUTOCOMPLETE
 // ==========================================
 class _ModalVendaProduto extends ConsumerStatefulWidget {
   final Produto produto;
@@ -340,7 +339,7 @@ class _ModalVendaProduto extends ConsumerStatefulWidget {
 }
 
 class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
-  final _clienteController = TextEditingController();
+  String _nomeClienteDigitado = '';
   int _quantidade = 1;
   bool _salvando = false;
 
@@ -350,13 +349,13 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
     await ref.read(vendaControllerProvider.notifier).registrarVendaAvulsa(
       widget.produto, 
       _quantidade, 
-      _clienteController.text.trim()
+      _nomeClienteDigitado.trim()
     );
 
     if (mounted) {
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('✅ Venda de ${widget.produto.nome} registada!'), backgroundColor: Colors.green),
+        SnackBar(content: Text('✅ Venda de ${widget.produto.nome} registrada!'), backgroundColor: Colors.green),
       );
     }
   }
@@ -365,6 +364,13 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
   Widget build(BuildContext context) {
     final p = widget.produto;
     final total = p.precoVenda * _quantidade;
+
+    // 🚀 OTIMIZAÇÃO: Puxa a lista de clientes da memória RAM (Instantâneo e 0 custo de Firebase)
+    final clientesAsync = ref.watch(clienteControllerProvider);
+    final nomesClientes = clientesAsync.maybeWhen(
+      data: (clientes) => clientes.map((c) => c.nome).toList(),
+      orElse: () => <String>[],
+    );
 
     return Padding(
       padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
@@ -380,7 +386,7 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Registar Venda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
+                    const Text('Registrar Venda', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green)),
                     Text(p.nome, style: const TextStyle(fontSize: 14, color: Colors.grey)),
                   ],
                 ),
@@ -410,15 +416,35 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
           ),
           const SizedBox(height: 16),
           
-          TextField(
-            controller: _clienteController,
-            decoration: const InputDecoration(
-              labelText: 'Nome do Cliente (Opcional)', 
-              hintText: 'Ex: Maria Silva ou "Balcão"',
-              border: OutlineInputBorder(),
-              prefixIcon: Icon(Icons.person_outline),
-            ),
-            textCapitalization: TextCapitalization.words,
+          // 🧠 CAMPO INTELIGENTE: Autocomplete puxando da memória
+          Autocomplete<String>(
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              _nomeClienteDigitado = textEditingValue.text; // Guarda o que foi digitado
+              
+              if (textEditingValue.text.isEmpty) {
+                return const Iterable<String>.empty();
+              }
+              return nomesClientes.where((nome) => 
+                nome.toLowerCase().contains(textEditingValue.text.toLowerCase())
+              );
+            },
+            onSelected: (String selection) {
+              _nomeClienteDigitado = selection;
+            },
+            fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: (val) => _nomeClienteDigitado = val,
+                decoration: const InputDecoration(
+                  labelText: 'Nome da Cliente (Busca Automática)', 
+                  hintText: 'Digite para buscar ou deixe em branco',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person_search_outlined),
+                ),
+                textCapitalization: TextCapitalization.words,
+              );
+            },
           ),
           const SizedBox(height: 24),
           
@@ -454,6 +480,9 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
   }
 }
 
+// ==========================================
+// FORMULÁRIO DE CADASTRO/EDIÇÃO DE PRODUTO
+// ==========================================
 class _FormularioProduto extends ConsumerStatefulWidget {
   final Produto? produtoEdit;
   const _FormularioProduto({this.produtoEdit});
@@ -581,7 +610,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
           
           TextField(
             controller: _estoqueController,
-            decoration: const InputDecoration(labelText: 'Quantidade em Stock', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'Quantidade em Estoque', border: OutlineInputBorder()),
             keyboardType: TextInputType.number,
           ),
           const SizedBox(height: 24),
