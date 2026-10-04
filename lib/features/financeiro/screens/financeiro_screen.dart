@@ -19,11 +19,9 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     Future.microtask(() => ref.read(financeiroControllerProvider.notifier).carregarDados());
   }
 
-  // Widget ajudante para desenhar a setinha colorida (Verde/Vermelha)
   Widget _buildIndicador(double percentual, {bool inverteCores = false}) {
     if (percentual == 0) return const SizedBox.shrink();
     
-    // Se for despesa (inverteCores = true), subir é ruim (vermelho)
     final bool subiu = percentual > 0;
     final bool positivo = inverteCores ? !subiu : subiu;
     
@@ -78,7 +76,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
-  // 🛡️ NOVO SELETOR DE MÊS INTELIGENTE E CLICÁVEL
   Widget _buildSeletorMes(FinanceiroState state) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -107,7 +104,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             );
             
             if (dataSelecionada != null) {
-              // MITIGAÇÃO: Força sempre o dia 1 para não quebrar a lógica do banco
               ref.read(financeiroControllerProvider.notifier).carregarDados(
                 mes: DateTime(dataSelecionada.year, dataSelecionada.month, 1)
               );
@@ -143,7 +139,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
-        // Cards de Receita e Despesa com %
+        // 🟢 BLOCO DE ENTRADAS (RECEITAS)
         Row(
           children: [
             Expanded(
@@ -153,22 +149,15 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Receitas Líquidas', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Row(
+                      children: [
+                        Icon(Icons.spa, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 4),
+                        const Text('Serviços', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                     const SizedBox(height: 4),
-                    Text(_formatMoeda.format(state.receitas), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _buildIndicador(state.variacaoReceitaMes),
-                        const Text(' vs Mês ant.', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        _buildIndicador(state.variacaoReceitaAno),
-                        const Text(' vs Ano ant.', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
+                    Text(_formatMoeda.format(state.receitasServicos), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
                   ],
                 ),
               ),
@@ -177,35 +166,77 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red.shade200)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green.shade200)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Despesas Totais', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Row(
+                      children: [
+                        Icon(Icons.shopping_bag, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 4),
+                        const Text('Loja/Produtos', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                     const SizedBox(height: 4),
-                    Text(_formatMoeda.format(state.despesas), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        _buildIndicador(state.variacaoDespesaMes, inverteCores: true), // Despesa subir é ruim
-                        const Text(' vs Mês ant.', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        _buildIndicador(state.variacaoDespesaAno, inverteCores: true),
-                        const Text(' vs Ano ant.', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                      ],
-                    ),
+                    Text(_formatMoeda.format(state.receitasProdutos), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
                   ],
                 ),
               ),
             ),
           ],
         ),
+        
+        // 🔴 BLOCO DE SAÍDAS E CUSTOS
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red.shade200)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.money_off, size: 14, color: Colors.red.shade700),
+                        const SizedBox(width: 4),
+                        const Text('Despesas', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_formatMoeda.format(state.despesas), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.shade200)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.inventory, size: 14, color: Colors.orange.shade700),
+                        const SizedBox(width: 4),
+                        const Text('Custo Loja (CMV)', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(_formatMoeda.format(state.cmv), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+
         const SizedBox(height: 16),
 
-        // Lucro Líquido
+        // 💰 LUCRO LÍQUIDO (Matematicamente Blindado)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: _primaryColor, borderRadius: BorderRadius.circular(16)),
@@ -338,7 +369,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
-  // 🛡️ BÔNUS: O SELETOR DE ANO NA ABA ANUAL AGORA TAMBÉM É CLICÁVEL!
   Widget _buildVisaoAnual(FinanceiroState state) {
     final meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     double maxValor = state.faturamentoAnual.reduce((a, b) => a > b ? a : b);
@@ -361,7 +391,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             children: [
               IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(ano: state.anoReferencia - 1)),
               
-              // SELETOR NATIVO DE ANO
               InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () {
@@ -444,7 +473,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             ),
           ),
           const SizedBox(height: 40),
-          const Text('Gráfico representa Receita Líquida (Entradas das comandas)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+          const Text('Gráfico representa Receitas Globais (Serviços + Produtos)', style: TextStyle(fontSize: 11, color: Colors.grey)),
         ],
       ),
     );
