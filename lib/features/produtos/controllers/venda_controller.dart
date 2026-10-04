@@ -10,6 +10,8 @@ final vendaControllerProvider = StateNotifierProvider<VendaController, AsyncValu
 
 class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
   final Ref ref;
+  DateTime _mesDaTela = DateTime.now(); // 🧠 NOVO: O cérebro agora lembra qual mês você está olhando
+  
   VendaController(this.ref) : super(const AsyncValue.loading()) {
     carregarVendasMes(DateTime.now());
   }
@@ -17,6 +19,7 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
   final _db = FirebaseFirestore.instance;
 
   Future<void> carregarVendasMes(DateTime mes) async {
+    _mesDaTela = mes; // Atualiza a memória
     try {
       state = const AsyncValue.loading();
       final inicioMes = DateTime(mes.year, mes.month, 1);
@@ -60,26 +63,22 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
 
     await batch.commit();
 
-    await carregarVendasMes(DateTime.now());
+    await carregarVendasMes(_mesDaTela); // Atualiza sem sair do mês que o usuário estava olhando
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 
-  // 🛡️ NOVO: O Estorno Perfeito (Apaga a venda e devolve ao stock)
   Future<void> cancelarVenda(VendaProduto venda) async {
     final batch = _db.batch();
 
-    // 1. Apaga o recibo do Histórico
     final docVenda = _db.collection('loja_vendas').doc(venda.id);
     batch.delete(docVenda);
 
-    // 2. Devolve o produto à Vitrine usando incremento seguro do Firebase
     final docProduto = _db.collection('loja_produtos').doc(venda.produtoId);
     batch.update(docProduto, {'estoque': FieldValue.increment(venda.quantidade)});
 
     await batch.commit();
 
-    // Atualiza as duas abas
-    await carregarVendasMes(DateTime.now());
+    await carregarVendasMes(_mesDaTela); // Atualiza sem sair do mês que o usuário estava olhando
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 }
