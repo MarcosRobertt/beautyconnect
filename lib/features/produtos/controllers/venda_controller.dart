@@ -10,8 +10,8 @@ final vendaControllerProvider = StateNotifierProvider<VendaController, AsyncValu
 
 class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
   final Ref ref;
-  DateTime _mesDaTela = DateTime.now(); // 🧠 NOVO: O cérebro agora lembra qual mês você está olhando
-  
+  DateTime _mesAtual = DateTime.now(); // 🧠 Lembra qual mês o usuário está visualizando!
+
   VendaController(this.ref) : super(const AsyncValue.loading()) {
     carregarVendasMes(DateTime.now());
   }
@@ -19,8 +19,8 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
   final _db = FirebaseFirestore.instance;
 
   Future<void> carregarVendasMes(DateTime mes) async {
-    _mesDaTela = mes; // Atualiza a memória
     try {
+      _mesAtual = mes; // Guarda a referência
       state = const AsyncValue.loading();
       final inicioMes = DateTime(mes.year, mes.month, 1);
       final fimMes = DateTime(mes.year, mes.month + 1, 0, 23, 59, 59);
@@ -63,7 +63,7 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
 
     await batch.commit();
 
-    await carregarVendasMes(_mesDaTela); // Atualiza sem sair do mês que o usuário estava olhando
+    await carregarVendasMes(_mesAtual); // Atualiza e mantém no mês que estava
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 
@@ -78,7 +78,7 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
 
     await batch.commit();
 
-    await carregarVendasMes(_mesDaTela); // Atualiza sem sair do mês que o usuário estava olhando
+    await carregarVendasMes(_mesAtual); // Atualiza e mantém no mês que estava
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 }
