@@ -36,7 +36,8 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
     }
   }
 
-  Future<void> registrarVendaAvulsa(Produto produto, int quantidadeSelecionada, String nomeCliente) async {
+  // 📅 NOVO: Agora recebe a "dataDaVenda" informada no formulário
+  Future<void> registrarVendaAvulsa(Produto produto, int quantidadeSelecionada, String nomeCliente, DateTime dataDaVenda) async {
     final novaVenda = VendaProduto(
       id: '',
       produtoId: produto.id,
@@ -46,11 +47,10 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
       precoVendido: produto.precoVenda,  
       quantidade: quantidadeSelecionada,
       clienteNome: nomeCliente.isEmpty ? 'Avulso (Balcão)' : nomeCliente,
-      dataVenda: DateTime.now(),
+      dataVenda: dataDaVenda, // 📅 Salva a data exata escolhida
     );
 
     final batch = _db.batch();
-
     final docVenda = _db.collection('loja_vendas').doc();
     batch.set(docVenda, novaVenda.toMap());
 
@@ -60,34 +60,29 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
 
     await batch.commit();
 
-    await carregarVendasMes(DateTime.now());
+    await carregarVendasMes(dataDaVenda); // Atualiza a tela com o mês da venda realizada
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 
-  // 🛡️ NOVO: Estorno Blindado contra Produtos Deletados e Opção de Apenas Apagar
   Future<void> cancelarVenda(VendaProduto venda, {bool devolverEstoque = true}) async {
     final docVenda = _db.collection('loja_vendas').doc(venda.id);
     final docProduto = _db.collection('loja_produtos').doc(venda.produtoId);
 
     if (devolverEstoque) {
-      // Verifica se o produto ainda existe na vitrine
       final snapProduto = await docProduto.get();
-      
       if (snapProduto.exists) {
         final batch = _db.batch();
-        batch.delete(docVenda); // Apaga a venda
-        batch.update(docProduto, {'estoque': FieldValue.increment(venda.quantidade)}); // Devolve o estoque
+        batch.delete(docVenda); 
+        batch.update(docProduto, {'estoque': FieldValue.increment(venda.quantidade)}); 
         await batch.commit();
       } else {
-        // Produto Fantasma: Como não existe mais na vitrine, apenas apaga a venda para limpar o DRE
         await docVenda.delete();
       }
     } else {
-      // Exclusão Simples (Teste): Apenas apaga a venda sem mexer na vitrine
       await docVenda.delete();
     }
 
-    await carregarVendasMes(DateTime.now());
+    await carregarVendasMes(venda.dataVenda);
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 }
