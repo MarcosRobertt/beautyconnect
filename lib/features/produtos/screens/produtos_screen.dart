@@ -20,7 +20,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
   final _moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
   DateTime _mesFiltro = DateTime.now(); 
   
-  // 🔍 NOVOS: Controles de Filtro da Vitrine
+  // 🔍 Controles de Filtro da Vitrine
   String _searchQuery = '';
   String _categoriaSelecionada = 'Todas';
   final List<String> _categorias = ['Todas', 'Joias', 'Produtos de Beleza', 'Outros'];
@@ -159,14 +159,14 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Erro: $e')),
               data: (produtos) {
-                // 1. Filtragem ultra-rápida na memória
+                // Filtragem ultra-rápida na memória
                 final produtosFiltrados = produtos.where((p) {
                   final matchNome = p.nome.toLowerCase().contains(_searchQuery.toLowerCase());
                   final matchCategoria = _categoriaSelecionada == 'Todas' || p.categoria == _categoriaSelecionada;
                   return matchNome && matchCategoria;
                 }).toList();
 
-                // 2. Cálculo do Total do Estoque Filtrado
+                // Cálculo do Total do Estoque Filtrado
                 double capitalInvestido = 0;
                 double potencialVenda = 0;
                 for (var p in produtosFiltrados) {
@@ -391,7 +391,7 @@ class _ModalVendaProduto extends ConsumerStatefulWidget {
 class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
   String _nomeClienteDigitado = '';
   int _quantidade = 1;
-  DateTime _dataSelecionada = DateTime.now(); // 📅 NOVO
+  DateTime _dataSelecionada = DateTime.now(); // 📅 Data da Venda
   bool _salvando = false;
 
   void _confirmarVenda() async {
@@ -437,7 +437,7 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
           ),
           const SizedBox(height: 16),
 
-          // 📅 NOVO: Seletor de Data da Venda
+          // 📅 Seletor de Data da Venda
           InkWell(
             onTap: () async {
               final picked = await showDatePicker(context: context, initialDate: _dataSelecionada, firstDate: DateTime(2020), lastDate: DateTime.now());
@@ -488,12 +488,12 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
   final _estoqueController = TextEditingController(text: '1');
   
   String _emojiSelecionado = '🛍️';
-  String _categoriaSelecionada = 'Joias'; // 🏷️ NOVO
-  DateTime _dataCompra = DateTime.now(); // 📅 NOVO
+  String _categoriaSelecionada = 'Joias'; // 🏷️ Categoria padrão
+  DateTime _dataCompra = DateTime.now(); // 📅 Data de Compra padrão
   bool _salvando = false;
 
   final List<String> _opcoesEmojis = ['🛍️', '💅', '🧴', '💄', '💍', '💎', '🎀', '✨', '🎁', '🧼'];
-  final List<String> _categoriasForm = ['Joias', 'Produtos de Beleza', 'Outros']; // 🏷️ NOVO
+  final List<String> _categoriasForm = ['Joias', 'Produtos de Beleza', 'Outros'];
 
   @override
   void initState() {
@@ -519,6 +519,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
     final vendaParse = double.tryParse(_vendaController.text.replaceAll(',', '.')) ?? 0.0;
     final estoqueParse = int.tryParse(_estoqueController.text) ?? 0;
 
+    // 🐛 AQUI ESTAVA O ERRO DE COMPILAÇÃO: Faltava enviar as duas linhas abaixo!
     final produto = Produto(
       id: widget.produtoEdit?.id ?? '',
       nome: _nomeController.text.trim(),
@@ -526,8 +527,8 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
       custo: custoParse,
       precoVenda: vendaParse,
       estoque: estoqueParse,
-      categoria: _categoriaSelecionada, // 🏷️ NOVO
-      dataCompra: _dataCompra, // 📅 NOVO
+      categoria: _categoriaSelecionada, // 🏷️️ CORRIGIDO: Agora envia a categoria
+      dataCompra: _dataCompra,          // 📅 CORRIGIDO: Agora envia a data
     );
 
     await ref.read(produtoControllerProvider.notifier).salvarProduto(produto);
@@ -541,7 +542,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
       child: Column(
         mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.produtoEdit != null ? '✏️ Editar Produto' : '🛍️ Novo Produto', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
+          Text(widget.produtoEdit != null ? '✏️ Editar Produto' : '🛍️️ Novo Produto', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
           const SizedBox(height: 16),
           
           Row(
@@ -553,7 +554,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
           ),
           const SizedBox(height: 16),
 
-          // 🏷️ NOVO: Seletor de Categoria
+          // 🏷️ Seletor de Categoria
           DropdownButtonFormField<String>(
             value: _categoriaSelecionada,
             decoration: const InputDecoration(labelText: 'Categoria', border: OutlineInputBorder()),
@@ -575,7 +576,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
             children: [
               Expanded(child: TextField(controller: _estoqueController, decoration: const InputDecoration(labelText: 'Estoque Atual', border: OutlineInputBorder()), keyboardType: TextInputType.number)),
               const SizedBox(width: 12),
-              // 📅 NOVO: Seletor de Data de Compra
+              // 📅 Seletor de Data de Compra
               Expanded(
                 child: InkWell(
                   onTap: () async {
