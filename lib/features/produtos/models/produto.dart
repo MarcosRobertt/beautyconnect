@@ -5,6 +5,8 @@ class Produto {
   final double custo;
   final double precoVenda;
   final int estoque;
+  final String categoria; // 🏷️ NOVO
+  final DateTime dataCompra; // 📅 NOVO
 
   Produto({
     required this.id,
@@ -13,15 +15,19 @@ class Produto {
     required this.custo,
     required this.precoVenda,
     required this.estoque,
+    required this.categoria,
+    required this.dataCompra,
   });
 
   Map<String, dynamic> toMap() {
     return {
       'nome': nome,
-      'emoji': emoji, // 🛡️ A MÁGICA: Salva apenas 1 caractere no Firebase em vez de fotos pesadas!
+      'emoji': emoji,
       'custo': custo,
       'precoVenda': precoVenda,
       'estoque': estoque,
+      'categoria': categoria,
+      'dataCompra': dataCompra.toIso8601String(),
     };
   }
 
@@ -33,6 +39,9 @@ class Produto {
       custo: (map['custo'] ?? 0.0).toDouble(),
       precoVenda: (map['precoVenda'] ?? 0.0).toDouble(),
       estoque: map['estoque'] ?? 0,
+      // 🛡️ MITIGAÇÃO: Se o produto for antigo e não tiver esses campos, define padrões seguros
+      categoria: map['categoria'] ?? 'Outros', 
+      dataCompra: map['dataCompra'] != null ? DateTime.parse(map['dataCompra']) : DateTime.now(),
     );
   }
 }
