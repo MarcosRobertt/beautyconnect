@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 👈 Adicione isso
 
 import '../../clientes/controllers/cliente_controller.dart'; 
 import '../controllers/produto_controller.dart';
@@ -36,55 +37,120 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
       builder: (context) => _ModalVendaProduto(produto: p),
     );
   }
+// 🛡️ NOVO: Alerta Inteligente antes de Excluir um Produto da Vitrine
+  void _confirmarExclusao(Produto p) async {
+    // Verifica rapidamente se este produto tem vendas no histórico
+    final snapshot = await FirebaseFirestore.instance
+        .collection('loja_vendas')
+        .where('produtoId', isEqualTo: p.id)
+        .limit(1)
+        .get();
 
-  void _confirmarExclusao(Produto p) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Excluir Produto'),
-        content: Text('Tem certeza que deseja apagar "${p.nome}" da loja?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(produtoControllerProvider.notifier).excluirProduto(p.id);
-            },
-            child: const Text('Excluir'),
+    final temVendas = snapshot.docs.isNotEmpty;
+    if (!mounted) return;
+
+    if (temVendas) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 8),
+              Expanded(child: Text('Produto possui histórico', style: TextStyle(fontSize: 16))),
+            ],
           ),
-        ],
-      ),
-    );
+          content: Text(
+            'O produto "${p.nome}" já possui vendas registradas.\n\n'
+            'Se você excluí-lo:\n'
+            '1. O faturamento antigo (DRE) não será alterado (Isso é bom, o histórico fica guardado).\n'
+            '2. Você NÃO poderá devolver os itens ao estoque caso tente estornar as vendas antigas.\n\n'
+            'Deseja mesmo apagar o produto da vitrine?'
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+              onPressed: () {
+                Navigator.pop(ctx);
+                ref.read(produtoControllerProvider.notifier).excluirProduto(p.id);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produto excluído da vitrine.'), backgroundColor: Colors.red));
+              },
+              child: const Text('Sim, Excluir'),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Produto sem vendas, exclusão normal
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Excluir Produto'),
+          content: Text('Tem certeza que deseja apagar "${p.nome}" da loja?'),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () {
+                Navigator.pop(ctx);
+                ref.read(produtoControllerProvider.notifier).excluirProduto(p.id);
+              },
+              child: const Text('Excluir'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
+  // 🛡️ NOVO: Menu Duplo para Cancelamento de Venda
   void _confirmarExclusaoVenda(VendaProduto v) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            Icon(Icons.edit_document, color: Colors.blueGrey),
             SizedBox(width: 8),
-            Text('Estornar Venda'),
+            Text('Opções de Cancelamento'),
           ],
         ),
-        content: Text('Tem certeza que deseja cancelar a venda de ${v.quantidade}x ${v.produtoNome}?\n\nO valor será removido do lucro e o produto voltará para o estoque da vitrine.'),
+        content: Text('Como deseja tratar a venda de ${v.quantidade}x ${v.produtoNome}?'),
+        actionsAlignment: MainAxisAlignment.center,
+        actionsOverflowDirection: VerticalDirection.down, // Empilha os botões
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar', style: TextStyle(color: Colors.grey))),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.blue.shade700, minimumSize: const Size.fromHeight(40)),
             onPressed: () {
               Navigator.pop(ctx);
-              ref.read(vendaControllerProvider.notifier).cancelarVenda(v);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venda estornada e estoque devolvido! 🔄'), backgroundColor: Colors.blue));
+              ref.read(vendaControllerProvider.notifier).cancelarVenda(v, devolverEstoque: true);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comando enviado! 🔄'), backgroundColor: Colors.blue));
             },
-            child: const Text('Sim, Estornar'),
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Estornar e Devolver Estoque'),
+          ),
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade600, minimumSize: const Size.fromHeight(40)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(vendaControllerProvider.notifier).cancelarVenda(v, devolverEstoque: false);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Registro apagado do faturamento.'), backgroundColor: Colors.orange));
+            },
+            icon: const Icon(Icons.delete_forever),
+            label: const Text('Apenas Apagar Registro (Teste)'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx), 
+            child: const Text('Voltar', style: TextStyle(color: Colors.grey))
           ),
         ],
       ),
     );
   }
+  
+  
 
   @override
   Widget build(BuildContext context) {
