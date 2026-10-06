@@ -20,7 +20,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
   final _moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
   DateTime _mesFiltro = DateTime.now(); 
   
-  // 🔍 Controles de Filtro da Vitrine
   String _searchQuery = '';
   String _categoriaSelecionada = 'Todas';
   final List<String> _categorias = ['Todas', 'Joias', 'Produtos de Beleza', 'Outros'];
@@ -49,67 +48,50 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     if (!mounted) return;
 
     if (temVendas) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.orange), SizedBox(width: 8), Expanded(child: Text('Produto com histórico', style: TextStyle(fontSize: 16)))]),
-          content: Text('O produto "${p.nome}" já possui vendas.\n\nSe excluí-lo:\n1. O DRE antigo não será alterado.\n2. Você não poderá devolver itens ao estoque em estornos futuros.\n\nDeseja apagar mesmo assim?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-              onPressed: () {
-                Navigator.pop(ctx);
-                ref.read(produtoControllerProvider.notifier).excluirProduto(p.id);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produto excluído.'), backgroundColor: Colors.red));
-              },
-              child: const Text('Sim, Excluir'),
-            ),
-          ],
-        ),
-      );
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        title: const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.orange), SizedBox(width: 8), Expanded(child: Text('Produto com histórico', style: TextStyle(fontSize: 16)))]),
+        content: Text('O produto "${p.nome}" já possui vendas.\n\nSe excluí-lo:\n1. O DRE antigo não será alterado.\n2. Você não poderá devolver itens ao estoque em estornos futuros.\n\nDeseja apagar mesmo assim?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700), onPressed: () { Navigator.pop(ctx); ref.read(produtoControllerProvider.notifier).excluirProduto(p.id); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produto excluído.'), backgroundColor: Colors.red)); }, child: const Text('Sim, Excluir')),
+        ],
+      ));
     } else {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Excluir Produto'),
-          content: Text('Tem certeza que deseja apagar "${p.nome}" da loja?'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-            FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () {
-                Navigator.pop(ctx);
-                ref.read(produtoControllerProvider.notifier).excluirProduto(p.id);
-              },
-              child: const Text('Excluir'),
-            ),
-          ],
-        ),
-      );
+      showDialog(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('Excluir Produto'), content: Text('Tem certeza que deseja apagar "${p.nome}" da loja?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () { Navigator.pop(ctx); ref.read(produtoControllerProvider.notifier).excluirProduto(p.id); }, child: const Text('Excluir')),
+        ],
+      ));
     }
   }
 
   void _confirmarExclusaoVenda(VendaProduto v) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.red), SizedBox(width: 8), Text('Estornar Venda')]),
-        content: Text('Deseja estornar a venda de ${v.quantidade}x ${v.produtoNome}?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar', style: TextStyle(color: Colors.grey))),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(vendaControllerProvider.notifier).cancelarVenda(v);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venda estornada com sucesso! 🔄'), backgroundColor: Colors.blue));
-            },
-            child: const Text('Estornar'),
-          ),
-        ],
-      ),
-    );
+    showDialog(context: context, builder: (ctx) => AlertDialog(
+      title: const Row(children: [Icon(Icons.warning_amber_rounded, color: Colors.red), SizedBox(width: 8), Text('Estornar Venda')]),
+      content: Text('Deseja estornar a venda de ${v.quantidade}x ${v.produtoNome}?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar', style: TextStyle(color: Colors.grey))),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700), onPressed: () { Navigator.pop(ctx); ref.read(vendaControllerProvider.notifier).cancelarVenda(v); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Venda estornada com sucesso! 🔄'), backgroundColor: Colors.blue)); }, child: const Text('Estornar')),
+      ],
+    ));
+  }
+
+  // 🛡️ NOVO: Badge visual de Validade do Produto
+  Widget _buildValidadeBadge(Produto p) {
+    if (!p.temValidade || p.dataValidade == null) return const SizedBox.shrink();
+    
+    final hoje = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final venc = DateTime(p.dataValidade!.year, p.dataValidade!.month, p.dataValidade!.day);
+    final diasRestantes = venc.difference(hoje).inDays;
+
+    if (diasRestantes < 0) {
+      return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(4)), child: Text('❌ VENCIDO (${diasRestantes.abs()} dias)', style: TextStyle(fontSize: 10, color: Colors.red.shade900, fontWeight: FontWeight.bold)));
+    } else if (diasRestantes <= 30) {
+      return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(4)), child: Text('⚠️ Vence em $diasRestantes dias', style: TextStyle(fontSize: 10, color: Colors.orange.shade900, fontWeight: FontWeight.bold)));
+    }
+    return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)), child: Text('✅ Validade: ${DateFormat('dd/MM/yy').format(p.dataValidade!)}', style: TextStyle(fontSize: 10, color: Colors.green.shade800)));
   }
 
   @override
@@ -119,8 +101,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     final vendasAsync = ref.watch(vendaControllerProvider);
 
     final controleMes = Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      color: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -138,179 +119,92 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
         appBar: AppBar(
           title: const Text('Loja & Revenda', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-          bottom: const TabBar(
-            labelColor: primaryColor,
-            indicatorColor: primaryColor,
-            tabs: [
-              Tab(icon: Icon(Icons.storefront), text: 'Vitrine (Estoque)'),
-              Tab(icon: Icon(Icons.receipt_long), text: 'Histórico de Vendas'),
-            ],
-          ),
-          actions: [
-            IconButton(icon: const Icon(Icons.add_circle, color: primaryColor, size: 28), onPressed: () => _abrirFormulario())
-          ],
+          bottom: const TabBar(labelColor: primaryColor, indicatorColor: primaryColor, tabs: [Tab(icon: Icon(Icons.storefront), text: 'Vitrine (Estoque)'), Tab(icon: Icon(Icons.receipt_long), text: 'Histórico de Vendas')]),
+          actions: [IconButton(icon: const Icon(Icons.add_circle, color: primaryColor, size: 28), onPressed: () => _abrirFormulario())],
         ),
         body: TabBarView(
           children: [
             // ==========================================
-            // ABA 1: VITRINE COM FILTROS E TOTAIS
+            // ABA 1: VITRINE
             // ==========================================
             produtosAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Erro: $e')),
+              loading: () => const Center(child: CircularProgressIndicator()), error: (e, _) => Center(child: Text('Erro: $e')),
               data: (produtos) {
-                // Filtragem ultra-rápida na memória
                 final produtosFiltrados = produtos.where((p) {
                   final matchNome = p.nome.toLowerCase().contains(_searchQuery.toLowerCase());
                   final matchCategoria = _categoriaSelecionada == 'Todas' || p.categoria == _categoriaSelecionada;
                   return matchNome && matchCategoria;
                 }).toList();
 
-                // Cálculo do Total do Estoque Filtrado
-                double capitalInvestido = 0;
-                double potencialVenda = 0;
-                for (var p in produtosFiltrados) {
-                  capitalInvestido += (p.custo * p.estoque);
-                  potencialVenda += (p.precoVenda * p.estoque);
-                }
+                double capitalInvestido = 0; double potencialVenda = 0;
+                for (var p in produtosFiltrados) { capitalInvestido += (p.custo * p.estoque); potencialVenda += (p.precoVenda * p.estoque); }
 
                 return Column(
                   children: [
-                    // BARRA DE PESQUISA
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      child: TextField(
-                        onChanged: (val) => setState(() => _searchQuery = val),
-                        decoration: InputDecoration(
-                          hintText: 'Pesquisar produto...',
-                          prefixIcon: const Icon(Icons.search),
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                        ),
-                      ),
-                    ),
-
-                    // PÍLULAS DE CATEGORIA
+                    Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: TextField(onChanged: (val) => setState(() => _searchQuery = val), decoration: InputDecoration(hintText: 'Pesquisar produto...', prefixIcon: const Icon(Icons.search), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(vertical: 0)))),
                     SizedBox(
                       height: 40,
                       child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _categorias.length,
+                        scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: _categorias.length,
                         itemBuilder: (context, index) {
-                          final cat = _categorias[index];
-                          final isSelected = _categoriaSelecionada == cat;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                              selected: isSelected,
-                              selectedColor: primaryColor,
-                              backgroundColor: Colors.white,
-                              onSelected: (selected) { if(selected) setState(() => _categoriaSelecionada = cat); },
-                            ),
-                          );
+                          final cat = _categorias[index]; final isSelected = _categoriaSelecionada == cat;
+                          return Padding(padding: const EdgeInsets.only(right: 8), child: ChoiceChip(label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)), selected: isSelected, selectedColor: primaryColor, backgroundColor: Colors.white, onSelected: (selected) { if(selected) setState(() => _categoriaSelecionada = cat); }));
                         },
                       ),
                     ),
-
-                    // CARD DE VALOR TOTAL DO ESTOQUE
                     Padding(
                       padding: const EdgeInsets.all(16),
                       child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blueGrey.shade100)),
+                        padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.blueGrey.shade100)),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('Capital Investido (Custo)', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                Text(_moeda.format(capitalInvestido), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange)),
-                              ],
-                            ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                const Text('Potencial de Venda', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                                Text(_moeda.format(potencialVenda), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
-                              ],
-                            ),
+                            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Capital Investido', style: TextStyle(fontSize: 12, color: Colors.grey)), Text(_moeda.format(capitalInvestido), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.orange))]),
+                            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [const Text('Potencial de Venda', style: TextStyle(fontSize: 12, color: Colors.grey)), Text(_moeda.format(potencialVenda), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green))]),
                           ],
                         ),
                       ),
                     ),
-
-                    // LISTA DE PRODUTOS
                     Expanded(
-                      child: produtosFiltrados.isEmpty
-                        ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
-                        : ListView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            itemCount: produtosFiltrados.length,
-                            itemBuilder: (context, index) {
-                              final p = produtosFiltrados[index];
-                              final semEstoque = p.estoque <= 0;
-
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: semEstoque ? Colors.red.shade200 : Colors.grey.shade200)),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Row(
+                      child: produtosFiltrados.isEmpty ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey))) : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16), itemCount: produtosFiltrados.length,
+                        itemBuilder: (context, index) {
+                          final p = produtosFiltrados[index]; final semEstoque = p.estoque <= 0;
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: semEstoque ? Colors.red.shade200 : Colors.grey.shade200)),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Row(
+                                children: [
+                                  Container(width: 55, height: 55, decoration: BoxDecoration(color: semEstoque ? Colors.red.shade50 : Colors.pink.shade50, borderRadius: BorderRadius.circular(12)), child: Center(child: Text(p.emoji, style: const TextStyle(fontSize: 28)))),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        Container(margin: const EdgeInsets.only(top: 2, bottom: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.blueGrey.shade50, borderRadius: BorderRadius.circular(4)), child: Text(p.categoria, style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade700))),
+                                        Text(semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)),
+                                        _buildValidadeBadge(p), // 📅 AQUI ESTÁ O BADGE DE VALIDADE
+                                      ],
+                                    ),
+                                  ),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      Container(
-                                        width: 55, height: 55,
-                                        decoration: BoxDecoration(color: semEstoque ? Colors.red.shade50 : Colors.pink.shade50, borderRadius: BorderRadius.circular(12)),
-                                        child: Center(child: Text(p.emoji, style: const TextStyle(fontSize: 28))),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                            Container(
-                                              margin: const EdgeInsets.only(top: 2, bottom: 4),
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(color: Colors.blueGrey.shade50, borderRadius: BorderRadius.circular(4)),
-                                              child: Text(p.categoria, style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade700)),
-                                            ),
-                                            Text(semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)),
-                                          ],
-                                        ),
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(_moeda.format(p.precoVenda), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
-                                          const SizedBox(height: 8),
-                                          Row(
-                                            children: [
-                                              InkWell(onTap: () => _abrirFormulario(produto: p), child: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey)),
-                                              const SizedBox(width: 12),
-                                              InkWell(onTap: () => _confirmarExclusao(p), child: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300)),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 8),
-                                          FilledButton.icon(
-                                            style: FilledButton.styleFrom(backgroundColor: semEstoque ? Colors.grey.shade400 : Colors.green.shade600, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), minimumSize: const Size(0, 32)),
-                                            onPressed: semEstoque ? null : () => _abrirModalVenda(p),
-                                            icon: const Icon(Icons.point_of_sale, size: 16),
-                                            label: const Text('VENDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                                          ),
-                                        ],
-                                      ),
+                                      Text(_moeda.format(p.precoVenda), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.green)),
+                                      const SizedBox(height: 8),
+                                      Row(children: [InkWell(onTap: () => _abrirFormulario(produto: p), child: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey)), const SizedBox(width: 12), InkWell(onTap: () => _confirmarExclusao(p), child: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300))]),
+                                      const SizedBox(height: 8),
+                                      FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: semEstoque ? Colors.grey.shade400 : Colors.green.shade600, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0), minimumSize: const Size(0, 32)), onPressed: semEstoque ? null : () => _abrirModalVenda(p), icon: const Icon(Icons.point_of_sale, size: 16), label: const Text('VENDER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
                                     ],
                                   ),
-                                ),
-                              );
-                            },
-                          ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                   ],
                 );
@@ -318,13 +212,12 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
             ),
             
             // ==========================================
-            // ABA 2: HISTÓRICO DE VENDAS
+            // ABA 2: HISTÓRICO (Com status de pagamento)
             // ==========================================
             vendasAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Erro: $e')),
+              loading: () => const Center(child: CircularProgressIndicator()), error: (e, _) => Center(child: Text('Erro: $e')),
               data: (vendas) {
-                if (vendas.isEmpty) { return Column(children: [controleMes, const Expanded(child: Center(child: Text('Nenhuma venda registrada neste mês.', style: TextStyle(color: Colors.grey))))]); }
+                if (vendas.isEmpty) return Column(children: [controleMes, const Expanded(child: Center(child: Text('Nenhuma venda registrada.', style: TextStyle(color: Colors.grey))))]);
                 final totalVendido = vendas.fold(0.0, (sum, v) => sum + v.valorTotal);
                 final totalLucro = vendas.fold(0.0, (sum, v) => sum + v.lucroTotal);
 
@@ -343,23 +236,49 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                     ),
                     Expanded(
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: vendas.length,
+                        padding: const EdgeInsets.all(16), itemCount: vendas.length,
                         itemBuilder: (context, index) {
                           final v = vendas[index];
+                          
+                          // 💰 Lógica Visual de Inadimplência
+                          bool estaAtrasado = false;
+                          if (!v.isPago && v.dataPagamentoEsperada != null) {
+                            final hoje = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+                            final prev = DateTime(v.dataPagamentoEsperada!.year, v.dataPagamentoEsperada!.month, v.dataPagamentoEsperada!.day);
+                            estaAtrasado = prev.isBefore(hoje);
+                          }
+
                           return Card(
-                            elevation: 0, margin: const EdgeInsets.only(bottom: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade200)),
+                            elevation: 0, margin: const EdgeInsets.only(bottom: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: !v.isPago ? Colors.orange.shade300 : Colors.grey.shade200)),
                             child: ListTile(
                               leading: Text(v.emoji, style: const TextStyle(fontSize: 24)),
                               title: Text('${v.quantidade}x ${v.produtoNome}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                              subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('👤 ${v.clienteNome}', style: const TextStyle(fontSize: 12)), Text('📅 ${DateFormat('dd/MM/yyyy HH:mm').format(v.dataVenda)}', style: const TextStyle(fontSize: 11, color: Colors.grey))]),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start, 
+                                children: [
+                                  Text('👤 ${v.clienteNome}', style: const TextStyle(fontSize: 12)), 
+                                  Text('📅 ${DateFormat('dd/MM/yyyy HH:mm').format(v.dataVenda)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                  if (!v.isPago)
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: estaAtrasado ? Colors.red.shade100 : Colors.orange.shade100, borderRadius: BorderRadius.circular(4)), 
+                                      child: Text(estaAtrasado ? '⚠️ ATRASADO' : '⏳ Receber: ${DateFormat('dd/MM/yy').format(v.dataPagamentoEsperada!)}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: estaAtrasado ? Colors.red.shade900 : Colors.orange.shade900))
+                                    )
+                                ]
+                              ),
                               trailing: Column(
                                 mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(_moeda.format(v.valorTotal), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
-                                  Text('Lucro: ${_moeda.format(v.lucroTotal)}', style: TextStyle(fontSize: 11, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
-                                  const SizedBox(height: 6),
-                                  InkWell(onTap: () => _confirmarExclusaoVenda(v), child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.undo, size: 10, color: Colors.red.shade700), const SizedBox(width: 4), Text('ESTORNAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade700))]))),
+                                  Text(v.formaPagamento, style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade600)),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (!v.isPago)
+                                        InkWell(onTap: () { ref.read(vendaControllerProvider.notifier).confirmarPagamento(v); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pagamento confirmado! ✅'), backgroundColor: Colors.green)); }, child: Container(margin: const EdgeInsets.only(right: 8), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4)), child: Row(children: [Icon(Icons.check, size: 10, color: Colors.green.shade700), const SizedBox(width: 4), Text('DAR BAIXA', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.green.shade700))]))),
+                                      InkWell(onTap: () => _confirmarExclusaoVenda(v), child: Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4)), child: Row(children: [Icon(Icons.undo, size: 10, color: Colors.red.shade700), const SizedBox(width: 4), Text('ESTORNAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade700))]))),
+                                    ],
+                                  ),
                                 ],
                               ),
                             ),
@@ -379,7 +298,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
 }
 
 // ==========================================
-// MODAL DE VENDA EXPRESSA 
+// MODAL DE VENDA EXPRESSA COM PAGAMENTO
 // ==========================================
 class _ModalVendaProduto extends ConsumerStatefulWidget {
   final Produto produto;
@@ -391,12 +310,22 @@ class _ModalVendaProduto extends ConsumerStatefulWidget {
 class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
   String _nomeClienteDigitado = '';
   int _quantidade = 1;
-  DateTime _dataSelecionada = DateTime.now(); // 📅 Data da Venda
+  DateTime _dataSelecionada = DateTime.now();
+  
+  String _formaPagamento = 'Dinheiro';
+  bool _estaPago = true;
+  DateTime _dataPagamentoEsperada = DateTime.now().add(const Duration(days: 7)); // Padrão: 7 dias se for fiado
+
   bool _salvando = false;
 
   void _confirmarVenda() async {
     setState(() => _salvando = true);
-    await ref.read(vendaControllerProvider.notifier).registrarVendaAvulsa(widget.produto, _quantidade, _nomeClienteDigitado.trim(), _dataSelecionada);
+    
+    await ref.read(vendaControllerProvider.notifier).registrarVendaAvulsa(
+      widget.produto, _quantidade, _nomeClienteDigitado.trim(), _dataSelecionada,
+      _formaPagamento, _estaPago, _estaPago ? null : _dataPagamentoEsperada
+    );
+
     if (mounted) { Navigator.pop(context); ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('✅ Venda de ${widget.produto.nome} registrada!'), backgroundColor: Colors.green)); }
   }
 
@@ -437,23 +366,56 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
           ),
           const SizedBox(height: 16),
 
-          // 📅 Seletor de Data da Venda
-          InkWell(
-            onTap: () async {
-              final picked = await showDatePicker(context: context, initialDate: _dataSelecionada, firstDate: DateTime(2020), lastDate: DateTime.now());
-              if (picked != null) setState(() => _dataSelecionada = DateTime(picked.year, picked.month, picked.day, DateTime.now().hour, DateTime.now().minute));
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-              decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
-              child: Row(children: [const Icon(Icons.calendar_today, color: Colors.grey), const SizedBox(width: 12), Text('Data da Venda: ${DateFormat('dd/MM/yyyy').format(_dataSelecionada)}', style: const TextStyle(fontSize: 16))]),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _formaPagamento,
+                  decoration: const InputDecoration(labelText: 'Forma de Pagamento', border: OutlineInputBorder()),
+                  items: ['Dinheiro', 'Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Fiado / A Prazo'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (val) {
+                    setState(() {
+                      _formaPagamento = val!;
+                      if (_formaPagamento == 'Fiado / A Prazo') _estaPago = false;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 💰 CONTROLE DE PAGAMENTO (Pago ou Pendente)
+          Container(
+            padding: const EdgeInsets.all(12), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('O pagamento já foi recebido?', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                  value: _estaPago, activeColor: Colors.green,
+                  onChanged: (val) => setState(() => _estaPago = val),
+                ),
+                if (!_estaPago) ...[
+                  const Divider(),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(context: context, initialDate: _dataPagamentoEsperada, firstDate: DateTime.now(), lastDate: DateTime(2035));
+                      if (picked != null) setState(() => _dataPagamentoEsperada = picked);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0),
+                      child: Row(children: [Icon(Icons.calendar_today, color: Colors.orange.shade700, size: 20), const SizedBox(width: 12), Text('Data prevista para o acerto:\n${DateFormat('dd/MM/yyyy').format(_dataPagamentoEsperada)}', style: TextStyle(color: Colors.orange.shade900, fontWeight: FontWeight.bold))]),
+                    ),
+                  ),
+                ]
+              ],
             ),
           ),
-
           const SizedBox(height: 24),
+          
           Container(
             padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total a Receber:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)), Text(NumberFormat.simpleCurrency(locale: 'pt_BR').format(total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green.shade800))]),
+            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total da Venda:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)), Text(NumberFormat.simpleCurrency(locale: 'pt_BR').format(total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green.shade800))]),
           ),
           const SizedBox(height: 24),
 
@@ -488,8 +450,12 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
   final _estoqueController = TextEditingController(text: '1');
   
   String _emojiSelecionado = '🛍️';
-  String _categoriaSelecionada = 'Joias'; // 🏷️ Categoria padrão
-  DateTime _dataCompra = DateTime.now(); // 📅 Data de Compra padrão
+  String _categoriaSelecionada = 'Joias'; 
+  DateTime _dataCompra = DateTime.now(); 
+  
+  bool _temValidade = false; // 📅 NOVO
+  DateTime _dataValidade = DateTime.now().add(const Duration(days: 365)); // 📅 NOVO
+
   bool _salvando = false;
 
   final List<String> _opcoesEmojis = ['🛍️', '💅', '🧴', '💄', '💍', '💎', '🎀', '✨', '🎁', '🧼'];
@@ -506,6 +472,8 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
       _estoqueController.text = p.estoque.toString();
       _categoriaSelecionada = _categoriasForm.contains(p.categoria) ? p.categoria : 'Outros';
       _dataCompra = p.dataCompra;
+      _temValidade = p.temValidade;
+      if (p.dataValidade != null) _dataValidade = p.dataValidade!;
       
       if (_opcoesEmojis.contains(p.emoji)) { _emojiSelecionado = p.emoji; } else { _opcoesEmojis.add(p.emoji); _emojiSelecionado = p.emoji; }
     }
@@ -519,7 +487,6 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
     final vendaParse = double.tryParse(_vendaController.text.replaceAll(',', '.')) ?? 0.0;
     final estoqueParse = int.tryParse(_estoqueController.text) ?? 0;
 
-    // 🐛 AQUI ESTAVA O ERRO DE COMPILAÇÃO: Faltava enviar as duas linhas abaixo!
     final produto = Produto(
       id: widget.produtoEdit?.id ?? '',
       nome: _nomeController.text.trim(),
@@ -527,8 +494,10 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
       custo: custoParse,
       precoVenda: vendaParse,
       estoque: estoqueParse,
-      categoria: _categoriaSelecionada, // 🏷️️ CORRIGIDO: Agora envia a categoria
-      dataCompra: _dataCompra,          // 📅 CORRIGIDO: Agora envia a data
+      categoria: _categoriaSelecionada, 
+      dataCompra: _dataCompra,  
+      temValidade: _temValidade,
+      dataValidade: _temValidade ? _dataValidade : null,
     );
 
     await ref.read(produtoControllerProvider.notifier).salvarProduto(produto);
@@ -542,7 +511,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
       child: Column(
         mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.produtoEdit != null ? '✏️ Editar Produto' : '🛍️️ Novo Produto', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
+          Text(widget.produtoEdit != null ? '✏️️ Editar Produto' : '🛍 Novo Produto', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
           const SizedBox(height: 16),
           
           Row(
@@ -554,7 +523,6 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
           ),
           const SizedBox(height: 16),
 
-          // 🏷️ Seletor de Categoria
           DropdownButtonFormField<String>(
             value: _categoriaSelecionada,
             decoration: const InputDecoration(labelText: 'Categoria', border: OutlineInputBorder()),
@@ -576,7 +544,6 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
             children: [
               Expanded(child: TextField(controller: _estoqueController, decoration: const InputDecoration(labelText: 'Estoque Atual', border: OutlineInputBorder()), keyboardType: TextInputType.number)),
               const SizedBox(width: 12),
-              // 📅 Seletor de Data de Compra
               Expanded(
                 child: InkWell(
                   onTap: () async {
@@ -591,6 +558,34 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+
+          // 📅 CONTROLE DE VALIDADE
+          Container(
+            decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Produto tem validade?', style: TextStyle(fontSize: 14)),
+                  value: _temValidade, activeColor: const Color(0xFF8A2463),
+                  onChanged: (val) => setState(() => _temValidade = val),
+                ),
+                if (_temValidade) ...[
+                  const Divider(),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(context: context, initialDate: _dataValidade, firstDate: DateTime.now(), lastDate: DateTime(2035));
+                      if (picked != null) setState(() => _dataValidade = picked);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(children: [const Icon(Icons.date_range, color: Colors.blueGrey), const SizedBox(width: 12), Text('Data de Vencimento:\n${DateFormat('dd/MM/yyyy').format(_dataValidade)}', style: const TextStyle(fontWeight: FontWeight.bold))]),
+                    ),
+                  ),
+                ]
+              ],
+            ),
           ),
           const SizedBox(height: 24),
           
