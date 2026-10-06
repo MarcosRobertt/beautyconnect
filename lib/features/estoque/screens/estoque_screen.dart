@@ -25,7 +25,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   int _abaSelecionada = 0; 
   String _categoriaSelecionada = 'Todas';
   bool _mostrarApenasAlertas = false;
-  DateTime _mesFiltro = DateTime.now(); // 📅 Controlador central do mês
+  DateTime _mesFiltro = DateTime.now(); 
 
   void _abrirModalInsumo(BuildContext context, [Insumo? insumoExistente]) {
     final nomeController = TextEditingController(text: insumoExistente?.nome ?? '');
@@ -174,7 +174,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     final fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final fmtData = DateFormat('dd/MM/yyyy');
 
-    // 📅 NOVO: Seletor de Mês isolado e seguro
     final controleMes = Container(
       color: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -192,8 +191,16 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
       appBar: AppBar(
         title: const Text('Estoque e Insumos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        // 🎯 O BOTÃO NOVO VEIO PARA CÁ (Na AppBar)
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add_circle, color: primaryColor, size: 28),
+            tooltip: 'Cadastrar Novo Insumo',
+            onPressed: () => _abrirModalInsumo(context),
+          )
+        ],
       ),
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _abrirModalInsumo(context), icon: const Icon(Icons.add), label: const Text('Novo Insumo'), backgroundColor: primaryColor, foregroundColor: Colors.white),
+      // Botão Flutuante Removido!
       body: estoqueAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
@@ -209,18 +216,16 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
             if (i.emAlerta && i.estoqueMinimo >= 0) itensEmAlerta++;
             if (i.categoria.isNotEmpty) categoriasSet.add(i.categoria);
             
-            // 💰 Gasto Dinâmico (Soma as compras feitas apenas NO MÊS filtrado e DA CATEGORIA filtrada)
             bool condicaoCat = _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
             if (i.dataCompra.isAfter(inicioMes.subtract(const Duration(seconds: 1))) && 
                 i.dataCompra.isBefore(fimMes.add(const Duration(seconds: 1))) && condicaoCat) {
-              gastoMes += (i.precoPago * i.quantidade); // Calcula o valor investido naquele lote
+              gastoMes += (i.precoPago * i.quantidade); 
             }
           }
 
           final List<String> listaCategorias = categoriasSet.toList()..sort();
           if (!listaCategorias.contains(_categoriaSelecionada)) _categoriaSelecionada = 'Todas';
 
-          // Lista final para a tela Lista & Uso
           final insumosGeral = insumos.where((i) {
             final condicaoBusca = i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) || i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
             final condicaoAlerta = _mostrarApenasAlertas ? (i.emAlerta && i.estoqueMinimo >= 0) : true;
@@ -230,7 +235,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
 
           return Column(
             children: [
-              controleMes, // Mostra o Mês no Topo
+              controleMes,
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -271,7 +276,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
       children: [
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), child: TextField(decoration: const InputDecoration(hintText: 'Buscar insumo por nome...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), filled: true, fillColor: Colors.white), onChanged: (v) => setState(() => _filtroBusca = v))),
         
-        // 🏷️ NOVO: Filtro Rápido de Categorias na Tela de Uso
         SizedBox(
           height: 44,
           child: ListView.builder(
@@ -295,7 +299,8 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           child: insumosFiltrados.isEmpty 
             ? const Center(child: Text('Nenhum insumo encontrado nesta categoria.', style: TextStyle(color: Colors.grey)))
             : ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            // 🎯 RESPIRO NO FIM DA LISTA: Adicionado um padding extra de 80px no rodapé
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
             itemCount: insumosFiltrados.length,
             itemBuilder: (context, index) {
               final item = insumosFiltrados[index];
@@ -344,7 +349,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   }
 
   Widget _buildAbaRelatorioIA(NumberFormat fmtMoeda) {
-    // 🧠 A Tela invoca a IA enviando o _mesFiltro (Mês selecionado lá no topo!)
     final iaAsync = ref.watch(iaRelatorioProvider(_mesFiltro));
 
     return iaAsync.when(
@@ -370,7 +374,8 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.all(16),
+          // 🎯 RESPIRO NO FIM DA LISTA DA IA:
+          padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
           itemCount: relatorios.length,
           itemBuilder: (context, index) {
             final rel = relatorios[index];
