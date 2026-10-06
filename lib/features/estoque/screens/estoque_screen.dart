@@ -5,8 +5,6 @@ import 'package:intl/intl.dart';
 import '../controllers/estoque_controller.dart';
 import '../models/insumo.dart';
 
-// Opcional: Aqui nós vamos simular os serviços que o salão tem para vincular ao produto.
-// (Num futuro próximo, isso virá direto do banco de dados da aba Serviços).
 const List<String> _listaServicosSalao = [
   'Mechas', 'Coloração', 'Progressiva', 'Botox', 'Corte', 'Escova', 
   'Design de Sobrancelha', 'Pé e Mão', 'Plástica dos Fios', 'Maquiagem'
@@ -21,7 +19,7 @@ class EstoqueScreen extends ConsumerStatefulWidget {
 
 class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   String _filtroBusca = '';
-  int _abaSelecionada = 0; // 0 = Visão Geral, 1 = Valor, 2 = IA Relatórios
+  int _abaSelecionada = 0; 
   String _categoriaSelecionada = 'Todas';
   bool _mostrarApenasAlertas = false;
 
@@ -35,7 +33,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     final precoController = TextEditingController(text: insumoExistente?.precoPago.toStringAsFixed(2) ?? '0.00');
     DateTime dataCompra = insumoExistente?.dataCompra ?? DateTime.now();
     
-    // 🧠 NOVO: Vínculos com a IA
     List<String> servicosVinculados = insumoExistente != null ? List.from(insumoExistente.servicosVinculados) : [];
     bool usadoEmTodos = servicosVinculados.contains('Todos');
 
@@ -43,8 +40,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     if (!categorias.contains(categoriaController.text) && categoriaController.text.isNotEmpty) categorias.add(categoriaController.text);
 
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
+      context: context, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (context) {
         return StatefulBuilder(
@@ -53,8 +49,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
               padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
               child: SingleChildScrollView(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(insumoExistente == null ? 'Novo Insumo / Produto' : 'Editar Insumo', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 16),
@@ -65,116 +60,64 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                       items: categorias.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (v) { if (v != null) setModalState(() => categoriaController.text = v); },
                     ),
-                    
                     const SizedBox(height: 16),
-                    // 🧠 NOVO BLOCO DA IA: ONDE ESTE PRODUTO É USADO?
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(border: Border.all(color: Colors.blue.shade200), borderRadius: BorderRadius.circular(8), color: Colors.blue.shade50),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            children: [
-                              Icon(Icons.smart_toy_outlined, size: 18, color: Colors.blue.shade800),
-                              const SizedBox(width: 8),
-                              Text('Vínculo para Custeio Inteligente (IA)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
-                            ],
-                          ),
+                          Row(children: [Icon(Icons.smart_toy_outlined, size: 18, color: Colors.blue.shade800), const SizedBox(width: 8), Text('Vínculo Inteligente (IA)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900))]),
                           const SizedBox(height: 8),
                           const Text('Quais serviços consomem este produto?', style: TextStyle(fontSize: 12)),
                           SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Usado em TODOS os serviços', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                            subtitle: const Text('Ex: Algodão, Água, Luvas', style: TextStyle(fontSize: 11)),
-                            value: usadoEmTodos,
-                            onChanged: (val) {
-                              setModalState(() {
-                                usadoEmTodos = val;
-                                if (val) { servicosVinculados = ['Todos']; } else { servicosVinculados.clear(); }
-                              });
-                            },
+                            contentPadding: EdgeInsets.zero, title: const Text('Usado em TODOS os serviços', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                            subtitle: const Text('Ex: Algodão, Água, Luvas', style: TextStyle(fontSize: 11)), value: usadoEmTodos,
+                            onChanged: (val) { setModalState(() { usadoEmTodos = val; if (val) { servicosVinculados = ['Todos']; } else { servicosVinculados.clear(); } }); },
                           ),
                           if (!usadoEmTodos)
                             Wrap(
                               spacing: 6, runSpacing: -8,
                               children: _listaServicosSalao.map((serv) {
                                 final isSelected = servicosVinculados.contains(serv);
-                                return FilterChip(
-                                  label: Text(serv, style: const TextStyle(fontSize: 11)),
-                                  selected: isSelected,
-                                  onSelected: (val) {
-                                    setModalState(() {
-                                      if (val) { servicosVinculados.add(serv); } else { servicosVinculados.remove(serv); }
-                                    });
-                                  },
-                                );
+                                return FilterChip(label: Text(serv, style: const TextStyle(fontSize: 11)), selected: isSelected, onSelected: (val) { setModalState(() { if (val) { servicosVinculados.add(serv); } else { servicosVinculados.remove(serv); } }); });
                               }).toList(),
                             )
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
-
                     Row(
                       children: [
                         Expanded(child: TextField(controller: quantidadeController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Qtd. Atual', border: OutlineInputBorder()))),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: estoqueMinimoController, keyboardType: TextInputType.number, enabled: !semEstoqueMinimo,
-                            decoration: InputDecoration(labelText: 'Qtd. Mínima', border: const OutlineInputBorder(), filled: semEstoqueMinimo, fillColor: Colors.grey.shade100),
-                          ),
-                        ),
+                        Expanded(child: TextField(controller: estoqueMinimoController, keyboardType: TextInputType.number, enabled: !semEstoqueMinimo, decoration: InputDecoration(labelText: 'Qtd. Mínima', border: const OutlineInputBorder(), filled: semEstoqueMinimo, fillColor: Colors.grey.shade100))),
                       ],
                     ),
                     const SizedBox(height: 8),
                     CheckboxListTile(
-                      value: semEstoqueMinimo, contentPadding: EdgeInsets.zero,
-                      title: const Text('Não exige estoque mínimo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      onChanged: (val) {
-                        setModalState(() {
-                          semEstoqueMinimo = val ?? false;
-                          estoqueMinimoController.text = semEstoqueMinimo ? '0' : '1';
-                        });
-                      },
+                      value: semEstoqueMinimo, contentPadding: EdgeInsets.zero, title: const Text('Não exige estoque mínimo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      controlAffinity: ListTileControlAffinity.leading, onChanged: (val) { setModalState(() { semEstoqueMinimo = val ?? false; estoqueMinimoController.text = semEstoqueMinimo ? '0' : '1'; }); },
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         Expanded(child: TextField(controller: precoController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Preço Pago (R\$)', border: OutlineInputBorder()))),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () async {
-                              final picked = await showDatePicker(context: context, initialDate: dataCompra, firstDate: DateTime(2020), lastDate: DateTime.now());
-                              if (picked != null) setModalState(() => dataCompra = picked);
-                            },
-                            child: InputDecorator(decoration: const InputDecoration(labelText: 'Data Compra', border: OutlineInputBorder()), child: Text(DateFormat('dd/MM/yyyy').format(dataCompra), style: const TextStyle(fontSize: 13))),
-                          ),
-                        ),
+                        Expanded(child: InkWell(onTap: () async { final picked = await showDatePicker(context: context, initialDate: dataCompra, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setModalState(() => dataCompra = picked); }, child: InputDecorator(decoration: const InputDecoration(labelText: 'Data Compra', border: OutlineInputBorder()), child: Text(DateFormat('dd/MM/yyyy').format(dataCompra), style: const TextStyle(fontSize: 13))))),
                       ],
                     ),
                     const SizedBox(height: 20),
                     FilledButton.icon(
-                      icon: const Icon(Icons.check),
-                      label: Text(insumoExistente == null ? 'Cadastrar Produto' : 'Salvar Alterações'),
+                      icon: const Icon(Icons.check), label: Text(insumoExistente == null ? 'Cadastrar Produto' : 'Salvar Alterações'),
                       onPressed: () {
                         if (nomeController.text.trim().isEmpty) return;
-                        
                         final novoInsumo = Insumo(
-                          id: insumoExistente?.id ?? '',
-                          nome: nomeController.text.trim(),
-                          categoria: categoriaController.text,
-                          quantidade: int.tryParse(quantidadeController.text) ?? 1,
-                          estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
-                          precoPago: double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0,
-                          dataCompra: dataCompra,
-                          servicosVinculados: servicosVinculados, // 🧠 Vinculando a IA
-                          ciclosDeUso: insumoExistente?.ciclosDeUso ?? [], // 🧠 Mantém o histórico seguro
+                          id: insumoExistente?.id ?? '', nome: nomeController.text.trim(), categoria: categoriaController.text,
+                          quantidade: int.tryParse(quantidadeController.text) ?? 1, estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
+                          precoPago: double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0, dataCompra: dataCompra,
+                          servicosVinculados: servicosVinculados, ciclosDeUso: insumoExistente?.ciclosDeUso ?? [],
                         );
-
                         ref.read(estoqueControllerProvider.notifier).salvar(novoInsumo);
                         Navigator.pop(context);
                       },
@@ -195,30 +138,20 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
       return;
     }
     showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Abrir Novo Pote'),
-      content: Text('Tem certeza que deseja pegar um(a) ${i.nome} novo do estoque e começar a usar hoje?'),
+      title: const Text('Abrir Novo Pote'), content: Text('Tem certeza que deseja pegar um(a) ${i.nome} novo do estoque e começar a usar hoje?'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Colors.green),
-          onPressed: () { Navigator.pop(ctx); ref.read(estoqueControllerProvider.notifier).iniciarPote(i); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pote iniciado! A IA já está contando.'), backgroundColor: Colors.green)); },
-          child: const Text('Sim, Iniciar'),
-        ),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.green), onPressed: () { Navigator.pop(ctx); ref.read(estoqueControllerProvider.notifier).iniciarPote(i); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pote iniciado! A IA já está contando.'), backgroundColor: Colors.green)); }, child: const Text('Sim, Iniciar')),
       ],
     ));
   }
 
   void _confirmarFimPote(Insumo i) {
     showDialog(context: context, builder: (ctx) => AlertDialog(
-      title: const Text('Produto Acabou'),
-      content: Text('O seu pote de ${i.nome} chegou ao fim? A IA fechará o ciclo de cálculo de gastos.'),
+      title: const Text('Produto Acabou'), content: Text('O seu pote de ${i.nome} chegou ao fim? A IA fechará o ciclo de cálculo de gastos.'),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-        FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-          onPressed: () { Navigator.pop(ctx); ref.read(estoqueControllerProvider.notifier).finalizarPoteAberto(i); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ciclo finalizado. Custo rateado!'), backgroundColor: Colors.orange)); },
-          child: const Text('Sim, Acabou'),
-        ),
+        FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700), onPressed: () { Navigator.pop(ctx); ref.read(estoqueControllerProvider.notifier).finalizarPoteAberto(i); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ciclo finalizado. Custo rateado!'), backgroundColor: Colors.orange)); }, child: const Text('Sim, Acabou')),
       ],
     ));
   }
@@ -245,9 +178,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
             if (i.dataCompra.isAfter(inicioMes.subtract(const Duration(seconds: 1)))) gastoMes += i.precoPago * i.quantidade;
             if (i.categoria.isNotEmpty) categoriasSet.add(i.categoria);
           }
-
-          final List<String> listaCategorias = categoriasSet.toList()..sort();
-          if (!listaCategorias.contains(_categoriaSelecionada)) _categoriaSelecionada = 'Todas';
 
           final insumosGeral = insumos.where((i) {
             final condicaoBusca = i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) || i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
@@ -346,27 +276,91 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 
+  // 🧠 AQUI A MÁGICA VISUAL ACONTECE (Os Cards Consumindo os Dados da IA)
   Widget _buildAbaRelatorioIA() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.smart_toy, size: 64, color: Colors.blue.shade200),
-          const SizedBox(height: 16),
-          const Text('A Inteligência Artificial está aprendendo!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
-          const SizedBox(height: 12),
-          const Text('À medida que você aperta "Abrir" e "Acabou" nos seus potes de insumos, e fecha as comandas de serviço na sua Agenda, nossa IA calculará silenciosamente quanto de produto está sendo gasto por procedimento.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-          const SizedBox(height: 24),
-          Card(
-            color: Colors.blue.shade50, elevation: 0,
-            child: const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text('Neste mês, quando o seu primeiro pote chegar ao fim (Botão "Acabou"), os relatórios de Custeio e Sugestão de Preços aparecerão automaticamente aqui.', style: TextStyle(fontSize: 12, color: Colors.blueGrey), textAlign: TextAlign.center),
+    final iaAsync = ref.watch(iaRelatorioProvider);
+
+    return iaAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, stack) => Center(child: Text('Erro ao carregar IA: $err')),
+      data: (relatorios) {
+        if (relatorios.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.smart_toy, size: 64, color: Colors.blue.shade200),
+                const SizedBox(height: 16),
+                const Text('A Inteligência Artificial está aprendendo!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                const Text('À medida que você aperta "Abrir Novo" e "Acabou" nos seus potes, e fecha as comandas de serviço na sua Agenda, nossa IA calculará silenciosamente quanto de produto está sendo gasto por procedimento.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                const SizedBox(height: 24),
+                Card(color: Colors.blue.shade50, elevation: 0, child: const Padding(padding: EdgeInsets.all(16.0), child: Text('Assim que o seu primeiro pote chegar ao fim (Botão "Acabou"), os relatórios de Custeio e Rentabilidade aparecerão automaticamente aqui.', style: TextStyle(fontSize: 12, color: Colors.blueGrey), textAlign: TextAlign.center)))
+              ],
             ),
-          )
-        ],
-      ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: relatorios.length,
+          itemBuilder: (context, index) {
+            final rel = relatorios[index];
+            final fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: BorderSide(color: rel.alertaCustoAlto ? Colors.orange.shade300 : Colors.blue.shade200),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(rel.alertaCustoAlto ? Icons.warning_rounded : Icons.lightbulb, color: rel.alertaCustoAlto ? Colors.orange : Colors.blue, size: 24),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text('Análise: ${rel.insumo.nome}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                      ],
+                    ),
+                    const Divider(height: 24),
+                    Text(rel.insightTexto, style: const TextStyle(fontSize: 14, height: 1.4)),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('Custo p/ Cliente', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text(fmtMoeda.format(rel.custoPorProcedimento), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: rel.alertaCustoAlto ? Colors.red : Colors.green)),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              const Text('Aplicações (Média)', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                              Text('${rel.totalServicos} clientes', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
