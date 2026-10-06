@@ -5,9 +5,12 @@ import 'package:intl/intl.dart';
 import '../controllers/estoque_controller.dart';
 import '../models/insumo.dart';
 
+// 💅 LISTA ESPECIALIZADA ATUALIZADA
 const List<String> _listaServicosSalao = [
-  'Mechas', 'Coloração', 'Progressiva', 'Botox', 'Corte', 'Escova', 
-  'Design de Sobrancelha', 'Pé e Mão', 'Plástica dos Fios', 'Maquiagem'
+  'Alongamento', 'Banho em gel', 'Blindagem mão', 'Blindagem pé', 
+  'Esmaltação', 'Manutenção 15 dias', 'Manutenção 20 dias', 
+  'Manutenção banho em gel', 'Mão', 'Pé', 'Mão e pé', 
+  'Plástica dos pés', 'Remoção', 'Spa dos pés', 'Unha quebrada'
 ];
 
 class EstoqueScreen extends ConsumerStatefulWidget {
@@ -22,6 +25,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   int _abaSelecionada = 0; 
   String _categoriaSelecionada = 'Todas';
   bool _mostrarApenasAlertas = false;
+  DateTime _mesFiltro = DateTime.now(); // 📅 Controlador central do mês
 
   void _abrirModalInsumo(BuildContext context, [Insumo? insumoExistente]) {
     final nomeController = TextEditingController(text: insumoExistente?.nome ?? '');
@@ -112,12 +116,19 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                       icon: const Icon(Icons.check), label: Text(insumoExistente == null ? 'Cadastrar Produto' : 'Salvar Alterações'),
                       onPressed: () {
                         if (nomeController.text.trim().isEmpty) return;
+                        
                         final novoInsumo = Insumo(
-                          id: insumoExistente?.id ?? '', nome: nomeController.text.trim(), categoria: categoriaController.text,
-                          quantidade: int.tryParse(quantidadeController.text) ?? 1, estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
-                          precoPago: double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0, dataCompra: dataCompra,
-                          servicosVinculados: servicosVinculados, ciclosDeUso: insumoExistente?.ciclosDeUso ?? [],
+                          id: insumoExistente?.id ?? '', 
+                          nome: nomeController.text.trim(), 
+                          categoria: categoriaController.text,
+                          quantidade: int.tryParse(quantidadeController.text) ?? 1, 
+                          estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
+                          precoPago: double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0, 
+                          dataCompra: dataCompra,
+                          servicosVinculados: servicosVinculados, 
+                          ciclosDeUso: insumoExistente?.ciclosDeUso ?? [], 
                         );
+
                         ref.read(estoqueControllerProvider.notifier).salvar(novoInsumo);
                         Navigator.pop(context);
                       },
@@ -158,42 +169,75 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
 
   @override
   Widget build(BuildContext context) {
+    const primaryColor = Color(0xFF8A2463);
     final estoqueAsync = ref.watch(estoqueControllerProvider);
     final fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final fmtData = DateFormat('dd/MM/yyyy');
 
+    // 📅 NOVO: Seletor de Mês isolado e seguro
+    final controleMes = Container(
+      color: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(icon: const Icon(Icons.chevron_left, color: primaryColor), onPressed: () { setState(() => _mesFiltro = DateTime(_mesFiltro.year, _mesFiltro.month - 1)); }),
+          Text(DateFormat('MMMM yyyy', 'pt_BR').format(_mesFiltro).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryColor)),
+          IconButton(icon: const Icon(Icons.chevron_right, color: primaryColor), onPressed: () { setState(() => _mesFiltro = DateTime(_mesFiltro.year, _mesFiltro.month + 1)); }),
+        ],
+      ),
+    );
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Estoque e Insumos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-      floatingActionButton: FloatingActionButton.extended(onPressed: () => _abrirModalInsumo(context), icon: const Icon(Icons.add), label: const Text('Novo Insumo')),
+      backgroundColor: const Color(0xFFFAF0F4),
+      appBar: AppBar(
+        title: const Text('Estoque e Insumos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+      ),
+      floatingActionButton: FloatingActionButton.extended(onPressed: () => _abrirModalInsumo(context), icon: const Icon(Icons.add), label: const Text('Novo Insumo'), backgroundColor: primaryColor, foregroundColor: Colors.white),
       body: estoqueAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (insumos) {
-          final hoje = DateTime.now(); final inicioMes = DateTime(hoje.year, hoje.month, 1);
-          double gastoMes = 0; int itensEmAlerta = 0;
+          final inicioMes = DateTime(_mesFiltro.year, _mesFiltro.month, 1);
+          final fimMes = DateTime(_mesFiltro.year, _mesFiltro.month + 1, 0, 23, 59, 59);
+          
+          double gastoMes = 0; 
+          int itensEmAlerta = 0;
           final Set<String> categoriasSet = {'Todas'};
 
           for (final i in insumos) {
             if (i.emAlerta && i.estoqueMinimo >= 0) itensEmAlerta++;
-            if (i.dataCompra.isAfter(inicioMes.subtract(const Duration(seconds: 1)))) gastoMes += i.precoPago * i.quantidade;
             if (i.categoria.isNotEmpty) categoriasSet.add(i.categoria);
+            
+            // 💰 Gasto Dinâmico (Soma as compras feitas apenas NO MÊS filtrado e DA CATEGORIA filtrada)
+            bool condicaoCat = _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
+            if (i.dataCompra.isAfter(inicioMes.subtract(const Duration(seconds: 1))) && 
+                i.dataCompra.isBefore(fimMes.add(const Duration(seconds: 1))) && condicaoCat) {
+              gastoMes += (i.precoPago * i.quantidade); // Calcula o valor investido naquele lote
+            }
           }
 
+          final List<String> listaCategorias = categoriasSet.toList()..sort();
+          if (!listaCategorias.contains(_categoriaSelecionada)) _categoriaSelecionada = 'Todas';
+
+          // Lista final para a tela Lista & Uso
           final insumosGeral = insumos.where((i) {
             final condicaoBusca = i.nome.toLowerCase().contains(_filtroBusca.toLowerCase()) || i.categoria.toLowerCase().contains(_filtroBusca.toLowerCase());
             final condicaoAlerta = _mostrarApenasAlertas ? (i.emAlerta && i.estoqueMinimo >= 0) : true;
-            return condicaoBusca && condicaoAlerta;
+            final condicaoCategoria = _categoriaSelecionada == 'Todas' || i.categoria == _categoriaSelecionada;
+            return condicaoBusca && condicaoAlerta && condicaoCategoria;
           }).toList();
 
           return Column(
             children: [
+              controleMes, // Mostra o Mês no Topo
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Card(elevation: 0, color: Colors.deepOrange.shade50, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Gasto no Mês', style: TextStyle(fontSize: 11, color: Colors.deepOrange.shade900, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(fmtMoeda.format(gastoMes), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.deepOrange.shade900))])))),
+                        Expanded(child: Card(elevation: 0, color: Colors.deepOrange.shade50, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Compras no Mês', style: TextStyle(fontSize: 11, color: Colors.deepOrange.shade900, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(fmtMoeda.format(gastoMes), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.deepOrange.shade900))])))),
                         const SizedBox(width: 8),
                         Expanded(child: Card(elevation: _mostrarApenasAlertas ? 2 : 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _mostrarApenasAlertas ? Colors.red.shade400 : Colors.transparent, width: _mostrarApenasAlertas ? 2 : 0)), color: itensEmAlerta > 0 ? Colors.red.shade50 : Colors.green.shade50, child: InkWell(borderRadius: BorderRadius.circular(12), onTap: () { setState(() { _mostrarApenasAlertas = !_mostrarApenasAlertas; if (_mostrarApenasAlertas) _abaSelecionada = 0; }); }, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Alertas', style: TextStyle(fontSize: 11, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900, fontWeight: FontWeight.bold)), if (_mostrarApenasAlertas) Icon(Icons.filter_alt, size: 14, color: Colors.red.shade900)]), const SizedBox(height: 4), Text('$itensEmAlerta produtos', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900))]))))),
                       ],
@@ -212,8 +256,8 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
               ),
               Expanded(
                 child: _abaSelecionada == 0 
-                  ? _buildAbaLista(insumosGeral, fmtData) 
-                  : _buildAbaRelatorioIA(),
+                  ? _buildAbaLista(insumosGeral, listaCategorias, fmtData, primaryColor) 
+                  : _buildAbaRelatorioIA(fmtMoeda),
               ),
             ],
           );
@@ -222,13 +266,35 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 
-  Widget _buildAbaLista(List<Insumo> insumosFiltrados, DateFormat fmtData) {
+  Widget _buildAbaLista(List<Insumo> insumosFiltrados, List<String> listaCategorias, DateFormat fmtData, Color primaryColor) {
     return Column(
       children: [
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), child: TextField(decoration: const InputDecoration(hintText: 'Buscar insumo por nome...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)), onChanged: (v) => setState(() => _filtroBusca = v))),
-        const SizedBox(height: 8),
-        Expanded(
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), child: TextField(decoration: const InputDecoration(hintText: 'Buscar insumo por nome...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), filled: true, fillColor: Colors.white), onChanged: (v) => setState(() => _filtroBusca = v))),
+        
+        // 🏷️ NOVO: Filtro Rápido de Categorias na Tela de Uso
+        SizedBox(
+          height: 44,
           child: ListView.builder(
+            scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), itemCount: listaCategorias.length,
+            itemBuilder: (context, index) {
+              final cat = listaCategorias[index]; final isSelected = _categoriaSelecionada == cat;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+                  selected: isSelected, selectedColor: primaryColor, backgroundColor: Colors.white,
+                  onSelected: (selected) { if(selected) setState(() => _categoriaSelecionada = cat); }
+                )
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        
+        Expanded(
+          child: insumosFiltrados.isEmpty 
+            ? const Center(child: Text('Nenhum insumo encontrado nesta categoria.', style: TextStyle(color: Colors.grey)))
+            : ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             itemCount: insumosFiltrados.length,
             itemBuilder: (context, index) {
@@ -238,6 +304,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
               
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
+                elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: temAberto ? Colors.blue.shade200 : Colors.grey.shade200)),
                 child: Column(
                   children: [
@@ -276,9 +343,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 
-  // 🧠 AQUI A MÁGICA VISUAL ACONTECE (Os Cards Consumindo os Dados da IA)
-  Widget _buildAbaRelatorioIA() {
-    final iaAsync = ref.watch(iaRelatorioProvider);
+  Widget _buildAbaRelatorioIA(NumberFormat fmtMoeda) {
+    // 🧠 A Tela invoca a IA enviando o _mesFiltro (Mês selecionado lá no topo!)
+    final iaAsync = ref.watch(iaRelatorioProvider(_mesFiltro));
 
     return iaAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -292,11 +359,11 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
               children: [
                 Icon(Icons.smart_toy, size: 64, color: Colors.blue.shade200),
                 const SizedBox(height: 16),
-                const Text('A Inteligência Artificial está aprendendo!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                const Text('A Inteligência Artificial está analisando!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                const Text('À medida que você aperta "Abrir Novo" e "Acabou" nos seus potes, e fecha as comandas de serviço na sua Agenda, nossa IA calculará silenciosamente quanto de produto está sendo gasto por procedimento.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                Text('Nenhum pote fechado foi encontrado no mês de ${DateFormat('MMMM yyyy', 'pt_BR').format(_mesFiltro)}.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
                 const SizedBox(height: 24),
-                Card(color: Colors.blue.shade50, elevation: 0, child: const Padding(padding: EdgeInsets.all(16.0), child: Text('Assim que o seu primeiro pote chegar ao fim (Botão "Acabou"), os relatórios de Custeio e Rentabilidade aparecerão automaticamente aqui.', style: TextStyle(fontSize: 12, color: Colors.blueGrey), textAlign: TextAlign.center)))
+                Card(color: Colors.blue.shade50, elevation: 0, child: const Padding(padding: EdgeInsets.all(16.0), child: Text('Lembre-se: A IA gera o relatório cruzando as comandas da agenda na exata data em que o botão "Acabou" é pressionado.', style: TextStyle(fontSize: 12, color: Colors.blueGrey), textAlign: TextAlign.center)))
               ],
             ),
           );
@@ -307,11 +374,10 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           itemCount: relatorios.length,
           itemBuilder: (context, index) {
             final rel = relatorios[index];
-            final fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
-              elevation: 0,
+              elevation: 0, color: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
                 side: BorderSide(color: rel.alertaCustoAlto ? Colors.orange.shade300 : Colors.blue.shade200),
