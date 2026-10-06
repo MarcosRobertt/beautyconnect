@@ -1,5 +1,27 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+// Modelo para guardar a data que abriu e a data que acabou o pote
+class CicloDeUso {
+  final String id;
+  final DateTime dataAbertura;
+  final DateTime? dataFim;
+
+  CicloDeUso({required this.id, required this.dataAbertura, this.dataFim});
+
+  Map<String, dynamic> toMap() => {
+    'id': id,
+    'dataAbertura': dataAbertura.toIso8601String(),
+    'dataFim': dataFim?.toIso8601String(),
+  };
+
+  factory CicloDeUso.fromMap(Map<String, dynamic> map) {
+    return CicloDeUso(
+      id: map['id'] ?? '',
+      dataAbertura: map['dataAbertura'] != null ? DateTime.parse(map['dataAbertura']) : DateTime.now(),
+      dataFim: map['dataFim'] != null ? DateTime.parse(map['dataFim']) : null,
+    );
+  }
+}
 
 class Insumo {
   final String id;
@@ -9,6 +31,10 @@ class Insumo {
   final int estoqueMinimo;
   final double precoPago;
   final DateTime dataCompra;
+  
+  // 🧠 NOVOS CAMPOS PARA A IA DE PRECIFICAÇÃO
+  final List<String> servicosVinculados;
+  final List<CicloDeUso> ciclosDeUso;
 
   Insumo({
     required this.id,
@@ -18,29 +44,14 @@ class Insumo {
     required this.estoqueMinimo,
     required this.precoPago,
     required this.dataCompra,
+    required this.servicosVinculados,
+    required this.ciclosDeUso,
   });
 
   bool get emAlerta => quantidade <= estoqueMinimo;
-
-  Insumo copyWith({
-    String? id,
-    String? nome,
-    String? categoria,
-    int? quantidade,
-    int? estoqueMinimo,
-    double? precoPago,
-    DateTime? dataCompra,
-  }) {
-    return Insumo(
-      id: id ?? this.id,
-      nome: nome ?? this.nome,
-      categoria: categoria ?? this.categoria,
-      quantidade: quantidade ?? this.quantidade,
-      estoqueMinimo: estoqueMinimo ?? this.estoqueMinimo,
-      precoPago: precoPago ?? this.precoPago,
-      dataCompra: dataCompra ?? this.dataCompra,
-    );
-  }
+  
+  // Verifica se existe algum pote aberto atualmente
+  bool get temPoteAberto => ciclosDeUso.any((c) => c.dataFim == null);
 
   Map<String, dynamic> toMap() {
     return {
@@ -51,6 +62,8 @@ class Insumo {
       'estoqueMinimo': estoqueMinimo,
       'precoPago': precoPago,
       'dataCompra': dataCompra.toIso8601String(),
+      'servicosVinculados': servicosVinculados,
+      'ciclosDeUso': ciclosDeUso.map((c) => c.toMap()).toList(),
     };
   }
 
@@ -69,6 +82,12 @@ class Insumo {
       estoqueMinimo: (map['estoqueMinimo'] as num?)?.toInt() ?? 1,
       precoPago: (map['precoPago'] as num?)?.toDouble() ?? 0.0,
       dataCompra: parseData(map['dataCompra']),
+      
+      // 🛡️ MITIGAÇÃO: Se for insumo antigo, nasce com lista vazia sem quebrar o app
+      servicosVinculados: List<String>.from(map['servicosVinculados'] ?? []),
+      ciclosDeUso: (map['ciclosDeUso'] as List<dynamic>?)
+              ?.map((e) => CicloDeUso.fromMap(e as Map<String, dynamic>))
+              .toList() ?? [],
     );
   }
 }
