@@ -88,7 +88,7 @@ class EstoqueController extends StateNotifier<AsyncValue<List<Insumo>>> {
 }
 
 // ==========================================
-// 🧠 O CÉREBRO DA IA DE PRECIFICAÇÃO
+// 🧠 O CÉREBRO DA IA (FILTRANDO POR MÊS)
 // ==========================================
 
 class RelatorioIA {
@@ -109,20 +109,25 @@ class RelatorioIA {
   });
 }
 
-// Provedor que a tela chama para gerar os relatórios visualmente
-final iaRelatorioProvider = FutureProvider.autoDispose<List<RelatorioIA>>((ref) async {
+// 🧠 NOVO: A IA agora exige o "mesFiltro" para auditar apenas os potes fechados naquele mês
+final iaRelatorioProvider = FutureProvider.autoDispose.family<List<RelatorioIA>, DateTime>((ref, mesFiltro) async {
   final db = FirebaseFirestore.instance;
   final insumos = ref.watch(estoqueControllerProvider).value ?? [];
   List<RelatorioIA> relatorios = [];
 
   for (var insumo in insumos) {
-    final ciclosFechados = insumo.ciclosDeUso.where((c) => c.dataFim != null).toList();
-    if (ciclosFechados.isEmpty) continue; 
+    // 🔍 Filtro: Apenas ciclos que acabaram dentro do mês e ano selecionados na tela
+    final ciclosFechadosNoMes = insumo.ciclosDeUso.where((c) {
+      if (c.dataFim == null) return false;
+      return c.dataFim!.year == mesFiltro.year && c.dataFim!.month == mesFiltro.month;
+    }).toList();
+
+    if (ciclosFechadosNoMes.isEmpty) continue; 
 
     int servicosTotais = 0;
     int diasTotais = 0;
 
-    for (var ciclo in ciclosFechados) {
+    for (var ciclo in ciclosFechadosNoMes) {
       diasTotais += ciclo.dataFim!.difference(ciclo.dataAbertura).inDays;
       if (diasTotais == 0) diasTotais = 1; 
 
@@ -141,17 +146,15 @@ final iaRelatorioProvider = FutureProvider.autoDispose<List<RelatorioIA>>((ref) 
           }
         }
         servicosTotais += count;
-      } catch (e) {
-        // Ignora erros e continua a soma
-      }
+      } catch (e) {}
     }
 
     if (servicosTotais > 0) {
-      double custoTotalGasto = insumo.precoPago * ciclosFechados.length;
+      double custoTotalGasto = insumo.precoPago * ciclosFechadosNoMes.length;
       double custoPorProcedimento = custoTotalGasto / servicosTotais;
-      int duracaoMedia = diasTotais ~/ ciclosFechados.length;
+      int duracaoMedia = diasTotais ~/ ciclosFechadosNoMes.length;
 
-      String insight = "O produto ${insumo.nome} está rendendo em média $duracaoMedia dias por unidade, atendendo um total de $servicosTotais procedimentos. Seu custo exato por cliente está em R\$ ${custoPorProcedimento.toStringAsFixed(2).replaceAll('.', ',')}.";
+      String insight = "O produto ${insumo.nome} rendeu em média $duracaoMedia dias por unidade neste mês, atendendo um total de $servicosTotais procedimentos. Seu custo exato por cliente ficou em R\$ ${custoPorProcedimento.toStringAsFixed(2).replaceAll('.', ',')}.";
       
       bool alerta = custoPorProcedimento > (insumo.precoPago * 0.20);
       if (alerta) {
@@ -171,8 +174,8 @@ final iaRelatorioProvider = FutureProvider.autoDispose<List<RelatorioIA>>((ref) 
         insumo: insumo,
         totalServicos: 0,
         custoPorProcedimento: insumo.precoPago,
-        duracaoMediaDias: diasTotais ~/ ciclosFechados.length,
-        insightTexto: "A unidade de ${insumo.nome} foi finalizada, mas a IA não encontrou nenhum serviço compatível concluído na Agenda neste período. Verifique se você vinculou o produto ao serviço correto.",
+        duracaoMediaDias: diasTotais ~/ ciclosFechadosNoMes.length,
+        insightTexto: "Uma unidade de ${insumo.nome} acabou neste mês, mas a IA não encontrou nenhum serviço compatível concluído na Agenda durante o uso. Verifique se você vinculou o produto ao serviço correto.",
         alertaCustoAlto: true,
       ));
     }
