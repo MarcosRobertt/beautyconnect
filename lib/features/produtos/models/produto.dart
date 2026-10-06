@@ -5,8 +5,10 @@ class Produto {
   final double custo;
   final double precoVenda;
   final int estoque;
-  final String categoria; // 🏷️ NOVO
-  final DateTime dataCompra; // 📅 NOVO
+  final String categoria;
+  final DateTime dataCompra;
+  final bool temValidade; // 📅 NOVO
+  final DateTime? dataValidade; // 📅 NOVO
 
   Produto({
     required this.id,
@@ -17,6 +19,8 @@ class Produto {
     required this.estoque,
     required this.categoria,
     required this.dataCompra,
+    required this.temValidade,
+    this.dataValidade,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,20 +32,24 @@ class Produto {
       'estoque': estoque,
       'categoria': categoria,
       'dataCompra': dataCompra.toIso8601String(),
+      'temValidade': temValidade,
+      'dataValidade': dataValidade?.toIso8601String(),
     };
   }
 
-  factory Produto.fromMap(Map<String, dynamic> map, String documentId) {
+  factory Produto.fromMap(Map<String, dynamic> map, String docId) {
     return Produto(
-      id: documentId,
+      id: docId,
       nome: map['nome'] ?? '',
       emoji: map['emoji'] ?? '🛍️',
       custo: (map['custo'] ?? 0.0).toDouble(),
       precoVenda: (map['precoVenda'] ?? 0.0).toDouble(),
       estoque: map['estoque'] ?? 0,
-      // 🛡️ MITIGAÇÃO: Se o produto for antigo e não tiver esses campos, define padrões seguros
-      categoria: map['categoria'] ?? 'Outros', 
+      categoria: map['categoria'] ?? 'Outros',
       dataCompra: map['dataCompra'] != null ? DateTime.parse(map['dataCompra']) : DateTime.now(),
+      // 🛡️ MITIGAÇÃO: Produtos velhos assumem que não têm validade marcada
+      temValidade: map['temValidade'] ?? false,
+      dataValidade: map['dataValidade'] != null ? DateTime.parse(map['dataValidade']) : null,
     );
   }
 }
