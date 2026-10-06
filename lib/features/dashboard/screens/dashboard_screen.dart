@@ -11,6 +11,7 @@ import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../../clientes/models/cliente.dart';
 import '../controllers/dashboard_controller.dart';
+import '../../configuracoes/screens/metas_screen.dart'; // 🎯 Conexão com o Motor de Metas
 
 String formatarMoeda(double valor) {
   return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
@@ -44,22 +45,30 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   String _periodoFaturamento = 'Hoje';
   String _periodoTM = 'Hoje';
 
-  // =========================================================
-  // 🎯 CONFIGURAÇÃO DAS METAS (Pode alterar esses valores)
-  // =========================================================
-  final int metaAtendimentosDia = 8;
-  final double metaFaturamentoDia = 800.0;
-  // =========================================================
-
   @override
   Widget build(BuildContext context) {
     ref.watch(agendamentoControllerProvider);
+
+    // 🧠 Consulta em Tempo Real as Metas Configuradas para este Mês
+    final metasNuvem = ref.watch(metasControllerProvider).value ?? {};
+    final hoje = DateTime.now();
+    final chaveMesAtual = '${hoje.year}-${hoje.month.toString().padLeft(2, '0')}';
+    
+    // Se não tiver meta configurada, assume um padrão de sobrevivência leve
+    final metaAtiva = metasNuvem[chaveMesAtual] ?? MetaMensal(
+      faturamentoMensal: 6000, faturamentoDiario: 250, 
+      atendimentosMensal: 80, atendimentosDiario: 4
+    );
+
+    final int metaAtendimentosDia = metaAtiva.atendimentosDiario > 0 ? metaAtiva.atendimentosDiario : 1; 
+    final double metaFaturamentoDia = metaAtiva.faturamentoDiario > 0 ? metaAtiva.faturamentoDiario : 1.0;
+    final double metaFaturamentoSemana = metaFaturamentoDia * 5;
+    final double metaFaturamentoMes = metaAtiva.faturamentoMensal > 0 ? metaAtiva.faturamentoMensal : (metaFaturamentoDia * 20);
 
     final metricas = ref.watch(dashboardMetricsProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
     final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
     
-    final hoje = DateTime.now();
     final rotuloData = formatarData(hoje);
     final larguraTela = MediaQuery.of(context).size.width;
 
@@ -151,7 +160,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
     final metaAtivaFaturamento = _periodoFaturamento == 'Hoje' 
         ? metaFaturamentoDia 
-        : (_periodoFaturamento == 'Semana' ? (metaFaturamentoDia * 5) : (metaFaturamentoDia * 20));
+        : (_periodoFaturamento == 'Semana' ? metaFaturamentoSemana : metaFaturamentoMes);
 
     final comandasPendentes = todosAgendamentos.where((a) =>
         a.clienteId != 'BLOQUEIO' &&
@@ -550,10 +559,6 @@ class _CardMetricaInteligente extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// MODAIS INTACTOS DO SISTEMA
-// ============================================================================
-
 class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({required this.aniversariantes, required this.inativas});
   final List<Cliente> aniversariantes; final List<Map<String, dynamic>> inativas;
@@ -664,7 +669,6 @@ class _ModalComandasPendentes extends ConsumerWidget {
         agendamento: agendamento,
         nomeCliente: nomeCliente,
         onConfirmar: (pagamentos, valorFinal, houveAtraso) async {
-          
           try {
             final docVerificacao = await FirebaseFirestore.instance
                 .collection('agendamentos')
@@ -719,7 +723,6 @@ class _ModalComandasPendentes extends ConsumerWidget {
           if (pagamentos.isNotEmpty) {
             final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
             formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
-            
             final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
             
             final listaDetalhes = pagamentos.map((p) {
@@ -772,113 +775,12 @@ class _ModalComandasPendentes extends ConsumerWidget {
       ),
     );
   }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
-    final clientesAsync = ref.watch(clienteControllerProvider);
-
-    final clientes = clientesAsync.value ?? [];
-    final clientesPorId = {for (final c in clientes) c.id: c};
-    final hoje = DateTime.now();
-    final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
-
-    final pendentes = (todosAgendamentosAsync.value ?? []).where((a) =>
-        a.clienteId != 'BLOQUEIO' &&
-        a.status == AgendamentoStatus.agendado &&
-        a.data.isBefore(hojeZerado)
-    ).toList();
-
-    pendentes.sort((a, b) {
-      int cmp = a.data.compareTo(b.data);
-      if (cmp == 0) return a.horaInicio.compareTo(b.horaInicio);
-      return cmp;
-    });
-
-    final mapMes = <String, Map<String, List<Agendamento>>>{};
-    for (var a in pendentes) {
-      final mesStr = _formatarMesAno(a.data);
-      final diaStr = _formatarDiaCurto(a.data);
-      mapMes.putIfAbsent(mesStr, () => {});
-      mapMes[mesStr]!.putIfAbsent(diaStr, () => []);
-      mapMes[mesStr]![diaStr]!.add(a);
-    }
-
-    return SafeArea(
-      child: Container(
-        height: MediaQuery.of(context).size.height * 0.8,
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Resolva suas Pendências', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            const Text('Feche as comandas abaixo para que o valor seja contabilizado.', style: TextStyle(fontSize: 12, color: Colors.grey)),
-            const SizedBox(height: 16),
-            Expanded(
-              child: pendentes.isEmpty
-                  ? const Center(child: Text('Tudo certo! Nenhuma comanda pendente.', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)))
-                  : ListView(
-                      children: mapMes.entries.map((mesEntry) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 16, bottom: 8),
-                              child: Text('🗓️ ${mesEntry.key}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800, fontSize: 12)),
-                            ),
-                            ...mesEntry.value.entries.map((diaEntry) {
-                              return Card(
-                                margin: const EdgeInsets.only(bottom: 12), elevation: 0,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.grey.shade300)),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: double.infinity, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
-                                      child: Text('📅 ${diaEntry.key}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    ),
-                                    ...diaEntry.value.map((a) {
-                                      final nomeCliente = clientesPorId[a.clienteId]?.nome ?? "Cliente não encontrado";
-                                      return ListTile(
-                                        title: Text('${a.horaInicio} · $nomeCliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                        subtitle: Text('${a.servico} — ${formatarMoeda(a.valor)}', style: const TextStyle(fontSize: 12)),
-                                        trailing: OutlinedButton(
-                                          style: OutlinedButton.styleFrom(foregroundColor: Colors.purple, side: const BorderSide(color: Colors.purple), padding: const EdgeInsets.symmetric(horizontal: 12)),
-                                          onPressed: () => _abrirModalFechamento(context, ref, a, nomeCliente),
-                                          child: const Text('FECHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
-                                        ),
-                                      );
-                                    }),
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _ModalFecharComandaDashboard extends StatefulWidget {
   const _ModalFecharComandaDashboard({
-    required this.agendamento,
-    required this.nomeCliente,
-    required this.onConfirmar,
-    required this.onCancelarAtendimento,
+    required this.agendamento, required this.nomeCliente,
+    required this.onConfirmar, required this.onCancelarAtendimento,
   });
 
   final Agendamento agendamento;
@@ -915,11 +817,7 @@ class _ModalFecharComandaDashboardState extends State<_ModalFecharComandaDashboa
     final valorDigitado = double.tryParse(_valorParcialController.text.replaceAll(',', '.')) ?? 0.0;
     if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
       setState(() {
-        _pagamentos.add({
-          'forma': _formaAtual,
-          'valor': valorDigitado,
-          'data': _dataPagamentoAtual 
-        });
+        _pagamentos.add({ 'forma': _formaAtual, 'valor': valorDigitado, 'data': _dataPagamentoAtual });
         _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ',');
         _dataPagamentoAtual = DateTime.now();
       });
