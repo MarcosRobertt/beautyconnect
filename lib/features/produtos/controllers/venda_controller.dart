@@ -36,6 +36,7 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
     }
   }
 
+  // 💰 NOVO: Agora a função recebe os parâmetros de Forma de Pagamento, isPago e Vencimento
   Future<void> registrarVendaAvulsa(
       Produto produto, int quantidadeSelecionada, String nomeCliente, 
       DateTime dataDaVenda, String formaPagamento, bool isPago, DateTime? dataPrevistaPagamento) async {
@@ -50,9 +51,9 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
       quantidade: quantidadeSelecionada,
       clienteNome: nomeCliente.isEmpty ? 'Avulso (Balcão)' : nomeCliente,
       dataVenda: dataDaVenda,
-      formaPagamento: formaPagamento,
-      isPago: isPago,
-      dataPagamentoEsperada: dataPrevistaPagamento,
+      formaPagamento: formaPagamento, // 💰 Enviando para o Firebase
+      isPago: isPago,                 // 💰 Enviando para o Firebase
+      dataPagamentoEsperada: dataPrevistaPagamento, // 📅 Enviando para o Firebase
     );
 
     final batch = _db.batch();
@@ -68,12 +69,13 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
   }
 
-  // 💰 NOVO: Função para dar baixa em fiado
+  // ✅ NOVO: Função para dar baixa em cliente que comprou fiado
   Future<void> confirmarPagamento(VendaProduto venda) async {
     await _db.collection('loja_vendas').doc(venda.id).update({'isPago': true});
     await carregarVendasMes(venda.dataVenda);
   }
 
+  // 🛡️ Mantém a nossa inteligência de estorno à prova de falhas
   Future<void> cancelarVenda(VendaProduto venda, {bool devolverEstoque = true}) async {
     final docVenda = _db.collection('loja_vendas').doc(venda.id);
     final docProduto = _db.collection('loja_produtos').doc(venda.produtoId);
