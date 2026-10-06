@@ -36,8 +36,10 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
     }
   }
 
-  // 📅 NOVO: Agora recebe a "dataDaVenda" informada no formulário
-  Future<void> registrarVendaAvulsa(Produto produto, int quantidadeSelecionada, String nomeCliente, DateTime dataDaVenda) async {
+  Future<void> registrarVendaAvulsa(
+      Produto produto, int quantidadeSelecionada, String nomeCliente, 
+      DateTime dataDaVenda, String formaPagamento, bool isPago, DateTime? dataPrevistaPagamento) async {
+    
     final novaVenda = VendaProduto(
       id: '',
       produtoId: produto.id,
@@ -47,7 +49,10 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
       precoVendido: produto.precoVenda,  
       quantidade: quantidadeSelecionada,
       clienteNome: nomeCliente.isEmpty ? 'Avulso (Balcão)' : nomeCliente,
-      dataVenda: dataDaVenda, // 📅 Salva a data exata escolhida
+      dataVenda: dataDaVenda,
+      formaPagamento: formaPagamento,
+      isPago: isPago,
+      dataPagamentoEsperada: dataPrevistaPagamento,
     );
 
     final batch = _db.batch();
@@ -59,9 +64,14 @@ class VendaController extends StateNotifier<AsyncValue<List<VendaProduto>>> {
     batch.update(docProduto, {'estoque': novoEstoque < 0 ? 0 : novoEstoque});
 
     await batch.commit();
-
-    await carregarVendasMes(dataDaVenda); // Atualiza a tela com o mês da venda realizada
+    await carregarVendasMes(dataDaVenda);
     ref.read(produtoControllerProvider.notifier).carregarProdutos();
+  }
+
+  // 💰 NOVO: Função para dar baixa em fiado
+  Future<void> confirmarPagamento(VendaProduto venda) async {
+    await _db.collection('loja_vendas').doc(venda.id).update({'isPago': true});
+    await carregarVendasMes(venda.dataVenda);
   }
 
   Future<void> cancelarVenda(VendaProduto venda, {bool devolverEstoque = true}) async {
