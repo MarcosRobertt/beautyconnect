@@ -13,7 +13,8 @@ import '../../financeiro/controllers/despesa_controller.dart';
 import '../../financeiro/screens/financeiro_screen.dart';
 import '../../estoque/screens/estoque_screen.dart';
 import '../controllers/backup_controller.dart';
-import '../../produtos/screens/produtos_screen.dart'; // 🛡️ Import da futura Loja
+import '../../produtos/screens/produtos_screen.dart'; 
+import 'metas_screen.dart'; // 🎯 Importamos a Tela Nova
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -213,9 +214,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EstoqueScreen())),
                 ),
-                // =========================================================
-                // 🛍️ MÓDULO DE LOJA E REVENDA
-                // =========================================================
                 const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.shopping_bag_outlined, color: Colors.pink),
@@ -224,7 +222,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProdutosScreen())),
                 ),
-                // =========================================================
               ],
             ),
           ),
@@ -239,9 +236,18 @@ class ConfiguracoesScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
             child: Column(
               children: [
+                // 🎯 AQUI O NOSSO NOVO BOTÃO DE METAS!
+                ListTile(
+                  leading: const Icon(Icons.track_changes, color: Colors.blue),
+                  title: const Text('Planejamento e Metas', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Configure suas metas de atendimentos', style: TextStyle(fontSize: 11)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MetasPlanejamentoScreen())),
+                ),
+                const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.cloud_done_outlined, color: Colors.green),
-                  title: const Text('Status de Backup'),
+                  title: const Text('Status de Backup', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Sincronizado na Nuvem / Cópia JSON', style: TextStyle(fontSize: 11)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
                   onTap: () => _mostrarStatusBackup(context, ref),
@@ -249,8 +255,8 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
-                  title: const Text('Sobre o App'),
-                  trailing: const Text('v1.0.8 (Sync Automático)', style: TextStyle(color: Colors.grey, fontSize: 12)), // Aproveitei e subi a versão!
+                  title: const Text('Sobre o App', style: TextStyle(fontWeight: FontWeight.w600)),
+                  trailing: const Text('v1.0.8 (Sync Automático)', style: TextStyle(color: Colors.grey, fontSize: 12)), 
                   onTap: () {},
                 ),
               ],
