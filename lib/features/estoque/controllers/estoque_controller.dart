@@ -1,6 +1,6 @@
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 import '../models/insumo.dart';
 
 final estoqueControllerProvider = StateNotifierProvider<EstoqueController, AsyncValue<List<Insumo>>>((ref) {
@@ -14,7 +14,6 @@ class EstoqueController extends StateNotifier<AsyncValue<List<Insumo>>> {
 
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  /// Ouve as atualizações do estoque em tempo real
   void carregarInsumos() {
     try {
       _db.collection('estoque').snapshots().listen((snapshot) {
@@ -24,9 +23,7 @@ class EstoqueController extends StateNotifier<AsyncValue<List<Insumo>>> {
           return Insumo.fromMap(data);
         }).toList();
 
-        // Ordena por nome
         lista.sort((a, b) => a.nome.toLowerCase().compareTo(b.nome.toLowerCase()));
-
         state = AsyncValue.data(lista);
       }, onError: (e, stack) {
         state = AsyncValue.error(e, stack);
@@ -36,7 +33,6 @@ class EstoqueController extends StateNotifier<AsyncValue<List<Insumo>>> {
     }
   }
 
-  /// Salva um novo insumo ou atualiza um existente
   Future<void> salvar(Insumo insumo) async {
     final mapData = insumo.toMap();
 
@@ -51,10 +47,46 @@ class EstoqueController extends StateNotifier<AsyncValue<List<Insumo>>> {
     }
   }
 
-  /// Remove um insumo do banco
   Future<void> deletar(String id) async {
     if (id.isNotEmpty) {
       await _db.collection('estoque').doc(id).delete();
     }
+  }
+
+  // 🟢 NOVO: A profissional abriu um pote novo
+  Future<void> iniciarPote(Insumo insumo) async {
+    final novoCiclo = CicloDeUso(
+      id: const Uuid().v4(),
+      dataAbertura: DateTime.now(),
+    );
+    
+    final listaAtualizada = List<CicloDeUso>.from(insumo.ciclosDeUso)..add(novoCiclo);
+    
+    // Desconta 1 unidade do armário (porque foi pro balcão)
+    final novoEstoque = insumo.quantidade > 0 ? insumo.quantidade - 1 : 0;
+    
+    await _db.collection('estoque').doc(insumo.id).update({
+      'quantidade': novoEstoque,
+      'ciclosDeUso': listaAtualizada.map((c) => c.toMap()).toList(),
+    });
+  }
+
+  // 🔴 NOVO: O pote acabou (Fecha o ciclo para a IA calcular depois)
+  Future<void> finalizarPoteAberto(Insumo insumo) async {
+    final indexAberto = insumo.ciclosDeUso.indexWhere((c) => c.dataFim == null);
+    if (indexAberto == -1) return; // Não tem pote aberto
+
+    final listaAtualizada = List<CicloDeUso>.from(insumo.ciclosDeUso);
+    final cicloAntigo = listaAtualizada[indexAberto];
+    
+    listaAtualizada[indexAberto] = CicloDeUso(
+      id: cicloAntigo.id,
+      dataAbertura: cicloAntigo.dataAbertura,
+      dataFim: DateTime.now(), // 🔴 Grava a data que acabou
+    );
+
+    await _db.collection('estoque').doc(insumo.id).update({
+      'ciclosDeUso': listaAtualizada.map((c) => c.toMap()).toList(),
+    });
   }
 }
