@@ -111,11 +111,58 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                         Expanded(child: InkWell(onTap: () async { final picked = await showDatePicker(context: context, initialDate: dataCompra, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setModalState(() => dataCompra = picked); }, child: InputDecorator(decoration: const InputDecoration(labelText: 'Data Compra', border: OutlineInputBorder()), child: Text(DateFormat('dd/MM/yyyy').format(dataCompra), style: const TextStyle(fontSize: 13))))),
                       ],
                     ),
+                    
+                    // 📜 BLOCO VISUAL DO HISTÓRICO DE PREÇOS (Auditoria)
+                    if (insumoExistente != null && insumoExistente.historicoPrecos.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(children: [Icon(Icons.history, size: 16, color: Colors.grey), SizedBox(width: 6), Text('Histórico de Preços (Auditoria)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey))]),
+                            const SizedBox(height: 8),
+                            ...insumoExistente.historicoPrecos.map((h) => Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: Text(h, style: TextStyle(fontSize: 11, color: h.startsWith('⬆️') ? Colors.red.shade800 : Colors.blue.shade800, fontWeight: FontWeight.w500)),
+                            )),
+                          ],
+                        )
+                      )
+                    ],
+
                     const SizedBox(height: 20),
                     FilledButton.icon(
                       icon: const Icon(Icons.check), label: Text(insumoExistente == null ? 'Cadastrar Produto' : 'Salvar Alterações'),
                       onPressed: () {
                         if (nomeController.text.trim().isEmpty) return;
+
+                        // 🧠 MATEMÁTICA DA INFLAÇÃO
+                        final novoPreco = double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0;
+                        final precoAntigo = insumoExistente?.precoPago ?? novoPreco;
+                        
+                        List<String> historicoAuditoria = List.from(insumoExistente?.historicoPrecos ?? []);
+                        String? alertaInflacao;
+                        Color corDoAlerta = Colors.green;
+
+                        // Se o produto já existia e a dona do salão mudou o preço para um valor diferente
+                        if (insumoExistente != null && novoPreco != precoAntigo) {
+                          final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
+                          final dataAtual = DateFormat('dd/MM/yyyy').format(DateTime.now());
+                          final diferenca = novoPreco - precoAntigo;
+                          final porcentagem = precoAntigo > 0 ? (diferenca / precoAntigo) * 100 : 0.0;
+
+                          if (diferenca > 0) {
+                            historicoAuditoria.insert(0, '⬆️ $dataAtual: Subiu de ${fmt.format(precoAntigo)} para ${fmt.format(novoPreco)} (+${porcentagem.toStringAsFixed(1)}%)');
+                            alertaInflacao = '⚠️ INFLAÇÃO DETECTADA! Produto encareceu ${porcentagem.toStringAsFixed(1)}%. O novo custo já foi enviado para a IA!';
+                            corDoAlerta = Colors.orange.shade900;
+                          } else {
+                            historicoAuditoria.insert(0, '⬇️ $dataAtual: Caiu de ${fmt.format(precoAntigo)} para ${fmt.format(novoPreco)} (${porcentagem.toStringAsFixed(1)}%)');
+                            alertaInflacao = '📉 Produto mais barato! Sua margem de lucro vai aumentar. A IA foi atualizada!';
+                            corDoAlerta = Colors.blue.shade700;
+                          }
+                        }
                         
                         final novoInsumo = Insumo(
                           id: insumoExistente?.id ?? '', 
@@ -123,14 +170,26 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           categoria: categoriaController.text,
                           quantidade: int.tryParse(quantidadeController.text) ?? 1, 
                           estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
-                          precoPago: double.tryParse(precoController.text.replaceAll(',', '.')) ?? 0.0, 
+                          precoPago: novoPreco, // Salva o novo preço 
                           dataCompra: dataCompra,
                           servicosVinculados: servicosVinculados, 
                           ciclosDeUso: insumoExistente?.ciclosDeUso ?? [], 
+                          historicoPrecos: historicoAuditoria, // ☁️ Envia o dossiê de auditoria para o Firebase
                         );
 
                         ref.read(estoqueControllerProvider.notifier).salvar(novoInsumo);
                         Navigator.pop(context);
+
+                        // 🔔 LANÇA O AVISO NA TELA DA USUÁRIA
+                        if (alertaInflacao != null) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(alertaInflacao, style: const TextStyle(fontWeight: FontWeight.bold)),
+                            backgroundColor: corDoAlerta,
+                            duration: const Duration(seconds: 6),
+                            behavior: SnackBarBehavior.floating,
+                            margin: const EdgeInsets.all(16),
+                          ));
+                        }
                       },
                     ),
                   ],
@@ -191,7 +250,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
       appBar: AppBar(
         title: const Text('Estoque e Insumos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-        // 🎯 O BOTÃO NOVO VEIO PARA CÁ (Na AppBar)
         actions: [
           IconButton(
             icon: const Icon(Icons.add_circle, color: primaryColor, size: 28),
@@ -200,7 +258,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           )
         ],
       ),
-      // Botão Flutuante Removido!
       body: estoqueAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Erro: $e')),
@@ -299,7 +356,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
           child: insumosFiltrados.isEmpty 
             ? const Center(child: Text('Nenhum insumo encontrado nesta categoria.', style: TextStyle(color: Colors.grey)))
             : ListView.builder(
-            // 🎯 RESPIRO NO FIM DA LISTA: Adicionado um padding extra de 80px no rodapé
             padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
             itemCount: insumosFiltrados.length,
             itemBuilder: (context, index) {
@@ -374,7 +430,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
         }
 
         return ListView.builder(
-          // 🎯 RESPIRO NO FIM DA LISTA DA IA:
           padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
           itemCount: relatorios.length,
           itemBuilder: (context, index) {
