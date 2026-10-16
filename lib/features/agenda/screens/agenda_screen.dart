@@ -490,7 +490,6 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
-  // 🎯 NOVO MODAL DE PRODUTOS UTILIZADOS COM CATEGORIAS
   void _abrirModalProdutosUtilizados(List<Insumo> estoqueGlobal) {
     FocusScope.of(context).unfocus();
     final buscaInsumoController = TextEditingController();
@@ -592,7 +591,6 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     );
   }
 
-  // 🎯 O MODAL DE BAIXA DE ESTOQUE (COM PRÉ-FILTRO E CONFIRMAÇÃO)
   void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
     final TextEditingController buscaInsumoController = TextEditingController();
 
