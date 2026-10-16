@@ -82,7 +82,7 @@ class TimelineDayView extends ConsumerWidget {
   final Function(String id) onReabrir; 
 
   static const double _pixelsPorMinuto = 2.0;
-  static const double _larguraHorarios = 60.0;
+  static const double _larguraHorarios = 50.0; // Levemente reduzido para ganhar espaço
 
   int _horaParaMinutos(String hhmm) {
     final partes = hhmm.split(':');
@@ -118,17 +118,20 @@ class TimelineDayView extends ConsumerWidget {
     }
   }
 
-  Widget _buildStatusBadge(AgendamentoStatus status, bool isBloqueio) {
+  // 🎯 Adicionado parâmetro 'compact' para não esmagar textos em agendas curtas
+  Widget _buildStatusBadge(AgendamentoStatus status, bool isBloqueio, {bool compact = false}) {
     if (isBloqueio) {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: 2),
         decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block, size: 10, color: Colors.grey.shade900),
-            const SizedBox(width: 3),
-            Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
+            Icon(Icons.block, size: compact ? 12 : 10, color: Colors.grey.shade900),
+            if (!compact) ...[
+              const SizedBox(width: 3),
+              Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
+            ]
           ],
         ),
       );
@@ -139,14 +142,16 @@ class TimelineDayView extends ConsumerWidget {
     final badgeColor = _getStatusBadgeColor(status);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: 2),
       decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(4)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, size: 10, color: Colors.grey.shade900),
-          const SizedBox(width: 3),
-          Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
+          Icon(statusIcon, size: compact ? 12 : 10, color: Colors.grey.shade900),
+          if (!compact) ...[
+            const SizedBox(width: 3),
+            Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
+          ]
         ],
       ),
     );
@@ -253,17 +258,29 @@ class TimelineDayView extends ConsumerWidget {
                 child: Column(
                   children: [
                     for (int h = horaMinima; h <= horaMaxima; h++)
-                      for (int m = 0; m < 60; m += 30)
-                        SizedBox(
-                          height: 30 * _pixelsPorMinuto,
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: Text(
-                              '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
-                              style: Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ),
+                      for (int m = 0; m < 60; m += 30) ...[
+                        // 🎯 LÓGICA DE LIMPEZA VISUAL (Hora a Hora)
+                        Builder(
+                          builder: (context) {
+                            bool showLabel = true;
+                            if (m == 30) {
+                              final timeStr = '${h.toString().padLeft(2, '0')}:30';
+                              // Só exibe o "14:30" se alguma comanda do dia esbarrar nele
+                              showLabel = agendamentosAtivos.any((a) => a.horaInicio == timeStr || a.horaFim == timeStr);
+                            }
+                            return SizedBox(
+                              height: 30 * _pixelsPorMinuto,
+                              child: Align(
+                                alignment: Alignment.topLeft,
+                                child: showLabel ? Text(
+                                  '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ) : const SizedBox.shrink(), // Oculta o texto se não for necessário
+                              ),
+                            );
+                          }
                         ),
+                      ]
                   ],
                 ),
               ),
@@ -301,7 +318,6 @@ class TimelineDayView extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        // 🎨 NOVO DESIGN COMPACTO DOS CARDS COMEÇA AQUI
                         ...agendamentosAtivos.map((a) {
                           final topPx = _calcularTop(a.horaInicio, horaMinima);
                           final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
@@ -311,16 +327,19 @@ class TimelineDayView extends ConsumerWidget {
                           final telefoneCliente = telefonesPorId[a.clienteId] ?? '';
                           final cor = _obterCorStatus(a.status, isBloqueio);
 
-                          // IA Visual: Se o fundo for escuro (Concluído), o texto fica branco para dar contraste
                           final bool isDark = a.status == AgendamentoStatus.concluido && !isBloqueio;
                           final Color corTexto = isDark ? Colors.white : Colors.black87;
                           final Color corIcone = isDark ? Colors.white70 : Colors.black54;
 
+                          // 🎯 A MÁGICA: Se o procedimento tiver menos de ~28 mins, ele adota o layout Ultra Compacto
+                          final bool isMuitoCurto = heightPx < 55;
+
                           return Positioned(
                             top: topPx,
-                            left: 8,
-                            right: 8,
-                            height: heightPx > 40 ? heightPx : 40,
+                            left: 4,
+                            right: 4,
+                            // Garante que pelo menos 46px existam para caber as duas linhas do modo ultra compacto
+                            height: heightPx > 46 ? heightPx : 46,
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: () => onEditar(a.id),
@@ -330,108 +349,157 @@ class TimelineDayView extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(color: Colors.grey.shade400, width: 1), 
                                 ),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // LINHA 1: Horário + Ações + Status
-                                    Row(
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          '${a.horaInicio} - ${a.horaFim}',
-                                          style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold),
-                                        ),
-                                        const Spacer(),
-                                        // Mini Botões de Ação Embutidos
-                                        if (!isBloqueio) ...[
-                                          if (a.status != AgendamentoStatus.concluido)
-                                            GestureDetector(
-                                              behavior: HitTestBehavior.opaque,
-                                              onTap: () {
-                                                WhatsAppService.enviarConfirmacao(
-                                                  telefone: telefoneCliente,
-                                                  nomeCliente: nomeCliente,
-                                                  agendamento: a,
-                                                );
-                                              },
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
-                                              ),
-                                            ),
-                                          if (a.status == AgendamentoStatus.agendado)
-                                            GestureDetector(
-                                              behavior: HitTestBehavior.opaque,
-                                              onTap: () => onConfirmar(a.id),
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
-                                              ),
-                                            ),
-                                          if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
-                                            GestureDetector(
-                                              behavior: HitTestBehavior.opaque,
-                                              onTap: () => onConcluir(a.id),
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
-                                              ),
-                                            ),
-                                          if (a.status == AgendamentoStatus.concluido)
-                                            GestureDetector(
-                                              behavior: HitTestBehavior.opaque,
-                                              onTap: () => onReabrir(a.id),
-                                              child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100),
-                                              ),
-                                            ),
-                                          const SizedBox(width: 4),
-                                        ],
-                                        _buildStatusBadge(a.status, isBloqueio),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    
-                                    // LINHA 2: Ícone + Nome do Cliente (Oculta excesso automaticamente)
-                                    Flexible(
-                                      child: Row(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                child: isMuitoCurto
+                                    // ==========================================
+                                    // 2 LINHAS: MODO ULTRA-COMPACTO (< 30 min)
+                                    // ==========================================
+                                    ? Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Icon(isBloqueio ? Icons.lock : Icons.person, size: 12, color: corIcone),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              nomeCliente,
-                                              style: TextStyle(fontSize: 12, color: corTexto, fontWeight: FontWeight.w600),
-                                              maxLines: 1, overflow: TextOverflow.ellipsis,
-                                            ),
+                                          Row(
+                                            children: [
+                                              Text('${a.horaInicio}-${a.horaFim}', style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold)),
+                                              const SizedBox(width: 4),
+                                              Expanded(
+                                                child: Text(nomeCliente, style: TextStyle(fontSize: 11, color: corTexto, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              _buildStatusBadge(a.status, isBloqueio, compact: true),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Row(
+                                            children: [
+                                              Icon(isBloqueio ? Icons.lock : Icons.back_hand, size: 10, color: corIcone),
+                                              const SizedBox(width: 2),
+                                              Expanded(
+                                                child: Text(a.servico, style: TextStyle(fontSize: 10, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                              ),
+                                              // Ações continuam disponíveis na segunda linha
+                                              if (!isBloqueio) ...[
+                                                if (a.status != AgendamentoStatus.concluido)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900)),
+                                                  ),
+                                                if (a.status == AgendamentoStatus.agendado)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () => onConfirmar(a.id),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900)),
+                                                  ),
+                                                if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () => onConcluir(a.id),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900)),
+                                                  ),
+                                                if (a.status == AgendamentoStatus.concluido)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () => onReabrir(a.id),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100)),
+                                                  ),
+                                              ],
+                                            ],
                                           ),
                                         ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    
-                                    // LINHA 3: Ícone + Serviço (Oculta se não houver espaço)
-                                    if (a.servico.isNotEmpty && !isBloqueio)
-                                      Flexible(
-                                        child: Row(
-                                          children: [
-                                            Icon(Icons.back_hand, size: 11, color: corIcone),
-                                            const SizedBox(width: 4),
-                                            Expanded(
-                                              child: Text(
-                                                a.servico,
-                                                style: TextStyle(fontSize: 11, color: corTexto),
-                                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      )
+                                    // ==========================================
+                                    // 3 LINHAS: MODO NORMAL COMPACTO (>= 30 min)
+                                    // ==========================================
+                                    : Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                '${a.horaInicio} - ${a.horaFim}',
+                                                style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold),
+                                              ),
+                                              const Spacer(),
+                                              if (!isBloqueio) ...[
+                                                if (a.status != AgendamentoStatus.concluido)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                      child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
+                                                    ),
+                                                  ),
+                                                if (a.status == AgendamentoStatus.agendado)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () => onConfirmar(a.id),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                      child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
+                                                    ),
+                                                  ),
+                                                if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () => onConcluir(a.id),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                      child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
+                                                    ),
+                                                  ),
+                                                if (a.status == AgendamentoStatus.concluido)
+                                                  GestureDetector(
+                                                    behavior: HitTestBehavior.opaque,
+                                                    onTap: () => onReabrir(a.id),
+                                                    child: Padding(
+                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                      child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100),
+                                                    ),
+                                                  ),
+                                                const SizedBox(width: 4),
+                                              ],
+                                              _buildStatusBadge(a.status, isBloqueio),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Flexible(
+                                            child: Row(
+                                              children: [
+                                                Icon(isBloqueio ? Icons.lock : Icons.person, size: 12, color: corIcone),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    nomeCliente,
+                                                    style: TextStyle(fontSize: 12, color: corTexto, fontWeight: FontWeight.w600),
+                                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          if (a.servico.isNotEmpty && !isBloqueio)
+                                            Flexible(
+                                              child: Row(
+                                                children: [
+                                                  Icon(Icons.back_hand, size: 11, color: corIcone),
+                                                  const SizedBox(width: 4),
+                                                  Expanded(
+                                                    child: Text(
+                                                      a.servico,
+                                                      style: TextStyle(fontSize: 11, color: corTexto),
+                                                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                          ],
-                                        ),
+                                        ],
                                       ),
-                                  ],
-                                ),
                               ),
                             ),
                           );
