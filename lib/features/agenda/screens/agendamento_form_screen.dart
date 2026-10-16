@@ -292,7 +292,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     );
   }
 
-  // 🎯 O MOTOR CENTRAL COM OS DOIS NOVOS PARÂMETROS
   void _abrirModalComandaCompleto(BuildContext context, WidgetRef ref, Agendamento agendamento, String nomeCliente) {
     showModalBottomSheet<void>(
       context: context, 
@@ -343,7 +342,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             }
           } catch (e) {}
 
-          // 1. EFETUA A BAIXA FÍSICA NO ESTOQUE (Se houver potes vazios)
           String baixasStr = '';
           if (insumosAcabaram.isNotEmpty) {
             for (final insumo in insumosAcabaram) {
@@ -355,7 +353,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             baixasStr = '[Potes Esgotados (Baixa): $nomes]';
           }
 
-          // 2. REGISTA APENAS O USO (Para histórico de clientes)
           String utilizadosStr = '';
           if (produtosUtilizados.isNotEmpty) {
             final nomes = produtosUtilizados.map((i) => i.nome).join(', ');
@@ -1082,7 +1079,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   }
 }
 
-// 🎯 A INFRAESTRUTURA DE RECEBIMENTO E REGISTO DE PRODUTOS!
 class ModalFecharComandaForm extends ConsumerStatefulWidget {
   const ModalFecharComandaForm({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
   
@@ -1105,7 +1101,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
   final TextEditingController _valorParcialController = TextEditingController();
 
   final List<Insumo> _insumosAcabaram = [];
-  final List<Insumo> _produtosUtilizados = []; // 🎯 NOVA GAVETA PARA HISTÓRICO DE USO
+  final List<Insumo> _produtosUtilizados = []; 
 
   @override
   void initState() {
@@ -1147,7 +1143,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
-  // 🎯 NOVO MODAL: SELECIONAR PRODUTOS UTILIZADOS (MULTI-SELECT DE USO)
   void _abrirModalProdutosUtilizados(List<Insumo> estoqueGlobal) {
     FocusScope.of(context).unfocus();
     final buscaInsumoController = TextEditingController();
@@ -1229,7 +1224,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     );
   }
 
-  // 🎯 O MODAL DE BAIXA DE ESTOQUE (AGORA COM CONFIRMAÇÃO)
   void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
     final TextEditingController buscaInsumoController = TextEditingController();
 
@@ -1280,7 +1274,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                                   trailing: FilledButton.tonal(
                                     style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
                                     onPressed: () {
-                                      // 🎯 A PROTEÇÃO: POP-UP DE CONFIRMAÇÃO ANTES DA BAIXA!
                                       showDialog(
                                         context: context,
                                         builder: (dialogCtx) => AlertDialog(
@@ -1291,9 +1284,9 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                                             FilledButton(
                                               style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
                                               onPressed: () {
-                                                Navigator.pop(dialogCtx); // Fecha o aviso
-                                                setState(() => _insumosAcabaram.add(item)); // Adiciona à lista
-                                                Navigator.pop(ctx); // Fecha o menu inferior
+                                                Navigator.pop(dialogCtx);
+                                                setState(() => _insumosAcabaram.add(item)); 
+                                                Navigator.pop(ctx); 
                                               },
                                               child: const Text('Sim, Acabou'),
                                             )
@@ -1374,7 +1367,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
             const Text('Registro de Produtos (Opcional):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 12),
             
-            // 🎯 SECÇÃO 1: PRODUTOS UTILIZADOS (HISTÓRICO)
             Container(
               padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.purple.shade200)),
               child: Column(
@@ -1393,7 +1385,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
             
             const SizedBox(height: 12),
             
-            // 🎯 SECÇÃO 2: BAIXA DE ESTOQUE (POTE VAZIO)
             Container(
               padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
               child: Column(
@@ -1426,7 +1417,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                     onPressed: _podeConfirmar ? () {
                       if (_valorRestante > 0.01) _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual});
                       Navigator.pop(context);
-                      // 🎯 ENVIA TODOS OS DADOS (Incluindo os Produtos Usados) PARA GUARDAR!
                       widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso, _insumosAcabaram, _produtosUtilizados);
                     } : null,
                     child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.check_circle_outline, size: 18, color: Colors.white), SizedBox(width: 6), Expanded(child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white), maxLines: 2))]),
