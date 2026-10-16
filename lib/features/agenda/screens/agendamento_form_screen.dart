@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +13,8 @@ import '../../servicos/controllers/servico_controller.dart';
 import '../../servicos/models/servico.dart';
 import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
+import '../../estoque/controllers/estoque_controller.dart';
+import '../../estoque/models/insumo.dart';
 
 class AgendamentoFormScreen extends ConsumerStatefulWidget {
   const AgendamentoFormScreen({super.key, this.agendamentoId, this.dataInicialIso, this.horaInicialStr});
@@ -200,36 +203,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return minFim - minInicio;
   }
 
-  Future<bool> _mostrarAlertaDuracao(
-    BuildContext context,
-    String nomeServico,
-    int duracaoServico,
-    int duracaoSelecionada,
-  ) async {
-    final resultado = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('⚠️ Atenção'),
-        content: Text(
-          'A comanda "$nomeServico" possui duração prevista de $duracaoServico minutos.\n\n'
-          'O horário selecionado ocupa $duracaoSelecionada minutos.\n\n'
-          'Deseja continuar mesmo assim?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Voltar e ajustar'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Continuar'),
-          ),
-        ],
-      ),
-    );
-    return resultado ?? false;
-  }
-
   Future<bool> _verificarConflitoDeHorarioParaData(DateTime dataAlvo) async {
     final todosAgendamentos = await ref.read(agendamentoControllerProvider.notifier).todos();
     final minNovoInicio = _horaInicio.hour * 60 + _horaInicio.minute;
@@ -319,6 +292,132 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     );
   }
 
+  // 🎯 O NOVO MOTOR CENTRAL DE FINALIZAÇÃO E ESTOQUE
+  void _abrirModalComandaCompleto(BuildContext context, WidgetRef ref, Agendamento agendamento, String nomeCliente) {
+    showModalBottomSheet<void>(
+      context: context, 
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (modalContext) => ModalFecharComandaForm(
+        agendamento: agendamento,
+        nomeCliente: nomeCliente,
+        onConfirmar: (pagamentos, valorFinal, houveAtraso, insumosAcabaram) async {
+          
+          try {
+            final docVerificacao = await FirebaseFirestore.instance
+                .collection('agendamentos')
+                .doc(agendamento.id)
+                .get(const GetOptions(source: Source.server));
+                
+            if (docVerificacao.exists) {
+              final statusBanco = docVerificacao.data()?['status']?.toString().toLowerCase() ?? '';
+              
+              if (statusBanco.contains('concluido') && agendamento.status != AgendamentoStatus.concluido) {
+                if (context.mounted) {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Row(
+                        children: [
+                          Icon(Icons.gpp_bad_rounded, color: Colors.orange.shade800, size: 28),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text('Duplicidade Evitada!', style: TextStyle(color: Colors.orange.shade900, fontSize: 18))),
+                        ],
+                      ),
+                      content: const Text('O sistema interceptou esta ação porque a comanda já consta como FECHADA no banco de dados.\n\nA ação foi bloqueada e nenhum valor extra foi lançado.'),
+                      actions: [
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            ref.invalidate(todosAgendamentosProvider);
+                          },
+                          child: const Text('Entendi, Atualizar Tela'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return; 
+              }
+            }
+          } catch (e) {}
+
+          // 1. EFETUA A BAIXA NO ESTOQUE FÍSICO
+          String baixasStr = '';
+          if (insumosAcabaram.isNotEmpty) {
+            for (final insumo in insumosAcabaram) {
+              final novaQtd = insumo.quantidade > 0 ? insumo.quantidade - 1 : 0;
+              final atualizacaoInsumo = insumo.copyWith(quantidade: novaQtd);
+              await ref.read(estoqueControllerProvider.notifier).salvar(atualizacaoInsumo);
+            }
+            final nomes = insumosAcabaram.map((i) => i.nome).join(', ');
+            baixasStr = '[Baixa de Estoque: $nomes]';
+          }
+
+          final obsAtual = agendamento.observacao;
+          String novaObs = obsAtual;
+          
+          if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
+            novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
+          }
+
+          if (baixasStr.isNotEmpty) {
+            novaObs = novaObs.isEmpty ? baixasStr : '$novaObs\n$baixasStr';
+          }
+
+          FormaPagamento formaPrincipal = FormaPagamento.pix;
+          String detalhePagamentoStr = '';
+
+          if (pagamentos.isNotEmpty) {
+            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
+            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+            
+            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+            
+            final listaDetalhes = pagamentos.map((p) {
+              final d = p['data'] as DateTime;
+              final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+              final f = (p['forma'] as FormaPagamento).rotulo;
+              final v = formataMoeda(p['valor'] as double);
+              return '[$dStr] $f: $v';
+            }).join(' | ');
+            
+            detalhePagamentoStr = '[Baixa Financeira: $listaDetalhes]';
+          }
+
+          if (detalhePagamentoStr.isNotEmpty) {
+             novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
+          }
+
+          final atualizado = agendamento.copyWith(
+            status: AgendamentoStatus.concluido,
+            formaPagamento: formaPrincipal,
+            valor: valorFinal,
+            observacao: novaObs,
+          );
+
+          final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          
+          if (context.mounted) {
+            if (relatorioDeErro != null) {
+              setState(() => _erro = relatorioDeErro);
+            } else {
+              ref.invalidate(todosAgendamentosProvider);
+              setState(() {
+                _original = atualizado; 
+              });
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Comanda fechada com sucesso!'), backgroundColor: Colors.green));
+            }
+          }
+        },
+        onCancelarAtendimento: () {
+          _abrirModalCancelamento(context);
+        },
+      ),
+    );
+  }
+
   Future<void> _salvar() async {
     setState(() => _erro = null);
     if (!_formKey.currentState!.validate()) return;
@@ -350,29 +449,15 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
       
       final servicos = ref.read(servicoControllerProvider).value ?? [];
       List<String> nomesCombinados = [];
-      int duracaoTotal = 0;
 
       for (var id in _servicosIdsSelecionados) {
         try {
           final s = servicos.firstWhere((x) => x.id == id);
           nomesCombinados.add(s.nome);
-          duracaoTotal += s.duracaoMin;
         } catch (_) {}
       }
 
       nomeServico = nomesCombinados.isNotEmpty ? nomesCombinados.join(' + ') : _servicoNomeOriginal;
-      
-      final duracaoSelecionada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
-      if (duracaoSelecionada != duracaoTotal && duracaoTotal > 0) {
-        final continuar = await _mostrarAlertaDuracao(
-          context,
-          nomeServico,
-          duracaoTotal,
-          duracaoSelecionada,
-        );
-        if (!continuar) return;
-      }
-
       valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
       servicoIdFinal = _servicosIdsSelecionados.first; 
     }
@@ -448,7 +533,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     if (mounted) context.pop();
   }
 
-  // 🚀 O NOVO MODAL DE SELEÇÃO MÚLTIPLA (MULTI-SELECT)
   void _abrirModalServicos(List<Servico> todosServicos) {
     FocusScope.of(context).unfocus();
     final buscaModalController = TextEditingController();
@@ -461,26 +545,17 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
             final textoBusca = buscaModalController.text.trim().toLowerCase();
-
-            // Mostra todos os serviços, sem esconder os já selecionados
             final servicosDisponiveis = todosServicos;
-
-            final ultimos5Servicos = servicosDisponiveis
-                .where((s) => _ultimosServicosIds.contains(s.id))
-                .toList();
-            
+            final ultimos5Servicos = servicosDisponiveis.where((s) => _ultimosServicosIds.contains(s.id)).toList();
             if (ultimos5Servicos.isEmpty && _ultimosServicosIds.isEmpty) {
               ultimos5Servicos.addAll(servicosDisponiveis.take(5));
             }
 
             final buscaAtiva = textoBusca.isNotEmpty;
             final listaExibicao = buscaAtiva 
-              ? servicosDisponiveis.where((s) => 
-                  s.nome.toLowerCase().contains(textoBusca)
-                ).toList()
+              ? servicosDisponiveis.where((s) => s.nome.toLowerCase().contains(textoBusca)).toList()
               : servicosDisponiveis;
 
-            // Função mágica de Toggle: Toca para adicionar, toca para remover!
             void _toggleServico(Servico s) {
               setModalState(() {
                 if (_servicosIdsSelecionados.contains(s.id)) {
@@ -495,9 +570,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             }
 
             return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(modalCtx).viewInsets.bottom,
-              ),
+              padding: EdgeInsets.only(bottom: MediaQuery.of(modalCtx).viewInsets.bottom),
               child: Container(
                 height: MediaQuery.of(modalCtx).size.height * 0.85,
                 padding: const EdgeInsets.all(16),
@@ -508,10 +581,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text('Selecionar Serviços', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(modalCtx),
-                        ),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalCtx)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -521,20 +591,10 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       decoration: InputDecoration(
                         hintText: 'Buscar serviço por nome...',
                         prefixIcon: const Icon(Icons.search),
-                        suffixIcon: buscaModalController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                onPressed: () {
-                                  buscaModalController.clear();
-                                  setModalState(() {});
-                                },
-                              )
-                            : null,
                         border: const OutlineInputBorder(),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
                       onChanged: (_) => setModalState(() {}),
-                      onSubmitted: (_) => FocusScope.of(modalCtx).unfocus(),
                     ),
                     const SizedBox(height: 12),
                     
@@ -542,8 +602,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       const Text('⭐ Últimos Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
                       const SizedBox(height: 8),
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: 8, runSpacing: 8,
                         children: ultimos5Servicos.map((s) {
                           final isSelected = _servicosIdsSelecionados.contains(s.id);
                           return ActionChip(
@@ -565,12 +624,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
                     Expanded(
                       child: listaExibicao.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'Nenhum serviço encontrado.',
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                            )
+                          ? const Center(child: Text('Nenhum serviço encontrado.', style: TextStyle(color: Colors.grey)))
                           : ListView.separated(
                               itemCount: listaExibicao.length,
                               separatorBuilder: (_, __) => const Divider(height: 1),
@@ -582,11 +636,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                   contentPadding: EdgeInsets.zero,
                                   title: Text(s.nome, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: isSelected ? Colors.purple.shade900 : Colors.black87)),
                                   subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
-                                  trailing: Icon(
-                                    isSelected ? Icons.check_circle : Icons.circle_outlined, 
-                                    color: isSelected ? Colors.green : Colors.grey.shade400,
-                                    size: 28,
-                                  ),
+                                  trailing: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.green : Colors.grey.shade400, size: 28),
                                   onTap: () => _toggleServico(s),
                                 );
                               },
@@ -633,10 +683,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         
         final clientesFiltrados = textoBusca.isEmpty
             ? clientes 
-            : clientes
-                .where((c) =>
-                    c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca))
-                .toList();
+            : clientes.where((c) => c.nome.toLowerCase().contains(textoBusca) || c.telefone.contains(textoBusca)).toList();
                 
         Widget? alertaAniversario;
         if (_clienteId != null) {
@@ -659,21 +706,12 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   padding: const EdgeInsets.only(top: 12),
                   child: Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.purple.shade50,
-                      border: Border.all(color: Colors.purple.shade200),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    decoration: BoxDecoration(color: Colors.purple.shade50, border: Border.all(color: Colors.purple.shade200), borderRadius: BorderRadius.circular(8)),
                     child: Row(
                       children: [
                         const Icon(Icons.cake, color: Colors.purple),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '🎉 Atenção: Aniversário chegando dia $dia/$mes! Que tal oferecer um mimo ou desconto?',
-                            style: TextStyle(color: Colors.purple.shade800, fontWeight: FontWeight.bold, fontSize: 12),
-                          ),
-                        ),
+                        Expanded(child: Text('🎉 Atenção: Aniversário chegando dia $dia/$mes! Que tal oferecer um mimo ou desconto?', style: TextStyle(color: Colors.purple.shade800, fontWeight: FontWeight.bold, fontSize: 12))),
                       ],
                     ),
                   ),
@@ -689,11 +727,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             if (!_editando || _clienteId == null) ...[
               TextField(
                 controller: _buscaClienteController,
-                decoration: const InputDecoration(
-                  labelText: 'Cliente',
-                  hintText: 'Buscar cliente por nome ou telefone...',
-                  prefixIcon: Icon(Icons.search),
-                ),
+                decoration: const InputDecoration(labelText: 'Cliente', hintText: 'Buscar cliente por nome ou telefone...', prefixIcon: Icon(Icons.search)),
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
@@ -702,23 +736,15 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 SizedBox(
                   height: 180, 
                   child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: clientesFiltrados.length,
+                    shrinkWrap: true, itemCount: clientesFiltrados.length,
                     itemBuilder: (context, index) {
                       final cliente = clientesFiltrados[index];
                       final selecionado = _clienteId == cliente.id;
-
                       return ListTile(
                         leading: selecionado ? const Icon(Icons.check_circle, color: Colors.green) : null,
-                        title: Text(cliente.nome),
-                        subtitle: Text(cliente.telefone),
-                        selected: selecionado,
+                        title: Text(cliente.nome), subtitle: Text(cliente.telefone), selected: selecionado,
                         onTap: () {
-                          setState(() {
-                            _clienteId = cliente.id;
-                            _buscaClienteController.clear(); 
-                            FocusScope.of(context).unfocus(); 
-                          });
+                          setState(() { _clienteId = cliente.id; _buscaClienteController.clear(); FocusScope.of(context).unfocus(); });
                         },
                       );
                     },
@@ -729,20 +755,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   child: Column(
                     children: [
-                      const Center(
-                        child: Text(
-                          'Nenhuma cliente encontrada.',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
+                      const Center(child: Text('Nenhuma cliente encontrada.', style: TextStyle(color: Colors.grey))),
                       const SizedBox(height: 8),
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () => context.push(AppRoutes.clienteNovo),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Cadastrar nova cliente'),
-                        ),
-                      ),
+                      Center(child: TextButton.icon(onPressed: () => context.push(AppRoutes.clienteNovo), icon: const Icon(Icons.add), label: const Text('Cadastrar nova cliente'))),
                     ],
                   ),
                 ),
@@ -753,34 +768,20 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 padding: const EdgeInsets.only(top: 12),
                 child: Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.blue.shade200, width: 1.5),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(color: Colors.blue.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))
-                    ]
-                  ),
+                  decoration: BoxDecoration(color: Colors.white, border: Border.all(color: Colors.blue.shade200, width: 1.5), borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))]),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: Colors.blue.shade50,
-                            child: Icon(Icons.person, size: 20, color: Colors.blue.shade800),
-                          ),
+                          CircleAvatar(radius: 18, backgroundColor: Colors.blue.shade50, child: Icon(Icons.person, size: 20, color: Colors.blue.shade800)),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('Cliente Vinculada', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
-                                Text(
-                                  clientes.firstWhere((c) => c.id == _clienteId).nome,
-                                  style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 16),
-                                ),
+                                Text(clientes.firstWhere((c) => c.id == _clienteId).nome, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 16)),
                               ],
                             ),
                           ),
@@ -788,35 +789,25 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: _original!.status == AgendamentoStatus.concluido 
-                                    ? Colors.blue.shade100 
-                                    : (_original!.status == AgendamentoStatus.confirmado ? Colors.green.shade100 : Colors.grey.shade200),
+                                color: _original!.status == AgendamentoStatus.concluido ? Colors.blue.shade100 : (_original!.status == AgendamentoStatus.confirmado ? Colors.green.shade100 : Colors.grey.shade200),
                                 borderRadius: BorderRadius.circular(6)
                               ),
-                              child: Text(
-                                _original!.status.name.toUpperCase(),
-                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
-                              )
+                              child: Text(_original!.status.name.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87))
                             )
                         ],
                       ),
                       
                       if (_editando && !_isBloqueio && _original != null) ...[
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(height: 1),
-                        ),
+                        const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(height: 1)),
                         const Text('Ações Rápidas do Agendamento:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
                         const SizedBox(height: 12),
                         Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                          spacing: 8, runSpacing: 8,
                           children: [
                             ActionChip(
                               avatar: const Icon(Icons.chat, size: 16, color: Colors.green),
                               label: const Text('WhatsApp', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                              backgroundColor: Colors.green.shade50,
-                              side: BorderSide(color: Colors.green.shade200),
+                              backgroundColor: Colors.green.shade50, side: BorderSide(color: Colors.green.shade200),
                               onPressed: () {
                                 final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
                                 WhatsAppService.enviarConfirmacao(telefone: clienteAtual.telefone, nomeCliente: clienteAtual.nome, agendamento: _original!);
@@ -826,8 +817,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                               ActionChip(
                                 avatar: const Icon(Icons.verified_outlined, size: 16, color: Colors.blue),
                                 label: const Text('Confirmar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                backgroundColor: Colors.blue.shade50,
-                                side: BorderSide(color: Colors.blue.shade200),
+                                backgroundColor: Colors.blue.shade50, side: BorderSide(color: Colors.blue.shade200),
                                 onPressed: () async {
                                   final att = _original!.copyWith(status: AgendamentoStatus.confirmado);
                                   await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
@@ -838,22 +828,19 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             if (_original!.status == AgendamentoStatus.agendado || _original!.status == AgendamentoStatus.confirmado)
                               ActionChip(
                                 avatar: const Icon(Icons.check_circle_outline, size: 16, color: Colors.indigo),
-                                label: const Text('Concluir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                backgroundColor: Colors.indigo.shade50,
-                                side: BorderSide(color: Colors.indigo.shade200),
-                                onPressed: () async {
-                                  final att = _original!.copyWith(status: AgendamentoStatus.concluido);
-                                  await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
-                                  setState(() => _original = att);
-                                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Atendimento Concluído!'), backgroundColor: Colors.indigo));
+                                label: const Text('Concluir e Receber', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                backgroundColor: Colors.indigo.shade50, side: BorderSide(color: Colors.indigo.shade200),
+                                onPressed: () {
+                                  final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
+                                  // 🎯 ABRE A NOSSA CENTRAL DE RECEBIMENTO E ESTOQUE
+                                  _abrirModalComandaCompleto(context, ref, _original!, clienteAtual.nome);
                                 }
                               ),
                             if (_original!.status == AgendamentoStatus.concluido)
                               ActionChip(
                                 avatar: const Icon(Icons.settings_backup_restore, size: 16, color: Colors.orange),
-                                label: const Text('Reabrir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                backgroundColor: Colors.orange.shade50,
-                                side: BorderSide(color: Colors.orange.shade200),
+                                label: const Text('Reabrir Comanda', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                backgroundColor: Colors.orange.shade50, side: BorderSide(color: Colors.orange.shade200),
                                 onPressed: () async {
                                   final att = _original!.copyWith(status: AgendamentoStatus.agendado);
                                   await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
@@ -865,8 +852,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                               ActionChip(
                                 avatar: const Icon(Icons.cancel_outlined, size: 16, color: Colors.red),
                                 label: const Text('Cancelar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                backgroundColor: Colors.red.shade50,
-                                side: BorderSide(color: Colors.red.shade200),
+                                backgroundColor: Colors.red.shade50, side: BorderSide(color: Colors.red.shade200),
                                 onPressed: () => _abrirModalCancelamento(context),
                               ),
                           ],
@@ -924,28 +910,20 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       error: (e, _) => Text('Erro ao carregar serviços: $e'),
                       data: (servicos) {
                         if (servicos.isEmpty) return const Text('Cadastre ao menos um serviço.');
-
+                        
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             const Text('Serviços (Selecione um ou mais)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                             const SizedBox(height: 6),
                             
-                            // 🎯 NOVO LAYOUT LIMPO E UNIFICADO
                             if (_servicosIdsSelecionados.isEmpty)
                               InkWell(
                                 onTap: () => _abrirModalServicos(servicos),
                                 borderRadius: BorderRadius.circular(8),
                                 child: InputDecorator(
-                                  decoration: const InputDecoration(
-                                    border: OutlineInputBorder(),
-                                    suffixIcon: Icon(Icons.add_circle_outline, color: Colors.purple),
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                                  ),
-                                  child: const Text(
-                                    'Toque para selecionar serviços', 
-                                    style: TextStyle(fontSize: 15, color: Colors.grey)
-                                  ),
+                                  decoration: const InputDecoration(border: OutlineInputBorder(), suffixIcon: Icon(Icons.add_circle_outline, color: Colors.purple), contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 16)),
+                                  child: const Text('Toque para selecionar serviços', style: TextStyle(fontSize: 15, color: Colors.grey)),
                                 ),
                               )
                             else ...[
@@ -955,11 +933,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 return Container(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: Border.all(color: Colors.purple.shade200, width: 1.5)
-                                  ),
+                                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.purple.shade200, width: 1.5)),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
@@ -992,10 +966,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 onPressed: () => _abrirModalServicos(servicos),
                                 icon: const Icon(Icons.add, size: 18),
                                 label: const Text('Adicionar mais serviços nesta comanda'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  side: BorderSide(color: Colors.purple.shade300)
-                                ),
+                                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.purple.shade300)),
                               ),
                             ],
                           ],
@@ -1007,25 +978,14 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   else ...[
                     TextFormField(
                       controller: _motivoBloqueioController,
-                      decoration: const InputDecoration(
-                        labelText: 'Motivo (Ex: Academia, Almoço, Médico)',
-                        prefixIcon: Icon(Icons.block, color: Colors.grey),
-                      ),
+                      decoration: const InputDecoration(labelText: 'Motivo (Ex: Academia, Almoço, Médico)', prefixIcon: Icon(Icons.block, color: Colors.grey)),
                     ),
                     const SizedBox(height: 12),
                   ],
 
                   Row(
                     children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: _selecionarData,
-                          child: InputDecorator(
-                            decoration: const InputDecoration(labelText: 'Data'),
-                            child: Text(_formatarDataGoogle(_data)),
-                          ),
-                        ),
-                      ),
+                      Expanded(child: InkWell(onTap: _selecionarData, child: InputDecorator(decoration: const InputDecoration(labelText: 'Data'), child: Text(_formatarDataGoogle(_data))))),
                       if (!_isBloqueio) ...[
                         const SizedBox(width: 12),
                         Expanded(
@@ -1048,10 +1008,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                           flex: 2,
                           child: DropdownButtonFormField<String>(
                             value: _tipoRepeticao,
-                            decoration: const InputDecoration(
-                              labelText: 'Repetir evento?',
-                              prefixIcon: Icon(Icons.event_repeat, color: Colors.grey),
-                            ),
+                            decoration: const InputDecoration(labelText: 'Repetir evento?', prefixIcon: Icon(Icons.event_repeat, color: Colors.grey)),
                             items: const [
                               DropdownMenuItem(value: 'nenhum', child: Text('Não repetir')),
                               DropdownMenuItem(value: 'semanal', child: Text('Toda semana')),
@@ -1068,9 +1025,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             child: DropdownButtonFormField<int>(
                               value: _ocorrencias,
                               decoration: const InputDecoration(labelText: 'Quantas vezes?'),
-                              items: List.generate(11, (i) => i + 2) 
-                                  .map((v) => DropdownMenuItem(value: v, child: Text('$v vezes')))
-                                  .toList(),
+                              items: List.generate(11, (i) => i + 2).map((v) => DropdownMenuItem(value: v, child: Text('$v vezes'))).toList(),
                               onChanged: (v) => setState(() => _ocorrencias = v!),
                             ),
                           ),
@@ -1082,44 +1037,20 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selecionarHora(inicio: true),
-                          child: InputDecorator(
-                            decoration: const InputDecoration(labelText: 'Hora início'),
-                            child: Text(_formatarHora(_horaInicio)),
-                          ),
-                        ),
-                      ),
+                      Expanded(child: InkWell(onTap: () => _selecionarHora(inicio: true), child: InputDecorator(decoration: const InputDecoration(labelText: 'Hora início'), child: Text(_formatarHora(_horaInicio))))),
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _selecionarHora(inicio: false),
-                          child: InputDecorator(
-                            decoration: const InputDecoration(labelText: 'Hora fim'),
-                            child: Text(_formatarHora(_horaFim)),
-                          ),
-                        ),
-                      ),
+                      Expanded(child: InkWell(onTap: () => _selecionarHora(inicio: false), child: InputDecorator(decoration: const InputDecoration(labelText: 'Hora fim'), child: Text(_formatarHora(_horaFim))))),
                     ],
                   ),
                   const SizedBox(height: 12),
                   
-                  TextFormField(
-                    controller: _observacaoController,
-                    decoration: const InputDecoration(labelText: 'Observação extra (Opcional)'),
-                    maxLines: 3,
-                  ),
+                  TextFormField(controller: _observacaoController, decoration: const InputDecoration(labelText: 'Observação extra (Opcional)'), maxLines: 3),
                   
                   if (_erro != null) ...[
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.red.shade200),
-                      ),
+                      decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.red.shade200)),
                       child: Text(_erro!, style: TextStyle(color: Theme.of(context).colorScheme.error, fontWeight: FontWeight.bold)),
                     ),
                   ],
@@ -1135,6 +1066,234 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class ModalFecharComandaForm extends ConsumerStatefulWidget {
+  const ModalFecharComandaForm({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
+  
+  final Agendamento agendamento;
+  final String nomeCliente;
+  final void Function(List<Map<String, dynamic>> pagamentos, double valorFinal, bool houveAtraso, List<Insumo> insumosAcabaram) onConfirmar;
+  final VoidCallback onCancelarAtendimento;
+  
+  @override
+  ConsumerState<ModalFecharComandaForm> createState() => _ModalFecharComandaFormState();
+}
+
+class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm> {
+  late double _valorTotal;
+  bool _houveAtraso = false;
+  
+  DateTime _dataPagamentoAtual = DateTime.now(); 
+  final List<Map<String, dynamic>> _pagamentos = [];
+  FormaPagamento _formaAtual = FormaPagamento.pix;
+  final TextEditingController _valorParcialController = TextEditingController();
+
+  final List<Insumo> _insumosAcabaram = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _valorTotal = widget.agendamento.valor;
+    _valorParcialController.text = _valorTotal.toStringAsFixed(2).replaceAll('.', ',');
+    _valorParcialController.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() { _valorParcialController.dispose(); super.dispose(); }
+
+  double get _valorRestante {
+    final pago = _pagamentos.fold<double>(0, (soma, p) => soma + (p['valor'] as double));
+    return _valorTotal - pago;
+  }
+
+  double get _valorDigitado => double.tryParse(_valorParcialController.text.replaceAll(',', '.')) ?? 0.0;
+
+  bool get _podeConfirmar {
+    if (_valorTotal <= 0.01) return true; 
+    if (_valorRestante <= 0.01) return true; 
+    if (_valorRestante > 0.01) return true; 
+    return false;
+  }
+
+  void _adicionarPagamento() {
+    final valorDigitado = _valorDigitado;
+    if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
+      setState(() { 
+        _pagamentos.add({'forma': _formaAtual, 'valor': valorDigitado, 'data': _dataPagamentoAtual}); 
+        _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); 
+        _dataPagamentoAtual = DateTime.now(); 
+      });
+    }
+  }
+
+  void _removerPagamento(int index) {
+    setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
+  }
+
+  void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
+    final TextEditingController buscaInsumoController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context, isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final textoBusca = buscaInsumoController.text.trim().toLowerCase();
+            final disponiveis = estoqueGlobal.where((e) => !_insumosAcabaram.any((a) => a.id == e.id)).toList();
+            final listaExibicao = textoBusca.isEmpty ? disponiveis : disponiveis.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(modalCtx).viewInsets.bottom),
+              child: Container(
+                height: MediaQuery.of(modalCtx).size.height * 0.75, padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Baixa de Estoque', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalCtx)),
+                      ],
+                    ),
+                    const Text('Selecione o produto que chegou ao fim:', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: buscaInsumoController,
+                      decoration: const InputDecoration(hintText: 'Buscar no estoque...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+                      onChanged: (_) => setModalState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: listaExibicao.isEmpty
+                          ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
+                          : ListView.separated(
+                              itemCount: listaExibicao.length, separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (c, i) {
+                                final item = listaExibicao[i];
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.delete_sweep, size: 20, color: Colors.red.shade400)),
+                                  title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: Text('${item.categoria} • Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
+                                  trailing: FilledButton.tonal(
+                                    style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
+                                    onPressed: () { setState(() => _insumosAcabaram.add(item)); Navigator.pop(ctx); },
+                                    child: const Text('Acabou'),
+                                  ),
+                                );
+                              }
+                            )
+                    )
+                  ]
+                )
+              )
+            );
+          }
+        );
+      }
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final valorPendente = _valorRestante;
+    final estoqueAsync = ref.watch(estoqueControllerProvider);
+
+    return Container(
+      padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text('Fechar Comanda — ${widget.nomeCliente}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('${widget.agendamento.servico} — R\$ ${_valorTotal.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
+            const Divider(height: 32),
+
+            const Text('Pagamentos Registrados:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            if (_pagamentos.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nenhum pagamento registrado ainda.', style: TextStyle(fontSize: 12, color: Colors.grey))),
+            ..._pagamentos.asMap().entries.map((entry) {
+              final index = entry.key; final p = entry.value; final forma = p['forma'] as FormaPagamento; final valor = p['valor'] as double; final dataP = p['data'] as DateTime; final dataStr = '${dataP.day.toString().padLeft(2,'0')}/${dataP.month.toString().padLeft(2,'0')}';
+              return ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18), title: Text('${forma.rotulo} ($dataStr)'), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _removerPagamento(index))]));
+            }),
+
+            if (valorPendente > 0.01) ...[
+              const SizedBox(height: 16),
+              Container(padding: const EdgeInsets.all(12), color: Colors.orange.shade50, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Falta Receber:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)), Text('R\$ ${valorPendente.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16))])),
+              const SizedBox(height: 24),
+              const Text('Registrar Entrada / Recebimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () async { final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setState(() => _dataPagamentoAtual = picked); },
+                child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: Colors.purple), const SizedBox(width: 8), Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14))])),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(flex: 2, child: DropdownButtonFormField<FormaPagamento>(value: _formaAtual, decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)), items: FormaPagamento.values.where((f) => f != FormaPagamento.pendente).map((f) => DropdownMenuItem(value: f, child: Text(f.rotulo, style: const TextStyle(fontSize: 12)))).toList(), onChanged: (v) => setState(() => _formaAtual = v!))),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 2, child: TextField(controller: _valorParcialController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(prefixText: 'R\$ ', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)))),
+                  const SizedBox(width: 8),
+                  Expanded(flex: 1, child: FilledButton(style: FilledButton.styleFrom(padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: _adicionarPagamento, child: const Icon(Icons.add))),
+                ],
+              ),
+            ],
+
+            const SizedBox(height: 24),
+            
+            const Text('Baixa de Estoque (Opcional):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text('Algum produto chegou ao fim neste atendimento?', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_insumosAcabaram.isNotEmpty) ...[
+                    Wrap(spacing: 8, runSpacing: -8, children: _insumosAcabaram.map((insumo) => Chip(label: Text(insumo.nome, style: TextStyle(fontSize: 11, color: Colors.red.shade900, fontWeight: FontWeight.bold)), onDeleted: () => setState(() => _insumosAcabaram.remove(insumo)), backgroundColor: Colors.red.shade50, deleteIconColor: Colors.red.shade300, side: BorderSide(color: Colors.red.shade200))).toList()),
+                    const SizedBox(height: 12),
+                  ],
+                  estoqueAsync.when(loading: () => const LinearProgressIndicator(), error: (_, __) => const Text('Erro ao carregar estoque.'), data: (estoqueGlobal) { return OutlinedButton.icon(style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade800, side: BorderSide(color: Colors.red.shade200)), onPressed: () => _abrirSeletorInsumo(estoqueGlobal), icon: const Icon(Icons.delete_sweep, size: 18), label: const Text('Registrar pote vazio (Baixa)')); })
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 24),
+            CheckboxListTile(value: _houveAtraso, contentPadding: EdgeInsets.zero, title: const Text('Cliente chegou atrasada?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)), subtitle: const Text('Registra o atraso no histórico para métricas.', style: TextStyle(fontSize: 11, color: Colors.grey)), controlAffinity: ListTileControlAffinity.leading, onChanged: (val) => setState(() => _houveAtraso = val ?? false)),
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                Expanded(flex: 1, child: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 12)), onPressed: () { Navigator.pop(context); widget.onCancelarAtendimento(); }, child: const Text('Cancelar\nAtendimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: _podeConfirmar ? Colors.green.shade700 : Colors.grey),
+                    onPressed: _podeConfirmar ? () {
+                      if (_valorRestante > 0.01) _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual});
+                      Navigator.pop(context);
+                      widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso, _insumosAcabaram);
+                    } : null,
+                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.check_circle_outline, size: 18, color: Colors.white), SizedBox(width: 6), Expanded(child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white), maxLines: 2))]),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
