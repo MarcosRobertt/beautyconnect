@@ -448,7 +448,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     if (mounted) context.pop();
   }
 
-  void _abrirModalAdicionarServico(List<Servico> todosServicos) {
+  // 🚀 O NOVO MODAL INTELIGENTE (Agrupa Serviço Principal e Adicional)
+  void _abrirModalServicos(List<Servico> todosServicos, {bool isPrincipal = false}) {
     FocusScope.of(context).unfocus();
     final buscaModalController = TextEditingController();
 
@@ -463,9 +464,17 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           builder: (modalCtx, setModalState) {
             final textoBusca = buscaModalController.text.trim().toLowerCase();
 
-            final servicosDisponiveis = todosServicos
-                .where((s) => !_servicosIdsSelecionados.contains(s.id))
-                .toList();
+            // Filtro inteligente: 
+            // Se for escolher o principal, não mostra os que já estão nos "adicionais"
+            // Se for escolher adicional, não mostra nenhum já selecionado
+            final servicosDisponiveis = todosServicos.where((s) {
+              if (isPrincipal) {
+                if (_servicosIdsSelecionados.length > 1 && _servicosIdsSelecionados.sublist(1).contains(s.id)) return false;
+                return true;
+              } else {
+                return !_servicosIdsSelecionados.contains(s.id);
+              }
+            }).toList();
 
             final ultimos5Servicos = servicosDisponiveis
                 .where((s) => _ultimosServicosIds.contains(s.id))
@@ -482,12 +491,22 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 ).toList()
               : servicosDisponiveis;
 
-            void _adicionarEFechar(Servico s) {
+            void _selecionarEFechar(Servico s) {
               if (processandoClique) return;
               setModalState(() => processandoClique = true);
               
               setState(() {
-                _servicosIdsSelecionados.add(s.id);
+                if (isPrincipal) {
+                  if (_servicosIdsSelecionados.isEmpty) {
+                    _servicosIdsSelecionados.add(s.id);
+                  } else {
+                    _servicosIdsSelecionados[0] = s.id; // Substitui o principal!
+                  }
+                } else {
+                  if (!_servicosIdsSelecionados.contains(s.id)) {
+                    _servicosIdsSelecionados.add(s.id);
+                  }
+                }
                 _recalcularTotais();
               });
               
@@ -507,7 +526,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Adicionar Serviço', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text(isPrincipal ? 'Selecionar Serviço Principal' : 'Adicionar Serviço Extra', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: () => Navigator.pop(modalCtx),
@@ -548,7 +567,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                           label: Text(s.nome, style: TextStyle(color: Colors.purple.shade900, fontSize: 12)),
                           backgroundColor: Colors.purple.shade50,
                           side: BorderSide(color: Colors.purple.shade200),
-                          onPressed: () => _adicionarEFechar(s),
+                          onPressed: () => _selecionarEFechar(s),
                         )).toList(),
                       ),
                       const SizedBox(height: 12),
@@ -577,8 +596,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                   contentPadding: EdgeInsets.zero,
                                   title: Text(s.nome, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                                   subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
-                                  trailing: const Icon(Icons.add_circle_outline, color: Colors.purple),
-                                  onTap: () => _adicionarEFechar(s),
+                                  trailing: Icon(isPrincipal ? Icons.check_circle_outline : Icons.add_circle_outline, color: Colors.purple),
+                                  onTap: () => _selecionarEFechar(s),
                                 );
                               },
                             ),
@@ -732,7 +751,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                 ),
             ],
 
-            // 🎯 O NOVO PAINEL DE CONTROLO DO CLIENTE (Substitui o antigo aviso verde)
             if (_clienteId != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
@@ -786,7 +804,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                         ],
                       ),
                       
-                      // 🚀 AÇÕES RÁPIDAS NO CORAÇÃO DO ECRA
                       if (_editando && !_isBloqueio && _original != null) ...[
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 16),
@@ -881,7 +898,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_editando ? 'Editar Horário' : 'Novo Horário'),
-        // 🧹 Limpamos as actions duplicadas da AppBar para não poluir o ecrã
       ),
       body: Center(
         child: ConstrainedBox(
@@ -912,32 +928,39 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                       data: (servicos) {
                         if (servicos.isEmpty) return const Text('Cadastre ao menos um serviço.');
                         
+                        // 🎯 AQUI FOI INJETADA A NOVA LÓGICA DO SERVIÇO PRINCIPAL!
+                        final servicoPrincipalId = _servicosIdsSelecionados.isNotEmpty ? _servicosIdsSelecionados.first : null;
+                        String labelServicoPrincipal = 'Toque para selecionar';
+                        if (servicoPrincipalId != null) {
+                          try {
+                            final s = servicos.firstWhere((x) => x.id == servicoPrincipalId);
+                            labelServicoPrincipal = '${s.nome} · ${s.duracaoMin}m';
+                          } catch (_) {
+                            labelServicoPrincipal = 'Serviço não encontrado';
+                          }
+                        }
+
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            DropdownMenu<String>(
-                              expandedInsets: EdgeInsets.zero,
-                              initialSelection: _servicosIdsSelecionados.isNotEmpty ? _servicosIdsSelecionados.first : null,
-                              label: const Text('Serviço Principal'),
-                              enableFilter: true,
-                              dropdownMenuEntries: servicos.map((s) => DropdownMenuEntry(
-                                value: s.id,
-                                label: '${s.nome} · ${s.duracaoMin}m',
-                              )).toList(),
-                              onSelected: (v) {
-                                if (v != null) {
-                                  setState(() {
-                                    if (_servicosIdsSelecionados.isEmpty) {
-                                      _servicosIdsSelecionados.add(v);
-                                    } else {
-                                      _servicosIdsSelecionados[0] = v;
-                                    }
-                                    _recalcularTotais();
-                                  });
-                                }
-                              },
+                            const Text('Serviço Principal', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                            const SizedBox(height: 6),
+                            InkWell(
+                              onTap: () => _abrirModalServicos(servicos, isPrincipal: true),
+                              borderRadius: BorderRadius.circular(4),
+                              child: InputDecorator(
+                                decoration: const InputDecoration(
+                                  border: OutlineInputBorder(),
+                                  suffixIcon: Icon(Icons.search),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                ),
+                                child: Text(
+                                  labelServicoPrincipal, 
+                                  style: TextStyle(fontSize: 16, color: servicoPrincipalId == null ? Colors.grey.shade600 : Colors.black87)
+                                ),
+                              ),
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 16),
 
                             if (_servicosIdsSelecionados.length > 1) ...[
                               const Text('Serviços Adicionais:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
@@ -975,9 +998,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                             ],
 
                             OutlinedButton.icon(
-                              onPressed: () => _abrirModalAdicionarServico(servicos),
+                              onPressed: () => _abrirModalServicos(servicos, isPrincipal: false),
                               icon: const Icon(Icons.add, size: 18),
-                              label: const Text('Adicionar serviço'),
+                              label: const Text('Adicionar serviço extra'),
                             ),
                           ],
                         );
@@ -1106,9 +1129,9 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      Expanded(child: OutlinedButton(onPressed: () => context.pop(), child: const Text('Cancelar'))),
+                      Expanded(child: OutlinedButton(onPressed: () => context.pop(), child: const Text('Voltar'))),
                       const SizedBox(width: 12),
-                      Expanded(child: FilledButton(onPressed: _salvar, child: const Text('Salvar'))),
+                      Expanded(child: FilledButton(onPressed: _salvar, child: const Text('Salvar Agendamento'))),
                     ],
                   ),
                 ],
