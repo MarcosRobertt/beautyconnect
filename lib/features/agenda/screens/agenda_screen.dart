@@ -194,7 +194,6 @@ class AgendaScreen extends ConsumerWidget {
       builder: (modalContext) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        // 🎯 LÓGICA ATUALIZADA PARA INCLUIR PRODUTOS UTILIZADOS E BAIXA
         onConfirmar: (pagamentos, valorFinal, houveAtraso, insumosAcabaram, produtosUtilizados) async {
           
           try {
@@ -238,7 +237,6 @@ class AgendaScreen extends ConsumerWidget {
             }
           } catch (e) {}
 
-          // 1. EFETUA A BAIXA NO ESTOQUE FÍSICO
           String baixasStr = '';
           if (insumosAcabaram.isNotEmpty) {
             for (final insumo in insumosAcabaram) {
@@ -250,7 +248,6 @@ class AgendaScreen extends ConsumerWidget {
             baixasStr = '[Potes Esgotados (Baixa): $nomes]';
           }
 
-          // 2. REGISTA O USO NO HISTÓRICO DA COMANDA
           String utilizadosStr = '';
           if (produtosUtilizados.isNotEmpty) {
             final nomes = produtosUtilizados.map((i) => i.nome).join(', ');
@@ -451,7 +448,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
   final TextEditingController _valorParcialController = TextEditingController();
 
   final List<Insumo> _insumosAcabaram = [];
-  final List<Insumo> _produtosUtilizados = []; // 🎯 NOVO ARRAY DE PRODUTOS
+  final List<Insumo> _produtosUtilizados = []; 
 
   @override
   void initState() {
@@ -482,11 +479,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     final valorDigitado = _valorDigitado;
     if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
       setState(() { 
-        _pagamentos.add({
-          'forma': _formaAtual, 
-          'valor': valorDigitado,
-          'data': _dataPagamentoAtual 
-        }); 
+        _pagamentos.add({'forma': _formaAtual, 'valor': valorDigitado, 'data': _dataPagamentoAtual}); 
         _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); 
         _dataPagamentoAtual = DateTime.now(); 
       });
@@ -497,7 +490,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
-  // 🎯 MODAL PARA MARCAR OS PRODUTOS USADOS
+  // 🎯 NOVO MODAL DE PRODUTOS UTILIZADOS COM CATEGORIAS
   void _abrirModalProdutosUtilizados(List<Insumo> estoqueGlobal) {
     FocusScope.of(context).unfocus();
     final buscaInsumoController = TextEditingController();
@@ -510,6 +503,12 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
           builder: (modalCtx, setModalState) {
             final textoBusca = buscaInsumoController.text.trim().toLowerCase();
             final listaExibicao = textoBusca.isEmpty ? estoqueGlobal : estoqueGlobal.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
+
+            final Map<String, List<Insumo>> agrupados = {};
+            for (final item in listaExibicao) {
+              agrupados.putIfAbsent(item.categoria, () => []).add(item);
+            }
+            final categoriasOrdenadas = agrupados.keys.toList()..sort();
 
             void _toggleInsumo(Insumo item) {
               setModalState(() {
@@ -547,17 +546,31 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
                     Expanded(
                       child: listaExibicao.isEmpty
                           ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
-                          : ListView.separated(
-                              itemCount: listaExibicao.length, separatorBuilder: (_, __) => const Divider(height: 1),
+                          : ListView.builder(
+                              itemCount: categoriasOrdenadas.length,
                               itemBuilder: (c, i) {
-                                final item = listaExibicao[i];
-                                final isSelected = _produtosUtilizados.contains(item);
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(item.nome, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? Colors.purple.shade900 : Colors.black87)),
-                                  subtitle: Text(item.categoria, style: const TextStyle(fontSize: 12)),
-                                  trailing: Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank, color: isSelected ? Colors.purple : Colors.grey),
-                                  onTap: () => _toggleInsumo(item),
+                                final cat = categoriasOrdenadas[i];
+                                final itens = agrupados[cat]!;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      color: Colors.purple.shade50,
+                                      child: Text(cat, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade900, fontSize: 12)),
+                                    ),
+                                    ...itens.map((item) {
+                                      final isSelected = _produtosUtilizados.contains(item);
+                                      return ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                                        title: Text(item.nome, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? Colors.purple.shade900 : Colors.black87)),
+                                        subtitle: Text('Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
+                                        trailing: Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank, color: isSelected ? Colors.purple : Colors.grey),
+                                        onTap: () => _toggleInsumo(item),
+                                      );
+                                    }).toList(),
+                                  ],
                                 );
                               }
                             )
@@ -579,29 +592,64 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     );
   }
 
+  // 🎯 O MODAL DE BAIXA DE ESTOQUE (COM PRÉ-FILTRO E CONFIRMAÇÃO)
   void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
     final TextEditingController buscaInsumoController = TextEditingController();
 
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
+      context: context, isScrollControlled: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
             final textoBusca = buscaInsumoController.text.trim().toLowerCase();
-            
             final disponiveis = estoqueGlobal.where((e) => !_insumosAcabaram.any((a) => a.id == e.id)).toList();
             
             final listaExibicao = textoBusca.isEmpty 
               ? disponiveis 
               : disponiveis.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
 
+            final usadosNestaComanda = listaExibicao.where((e) => _produtosUtilizados.any((u) => u.id == e.id)).toList();
+            final outrosEstoque = listaExibicao.where((e) => !_produtosUtilizados.any((u) => u.id == e.id)).toList();
+
+            Widget buildTile(Insumo item) {
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.delete_sweep, size: 20, color: Colors.red.shade400)),
+                title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('${item.categoria} • Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
+                trailing: FilledButton.tonal(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogCtx) => AlertDialog(
+                        title: const Text('Confirmar Baixa'),
+                        content: Text('Tem certeza que o pote de "${item.nome}" acabou?\n\nIsso descontará 1 unidade do estoque imediatamente após fechar a comanda.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                            onPressed: () {
+                              Navigator.pop(dialogCtx);
+                              setState(() => _insumosAcabaram.add(item)); 
+                              Navigator.pop(modalCtx); 
+                            },
+                            child: const Text('Sim, Acabou'),
+                          )
+                        ]
+                      )
+                    );
+                  },
+                  child: const Text('Acabou'),
+                ),
+              );
+            }
+
             return Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.of(modalCtx).viewInsets.bottom),
               child: Container(
-                height: MediaQuery.of(modalCtx).size.height * 0.75,
-                padding: const EdgeInsets.all(20),
+                height: MediaQuery.of(modalCtx).size.height * 0.75, padding: const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -616,59 +664,37 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: buscaInsumoController,
-                      decoration: const InputDecoration(
-                        hintText: 'Buscar no estoque...',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
+                      decoration: const InputDecoration(hintText: 'Buscar no estoque...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
                       onChanged: (_) => setModalState(() {}),
                     ),
                     const SizedBox(height: 12),
                     Expanded(
                       child: listaExibicao.isEmpty
                           ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
-                          : ListView.separated(
-                              itemCount: listaExibicao.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (c, i) {
-                                final item = listaExibicao[i];
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                                    child: Icon(Icons.delete_sweep, size: 20, color: Colors.red.shade400),
+                          : ListView(
+                              children: [
+                                if (usadosNestaComanda.isNotEmpty && textoBusca.isEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    color: Colors.orange.shade50,
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.star, size: 16, color: Colors.orange.shade800),
+                                        const SizedBox(width: 6),
+                                        Text('Utilizados nesta cliente', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 12)),
+                                      ],
+                                    )
                                   ),
-                                  title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('${item.categoria} • Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
-                                  trailing: FilledButton.tonal(
-                                    style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
-                                    onPressed: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (dialogCtx) => AlertDialog(
-                                          title: const Text('Confirmar Baixa'),
-                                          content: Text('Tem certeza que o pote de "${item.nome}" acabou?\n\nIsso descontará 1 unidade do estoque imediatamente após fechar a comanda.'),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
-                                            FilledButton(
-                                              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                                              onPressed: () {
-                                                Navigator.pop(dialogCtx);
-                                                setState(() => _insumosAcabaram.add(item));
-                                                Navigator.pop(ctx);
-                                              },
-                                              child: const Text('Sim, Acabou'),
-                                            )
-                                          ]
-                                        )
-                                      );
-                                    },
-                                    child: const Text('Acabou'),
+                                  ...usadosNestaComanda.map((item) => buildTile(item)).toList(),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    color: Colors.grey.shade100,
+                                    child: const Text('Outros Produtos do Estoque', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54, fontSize: 12)),
                                   ),
-                                );
-                              }
+                                ],
+                                ...outrosEstoque.map((item) => buildTile(item)).toList(),
+                              ]
                             )
                     )
                   ]
@@ -690,8 +716,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
       padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
       child: SingleChildScrollView(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -707,46 +732,19 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
             const Text('Pagamentos Registrados:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             if (_pagamentos.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nenhum pagamento registrado ainda.', style: TextStyle(fontSize: 12, color: Colors.grey))),
             ..._pagamentos.asMap().entries.map((entry) {
-              final index = entry.key; final p = entry.value; 
-              final forma = p['forma'] as FormaPagamento; 
-              final valor = p['valor'] as double;
-              final dataP = p['data'] as DateTime;
-              final dataStr = '${dataP.day.toString().padLeft(2,'0')}/${dataP.month.toString().padLeft(2,'0')}';
-
-              return ListTile(
-                contentPadding: EdgeInsets.zero, dense: true,
-                leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
-                title: Text('${forma.rotulo} ($dataStr)'), 
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _removerPagamento(index))]),
-              );
+              final index = entry.key; final p = entry.value; final forma = p['forma'] as FormaPagamento; final valor = p['valor'] as double; final dataP = p['data'] as DateTime; final dataStr = '${dataP.day.toString().padLeft(2,'0')}/${dataP.month.toString().padLeft(2,'0')}';
+              return ListTile(contentPadding: EdgeInsets.zero, dense: true, leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18), title: Text('${forma.rotulo} ($dataStr)'), trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _removerPagamento(index))]));
             }),
 
             if (valorPendente > 0.01) ...[
               const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12), color: Colors.orange.shade50,
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Falta Receber:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)), Text('R\$ ${valorPendente.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16))]),
-              ),
+              Container(padding: const EdgeInsets.all(12), color: Colors.orange.shade50, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Falta Receber:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)), Text('R\$ ${valorPendente.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16))])),
               const SizedBox(height: 24),
-              
               const Text('Registrar Entrada / Recebimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now());
-                  if (picked != null) setState(() => _dataPagamentoAtual = picked);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 16, color: Colors.purple),
-                      const SizedBox(width: 8),
-                      Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14)),
-                    ],
-                  ),
-                ),
+                onTap: () async { final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setState(() => _dataPagamentoAtual = picked); },
+                child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: Colors.purple), const SizedBox(width: 8), Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14))])),
               ),
               const SizedBox(height: 12),
               Row(
@@ -766,7 +764,6 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
             const Text('Registro de Produtos (Opcional):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 12),
             
-            // 🎯 SECÇÃO 1: PRODUTOS UTILIZADOS
             Container(
               padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.purple.shade200)),
               child: Column(
@@ -778,17 +775,26 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
                     Wrap(spacing: 8, runSpacing: -8, children: _produtosUtilizados.map((insumo) => Chip(label: Text(insumo.nome, style: TextStyle(fontSize: 11, color: Colors.purple.shade900)), onDeleted: () => setState(() => _produtosUtilizados.remove(insumo)), backgroundColor: Colors.white, side: BorderSide(color: Colors.purple.shade200))).toList()),
                     const SizedBox(height: 8),
                   ],
-                  estoqueAsync.when(loading: () => const LinearProgressIndicator(), error: (_, __) => const Text('Erro.'), data: (estoqueGlobal) { return OutlinedButton.icon(style: OutlinedButton.styleFrom(foregroundColor: Colors.purple.shade800, side: BorderSide(color: Colors.purple.shade200), backgroundColor: Colors.white), onPressed: () => _abrirModalProdutosUtilizados(estoqueGlobal), icon: const Icon(Icons.format_paint, size: 18), label: const Text('Selecionar Produtos Utilizados')); })
+                  estoqueAsync.when(
+                    loading: () => const LinearProgressIndicator(), 
+                    error: (_, __) => const Text('Erro.'), 
+                    data: (estoqueGlobal) { 
+                      return OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.purple.shade800, side: BorderSide(color: Colors.purple.shade200), backgroundColor: Colors.white), 
+                        onPressed: () => _abrirModalProdutosUtilizados(estoqueGlobal), 
+                        icon: const Icon(Icons.water_drop, size: 18), 
+                        label: const Text('Selecionar Produtos Utilizados')
+                      ); 
+                    }
+                  )
                 ],
               ),
             ),
             
             const SizedBox(height: 12),
             
-            // 🎯 SECÇÃO 2: BAIXA DE ESTOQUE
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+              padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
