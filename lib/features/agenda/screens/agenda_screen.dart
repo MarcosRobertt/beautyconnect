@@ -13,6 +13,9 @@ import '../widgets/timeline_day_view.dart';
 import '../widgets/timeline_week_view.dart';
 import '../widgets/calendar_month_view.dart';
 import '../../dashboard/controllers/dashboard_controller.dart'; 
+// 🎯 NOVOS IMPORTS PARA A BAIXA DE ESTOQUE
+import '../../estoque/controllers/estoque_controller.dart';
+import '../../estoque/models/insumo.dart';
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -192,7 +195,8 @@ class AgendaScreen extends ConsumerWidget {
       builder: (modalContext) => ModalFecharComanda(
         agendamento: agendamento,
         nomeCliente: nomeCliente,
-        onConfirmar: (pagamentos, valorFinal, houveAtraso) async {
+        // 🎯 NOVA ASSINATURA: Agora recebe a lista de produtos que acabaram
+        onConfirmar: (pagamentos, valorFinal, houveAtraso, insumosAcabaram) async {
           
           try {
             final docVerificacao = await FirebaseFirestore.instance
@@ -237,11 +241,28 @@ class AgendaScreen extends ConsumerWidget {
             // Ignora falha de verificação para seguir o fluxo principal
           }
 
+          // 🎯 1. EFETUA A BAIXA NO ESTOQUE FÍSICO
+          String baixasStr = '';
+          if (insumosAcabaram.isNotEmpty) {
+            for (final insumo in insumosAcabaram) {
+              final novaQtd = insumo.quantidade > 0 ? insumo.quantidade - 1 : 0;
+              final atualizacaoInsumo = insumo.copyWith(quantidade: novaQtd);
+              await ref.read(estoqueControllerProvider.notifier).salvar(atualizacaoInsumo);
+            }
+            final nomes = insumosAcabaram.map((i) => i.nome).join(', ');
+            baixasStr = '[Baixa de Estoque: $nomes]';
+          }
+
           final obsAtual = agendamento.observacao;
           String novaObs = obsAtual;
           
           if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
             novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
+          }
+
+          // 🎯 2. ANEXA A BAIXA NO HISTÓRICO DA COMANDA
+          if (baixasStr.isNotEmpty) {
+            novaObs = novaObs.isEmpty ? baixasStr : '$novaObs\n$baixasStr';
           }
 
           FormaPagamento formaPrincipal = FormaPagamento.pix;
@@ -401,17 +422,20 @@ class AgendaScreen extends ConsumerWidget {
   }
 }
 
-class ModalFecharComanda extends StatefulWidget {
+// 🎯 Transformado em ConsumerStatefulWidget para conseguir aceder ao Estoque
+class ModalFecharComanda extends ConsumerStatefulWidget {
   const ModalFecharComanda({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
+  
   final Agendamento agendamento;
   final String nomeCliente;
-  final void Function(List<Map<String, dynamic>> pagamentos, double valorFinal, bool houveAtraso) onConfirmar;
+  final void Function(List<Map<String, dynamic>> pagamentos, double valorFinal, bool houveAtraso, List<Insumo> insumosAcabaram) onConfirmar;
   final VoidCallback onCancelarAtendimento;
+  
   @override
-  State<ModalFecharComanda> createState() => _ModalFecharComandaState();
+  ConsumerState<ModalFecharComanda> createState() => _ModalFecharComandaState();
 }
 
-class _ModalFecharComandaState extends State<ModalFecharComanda> {
+class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
   late double _valorTotal;
   bool _houveAtraso = false;
   
@@ -419,6 +443,9 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
   final List<Map<String, dynamic>> _pagamentos = [];
   FormaPagamento _formaAtual = FormaPagamento.pix;
   final TextEditingController _valorParcialController = TextEditingController();
+
+  // 🎯 A GAVETA ONDE GUARDAMOS O QUE ACABOU NESTE ATENDIMENTO
+  final List<Insumo> _insumosAcabaram = [];
 
   @override
   void initState() {
@@ -464,9 +491,97 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
+  // 🚀 O MODALZINHO QUE ABRE A GAVETA DO ESTOQUE
+  void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
+    final TextEditingController buscaInsumoController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (modalCtx, setModalState) {
+            final textoBusca = buscaInsumoController.text.trim().toLowerCase();
+            
+            // Filtra os que ainda NÃO foram adicionados na lista da comanda
+            final disponiveis = estoqueGlobal.where((e) => !_insumosAcabaram.any((a) => a.id == e.id)).toList();
+            
+            final listaExibicao = textoBusca.isEmpty 
+              ? disponiveis 
+              : disponiveis.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
+
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(modalCtx).viewInsets.bottom),
+              child: Container(
+                height: MediaQuery.of(modalCtx).size.height * 0.75,
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Baixa de Estoque', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalCtx)),
+                      ],
+                    ),
+                    const Text('Selecione o produto que chegou ao fim:', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: buscaInsumoController,
+                      decoration: const InputDecoration(
+                        hintText: 'Buscar no estoque...',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      onChanged: (_) => setModalState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: listaExibicao.isEmpty
+                          ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
+                          : ListView.separated(
+                              itemCount: listaExibicao.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1),
+                              itemBuilder: (c, i) {
+                                final item = listaExibicao[i];
+                                return ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                                    child: Icon(Icons.delete_sweep, size: 20, color: Colors.red.shade400),
+                                  ),
+                                  title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: Text('${item.categoria} • Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
+                                  trailing: FilledButton.tonal(
+                                    style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
+                                    onPressed: () {
+                                      setState(() => _insumosAcabaram.add(item));
+                                      Navigator.pop(ctx);
+                                    },
+                                    child: const Text('Acabou'),
+                                  ),
+                                );
+                              }
+                            )
+                    )
+                  ]
+                )
+              )
+            );
+          }
+        );
+      }
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final valorPendente = _valorRestante;
+    final estoqueAsync = ref.watch(estoqueControllerProvider);
 
     return Container(
       padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
@@ -543,6 +658,47 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
             ],
 
             const SizedBox(height: 24),
+            
+            // 🚀 O NOVO BLOCO DE BAIXA DE ESTOQUE DIRETAMENTE NA COMANDA
+            const Text('Baixa de Estoque (Opcional):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            const Text('Algum produto chegou ao fim neste atendimento?', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_insumosAcabaram.isNotEmpty) ...[
+                    Wrap(
+                      spacing: 8, runSpacing: -8,
+                      children: _insumosAcabaram.map((insumo) => Chip(
+                        label: Text(insumo.nome, style: TextStyle(fontSize: 11, color: Colors.red.shade900, fontWeight: FontWeight.bold)),
+                        onDeleted: () => setState(() => _insumosAcabaram.remove(insumo)),
+                        backgroundColor: Colors.red.shade50,
+                        deleteIconColor: Colors.red.shade300,
+                        side: BorderSide(color: Colors.red.shade200),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  estoqueAsync.when(
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, __) => const Text('Erro ao carregar estoque.'),
+                    data: (estoqueGlobal) {
+                      return OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade800, side: BorderSide(color: Colors.red.shade200)),
+                        onPressed: () => _abrirSeletorInsumo(estoqueGlobal),
+                        icon: const Icon(Icons.delete_sweep, size: 18),
+                        label: const Text('Registrar pote vazio (Baixa)')
+                      );
+                    }
+                  )
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 24),
             CheckboxListTile(value: _houveAtraso, contentPadding: EdgeInsets.zero, title: const Text('Cliente chegou atrasada?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)), subtitle: const Text('Registra o atraso no histórico para métricas.', style: TextStyle(fontSize: 11, color: Colors.grey)), controlAffinity: ListTileControlAffinity.leading, onChanged: (val) => setState(() => _houveAtraso = val ?? false)),
             const SizedBox(height: 20),
 
@@ -562,7 +718,8 @@ class _ModalFecharComandaState extends State<ModalFecharComanda> {
                         _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual}); 
                       }
                       Navigator.pop(context);
-                      widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso);
+                      // 🎯 ENVIA PARA O PAI A LISTA DE INSUMOS QUE ACABARAM
+                      widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso, _insumosAcabaram);
                     } : null,
                     child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.check_circle_outline, size: 18, color: Colors.white), SizedBox(width: 6), Expanded(child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white), maxLines: 2))]),
                   ),
