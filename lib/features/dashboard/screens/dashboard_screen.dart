@@ -11,7 +11,7 @@ import '../../agenda/models/agendamento.dart';
 import '../../clientes/controllers/cliente_controller.dart';
 import '../../clientes/models/cliente.dart';
 import '../controllers/dashboard_controller.dart';
-import '../../configuracoes/screens/metas_screen.dart'; // 🎯 Conexão com o Motor de Metas
+import '../../configuracoes/screens/metas_screen.dart'; 
 
 String formatarMoeda(double valor) {
   return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
@@ -49,12 +49,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Widget build(BuildContext context) {
     ref.watch(agendamentoControllerProvider);
 
-    // 🧠 Consulta em Tempo Real as Metas Configuradas para este Mês
     final metasNuvem = ref.watch(metasControllerProvider).value ?? {};
     final hoje = DateTime.now();
     final chaveMesAtual = '${hoje.year}-${hoje.month.toString().padLeft(2, '0')}';
     
-    // Se não tiver meta configurada, assume um padrão de sobrevivência leve
     final metaAtiva = metasNuvem[chaveMesAtual] ?? MetaMensal(
       faturamentoMensal: 6000, faturamentoDiario: 250, 
       atendimentosMensal: 80, atendimentosDiario: 4
@@ -279,7 +277,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     leading: Icon(Icons.warning_amber_rounded, color: Colors.orange.shade800, size: 28),
                     title: Text('${comandasPendentes.length} Comanda(s) pendente(s)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 14)),
-                    subtitle: Text('De dias anteriores. Feche para registrar o faturamento.', style: TextStyle(color: Colors.orange.shade800, fontSize: 12)),
+                    subtitle: Text('Acesse a agenda para realizar o fechamento.', style: TextStyle(color: Colors.orange.shade800, fontSize: 12)),
                     trailing: FilledButton(
                       style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800, foregroundColor: Colors.white, textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                       onPressed: () {
@@ -320,6 +318,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             leading: SizedBox(width: 48, child: Text(a.horaInicio, style: const TextStyle(fontWeight: FontWeight.w600))),
                             title: Text('$nomeCliente — ${a.servico}'),
                             trailing: StatusChip(status: a.status),
+                            onTap: () => context.push('${AppRoutes.agenda}/editar/${a.id}'),
                           );
                         }),
                     ],
@@ -350,10 +349,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 }
-
-// ============================================================================
-// 🎯 NOVOS WIDGETS DE GAMIFICAÇÃO DAS METAS
-// ============================================================================
 
 class _CardMetaAtendimentos extends StatelessWidget {
   const _CardMetaAtendimentos({required this.atual, required this.meta});
@@ -559,10 +554,6 @@ class _CardMetricaInteligente extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// MODAIS INTACTOS DO SISTEMA
-// ============================================================================
-
 class _ModalCentralNotificacoes extends StatelessWidget {
   const _ModalCentralNotificacoes({required this.aniversariantes, required this.inativas});
   final List<Cliente> aniversariantes; final List<Map<String, dynamic>> inativas;
@@ -662,133 +653,17 @@ class _ModalDetalhesReceitaState extends State<_ModalDetalhesReceita> {
   }
 }
 
-// 🎯 CLASSE CORRIGIDA COM O METÓDO BUILD REINSERIDO
+// 🎯 NOVA CLASSE: Apenas encaminha a utilizadora para a Comanda (Centralização DRY)
 class _ModalComandasPendentes extends ConsumerWidget {
   const _ModalComandasPendentes();
 
-  void _abrirModalFechamento(BuildContext context, WidgetRef ref, Agendamento agendamento, String nomeCliente) {
-    showModalBottomSheet<void>(
-      context: context, isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) => _ModalFecharComandaDashboard(
-        agendamento: agendamento,
-        nomeCliente: nomeCliente,
-        onConfirmar: (pagamentos, valorFinal, houveAtraso) async {
-          try {
-            final docVerificacao = await FirebaseFirestore.instance
-                .collection('agendamentos')
-                .doc(agendamento.id)
-                .get(const GetOptions(source: Source.server));
-                
-            if (docVerificacao.exists) {
-              final statusBanco = docVerificacao.data()?['status']?.toString().toLowerCase() ?? '';
-              
-              if (statusBanco.contains('concluido') && agendamento.status != AgendamentoStatus.concluido) {
-                if (context.mounted) {
-                  showDialog(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: Row(
-                        children: [
-                          Icon(Icons.gpp_bad_rounded, color: Colors.orange.shade800, size: 28),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text('Duplicidade Evitada!', style: TextStyle(color: Colors.orange.shade900, fontSize: 18))),
-                        ],
-                      ),
-                      content: const Text('O sistema interceptou esta ação porque a comanda já consta como FECHADA no banco de dados.\n\nA ação foi bloqueada e nenhum valor extra foi lançado.'),
-                      actions: [
-                        FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            ref.invalidate(todosAgendamentosProvider);
-                            ref.invalidate(dashboardMetricsProvider);
-                          },
-                          child: const Text('Entendi, Atualizar Tela'),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return;
-              }
-            }
-          } catch (e) { }
-
-          final obsAtual = agendamento.observacao;
-          String novaObs = obsAtual;
-          
-          if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
-            novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
-          }
-
-          FormaPagamento formaPrincipal = FormaPagamento.pix;
-          String detalhePagamentoStr = '';
-
-          if (pagamentos.isNotEmpty) {
-            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
-            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
-            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
-            
-            final listaDetalhes = pagamentos.map((p) {
-              final d = p['data'] as DateTime;
-              final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-              final f = (p['forma'] as FormaPagamento).rotulo;
-              final v = formataMoeda(p['valor'] as double);
-              return '[$dStr] $f: $v';
-            }).join(' | ');
-            
-            detalhePagamentoStr = '[Baixa Financeira: $listaDetalhes]';
-          }
-
-          if (detalhePagamentoStr.isNotEmpty) {
-             novaObs = novaObs.isEmpty ? detalhePagamentoStr : '$novaObs\n$detalhePagamentoStr';
-          }
-
-          final atualizado = agendamento.copyWith(
-            status: AgendamentoStatus.concluido,
-            formaPagamento: formaPrincipal,
-            valor: valorFinal,
-            observacao: novaObs,
-          );
-
-          final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
-          
-          if (context.mounted) {
-            if (relatorioDeErro != null) {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erro: $relatorioDeErro'), backgroundColor: Colors.red));
-            } else {
-              ref.invalidate(todosAgendamentosProvider);
-              ref.invalidate(dashboardMetricsProvider);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Comanda fechada e sistema sincronizado!'), backgroundColor: Colors.green));
-            }
-          }
-        },
-        onCancelarAtendimento: () async {
-          final atualizado = agendamento.copyWith(
-            status: AgendamentoStatus.cancelado,
-            observacao: agendamento.observacao.isEmpty ? '[Cancelado pelo Dashboard]' : '${agendamento.observacao} | [Cancelado pelo Dashboard]',
-          );
-          await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
-          ref.invalidate(todosAgendamentosProvider);
-          ref.invalidate(dashboardMetricsProvider);
-
-          if (context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Agendamento cancelado!'), backgroundColor: Colors.blue));
-          }
-        },
-      ),
-    );
-  }
-
-  // 🎯 MÉTODO BUILD REINSERIDO AQUI
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final todosAgendamentosAsync = ref.watch(todosAgendamentosProvider);
     final clientesAsync = ref.watch(clienteControllerProvider);
 
     final clientes = clientesAsync.value ?? [];
-    final clientesPorId = {for (final c in clientes) c.id: c};
+    final clientesPorId = {for (final c in clientes) c.id: c.nome}; 
     final hoje = DateTime.now();
     final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
 
@@ -804,10 +679,19 @@ class _ModalComandasPendentes extends ConsumerWidget {
       return cmp;
     });
 
+    String formatarMesAno(DateTime data) {
+      final meses = ['JANEIRO', 'FEVEREIRO', 'MARÇO', 'ABRIL', 'MAIO', 'JUNHO', 'JULHO', 'AGOSTO', 'SETEMBRO', 'OUTUBRO', 'NOVEMBRO', 'DEZEMBRO'];
+      return '${meses[data.month - 1]} DE ${data.year}';
+    }
+    String formatarDiaCurto(DateTime data) {
+      final diasSemana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo'];
+      return '${diasSemana[data.weekday - 1]}, ${data.day.toString().padLeft(2, '0')}/${data.month.toString().padLeft(2, '0')}';
+    }
+
     final mapMes = <String, Map<String, List<Agendamento>>>{};
     for (var a in pendentes) {
-      final mesStr = _formatarMesAno(a.data);
-      final diaStr = _formatarDiaCurto(a.data);
+      final mesStr = formatarMesAno(a.data);
+      final diaStr = formatarDiaCurto(a.data);
       mapMes.putIfAbsent(mesStr, () => {});
       mapMes[mesStr]!.putIfAbsent(diaStr, () => []);
       mapMes[mesStr]![diaStr]!.add(a);
@@ -828,7 +712,7 @@ class _ModalComandasPendentes extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
-            const Text('Feche as comandas abaixo para que o valor seja contabilizado.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const Text('Acesse a comanda para realizar o fechamento.', style: TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 16),
             Expanded(
               child: pendentes.isEmpty
@@ -855,14 +739,18 @@ class _ModalComandasPendentes extends ConsumerWidget {
                                       child: Text('📅 ${diaEntry.key}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                                     ),
                                     ...diaEntry.value.map((a) {
-                                      final nomeCliente = clientesPorId[a.clienteId]?.nome ?? "Cliente não encontrado";
+                                      final nomeCliente = clientesPorId[a.clienteId] ?? "Cliente não encontrado";
                                       return ListTile(
                                         title: Text('${a.horaInicio} · $nomeCliente', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                        subtitle: Text('${a.servico} — ${formatarMoeda(a.valor)}', style: const TextStyle(fontSize: 12)),
-                                        trailing: OutlinedButton(
-                                          style: OutlinedButton.styleFrom(foregroundColor: Colors.purple, side: const BorderSide(color: Colors.purple), padding: const EdgeInsets.symmetric(horizontal: 12)),
-                                          onPressed: () => _abrirModalFechamento(context, ref, a, nomeCliente),
-                                          child: const Text('FECHAR', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                                        subtitle: Text(a.servico, style: const TextStyle(fontSize: 12)),
+                                        trailing: FilledButton(
+                                          style: FilledButton.styleFrom(backgroundColor: Colors.purple, padding: const EdgeInsets.symmetric(horizontal: 12)),
+                                          onPressed: () {
+                                            Navigator.pop(context); 
+                                            // 🎯 DIRECIONA MAGICAMENTE PARA A TELA DA COMANDA
+                                            context.push('${AppRoutes.agenda}/editar/${a.id}');
+                                          },
+                                          child: const Text('ABRIR COMANDA', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
                                         ),
                                       );
                                     }),
@@ -874,168 +762,6 @@ class _ModalComandasPendentes extends ConsumerWidget {
                         );
                       }).toList(),
                     ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ModalFecharComandaDashboard extends StatefulWidget {
-  const _ModalFecharComandaDashboard({
-    required this.agendamento, required this.nomeCliente,
-    required this.onConfirmar, required this.onCancelarAtendimento,
-  });
-
-  final Agendamento agendamento;
-  final String nomeCliente;
-  final void Function(List<Map<String, dynamic>> pagamentos, double valorFinal, bool houveAtraso) onConfirmar;
-  final VoidCallback onCancelarAtendimento;
-
-  @override
-  State<_ModalFecharComandaDashboard> createState() => _ModalFecharComandaDashboardState();
-}
-
-class _ModalFecharComandaDashboardState extends State<_ModalFecharComandaDashboard> {
-  late double _valorTotal;
-  bool _houveAtraso = false;
-  
-  DateTime _dataPagamentoAtual = DateTime.now();
-  final List<Map<String, dynamic>> _pagamentos = [];
-  FormaPagamento _formaAtual = FormaPagamento.pix;
-  final TextEditingController _valorParcialController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _valorTotal = widget.agendamento.valor;
-    _valorParcialController.text = _valorTotal.toStringAsFixed(2).replaceAll('.', ',');
-  }
-
-  double get _valorRestante {
-    final pago = _pagamentos.fold<double>(0, (soma, p) => soma + (p['valor'] as double));
-    return _valorTotal - pago;
-  }
-
-  void _adicionarPagamento() {
-    final valorDigitado = double.tryParse(_valorParcialController.text.replaceAll(',', '.')) ?? 0.0;
-    if (valorDigitado > 0 && valorDigitado <= _valorRestante) {
-      setState(() {
-        _pagamentos.add({ 'forma': _formaAtual, 'valor': valorDigitado, 'data': _dataPagamentoAtual });
-        _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ',');
-        _dataPagamentoAtual = DateTime.now();
-      });
-    }
-  }
-
-  void _removerPagamento(int index) {
-    setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final valorPendente = _valorRestante;
-    final podeConfirmar = valorPendente <= 0.01;
-
-    return Container(
-      padding: EdgeInsets.only(top: 20, left: 20, right: 20, bottom: MediaQuery.of(context).viewInsets.bottom + 20),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text('Fechar Comanda — ${widget.nomeCliente}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('${widget.agendamento.servico} — R\$ ${_valorTotal.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontSize: 14, color: Colors.grey)),
-            const Divider(height: 32),
-
-            const Text('Pagamentos Registrados:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            if (_pagamentos.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Nenhum pagamento registrado ainda.', style: TextStyle(fontSize: 12, color: Colors.grey))),
-            ..._pagamentos.asMap().entries.map((entry) {
-              final index = entry.key; final p = entry.value; 
-              final forma = p['forma'] as FormaPagamento; 
-              final valor = p['valor'] as double;
-              final dataP = p['data'] as DateTime;
-              final dataStr = '${dataP.day.toString().padLeft(2,'0')}/${dataP.month.toString().padLeft(2,'0')}';
-
-              return ListTile(
-                contentPadding: EdgeInsets.zero, dense: true,
-                leading: Icon(Icons.check_circle, color: Colors.green.shade600, size: 18),
-                title: Text('${forma.rotulo} ($dataStr)'),
-                trailing: Row(mainAxisSize: MainAxisSize.min, children: [Text('R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(fontWeight: FontWeight.bold)), IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _removerPagamento(index))]),
-              );
-            }),
-
-            if (valorPendente > 0.01) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12), color: Colors.orange.shade50,
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Falta Receber:', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold)), Text('R\$ ${valorPendente.toStringAsFixed(2).replaceAll('.', ',')}', style: const TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.bold, fontSize: 16))]),
-              ),
-              const SizedBox(height: 24),
-              
-              const Text('Registrar Entrada / Recebimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 8),
-              InkWell(
-                onTap: () async {
-                  final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now());
-                  if (picked != null) setState(() => _dataPagamentoAtual = picked);
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.calendar_today, size: 16, color: Colors.purple),
-                      const SizedBox(width: 8),
-                      Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(flex: 2, child: DropdownButtonFormField<FormaPagamento>(value: _formaAtual, decoration: const InputDecoration(border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)), items: FormaPagamento.values.where((f) => f != FormaPagamento.pendente).map((f) => DropdownMenuItem(value: f, child: Text(f.rotulo, style: const TextStyle(fontSize: 12)))).toList(), onChanged: (v) => setState(() => _formaAtual = v!))),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 2, child: TextField(controller: _valorParcialController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(prefixText: 'R\$ ', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 8)))),
-                  const SizedBox(width: 8),
-                  Expanded(flex: 1, child: FilledButton(style: FilledButton.styleFrom(padding: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), onPressed: _adicionarPagamento, child: const Icon(Icons.add))),
-                ],
-              ),
-            ],
-
-            const SizedBox(height: 24),
-            CheckboxListTile(value: _houveAtraso, contentPadding: EdgeInsets.zero, title: const Text('Cliente chegou atrasada?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)), subtitle: const Text('Registra o atraso no histórico para métricas.', style: TextStyle(fontSize: 11, color: Colors.grey)), controlAffinity: ListTileControlAffinity.leading, onChanged: (val) => setState(() => _houveAtraso = val ?? false)),
-            const SizedBox(height: 20),
-
-            Row(
-              children: [
-                Expanded(
-                  flex: 1,
-                  child: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 12)), onPressed: () { Navigator.pop(context); widget.onCancelarAtendimento(); }, child: const Text('Cancelar\nAtendimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 2,
-                  child: FilledButton(
-                    style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: podeConfirmar ? Colors.green.shade700 : Colors.grey),
-                    onPressed: podeConfirmar ? () {
-                      if (_valorRestante > 0.01) { _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual}); }
-                      Navigator.pop(context);
-                      widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso);
-                    } : null,
-                    child: Row(mainAxisAlignment: MainAxisAlignment.center, children: const [Icon(Icons.check_circle_outline, size: 18, color: Colors.white), SizedBox(width: 6), Expanded(child: Text('Confirmar Recebimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.white), maxLines: 2))]),
-                  ),
-                ),
-              ],
             ),
           ],
         ),
