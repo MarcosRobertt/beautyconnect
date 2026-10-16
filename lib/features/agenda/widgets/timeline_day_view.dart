@@ -214,7 +214,6 @@ class TimelineDayView extends ConsumerWidget {
 
     return SingleChildScrollView(
       key: const PageStorageKey('agenda_scroll_dia_global'), 
-      // 🛡️ A MÁGICA DE UX AQUI: 120 pixels de espaço vazio no final da tela para o botão flutuar
       padding: const EdgeInsets.only(bottom: 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -272,7 +271,6 @@ class TimelineDayView extends ConsumerWidget {
                 child: SingleChildScrollView(
                   key: const PageStorageKey('agenda_scroll_dia_interno'), 
                   scrollDirection: Axis.vertical,
-                  // 🛡️️ GARANTIA DUPLA: Adicionando o respiro na rolagem interna também
                   padding: const EdgeInsets.only(bottom: 120),
                   child: GestureDetector(
                     onTapUp: (details) {
@@ -303,6 +301,7 @@ class TimelineDayView extends ConsumerWidget {
                             ],
                           ),
                         ),
+                        // 🎨 NOVO DESIGN COMPACTO DOS CARDS COMEÇA AQUI
                         ...agendamentosAtivos.map((a) {
                           final topPx = _calcularTop(a.horaInicio, horaMinima);
                           final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
@@ -311,6 +310,11 @@ class TimelineDayView extends ConsumerWidget {
                           final nomeCliente = isBloqueio ? 'Compromisso Pessoal' : (clientesPorId[a.clienteId] ?? 'Cliente removido');
                           final telefoneCliente = telefonesPorId[a.clienteId] ?? '';
                           final cor = _obterCorStatus(a.status, isBloqueio);
+
+                          // IA Visual: Se o fundo for escuro (Concluído), o texto fica branco para dar contraste
+                          final bool isDark = a.status == AgendamentoStatus.concluido && !isBloqueio;
+                          final Color corTexto = isDark ? Colors.white : Colors.black87;
+                          final Color corIcone = isDark ? Colors.white70 : Colors.black54;
 
                           return Positioned(
                             top: topPx,
@@ -326,18 +330,22 @@ class TimelineDayView extends ConsumerWidget {
                                   borderRadius: BorderRadius.circular(6),
                                   border: Border.all(color: Colors.grey.shade400, width: 1), 
                                 ),
-                                padding: const EdgeInsets.all(6),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    // LINHA 1: Horário + Ações + Status
                                     Row(
                                       crossAxisAlignment: CrossAxisAlignment.center,
                                       children: [
-                                        _buildStatusBadge(a.status, isBloqueio),
+                                        Text(
+                                          '${a.horaInicio} - ${a.horaFim}',
+                                          style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold),
+                                        ),
                                         const Spacer(),
+                                        // Mini Botões de Ação Embutidos
                                         if (!isBloqueio) ...[
-                                          
                                           if (a.status != AgendamentoStatus.concluido)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
@@ -349,18 +357,17 @@ class TimelineDayView extends ConsumerWidget {
                                                 );
                                               },
                                               child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                child: Icon(Icons.chat_bubble_outline, size: 24, color: Colors.green.shade900), 
+                                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
                                               ),
                                             ),
-
                                           if (a.status == AgendamentoStatus.agendado)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
                                               onTap: () => onConfirmar(a.id),
                                               child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                child: Icon(Icons.verified_outlined, size: 24, color: Colors.grey.shade900),
+                                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
                                               ),
                                             ),
                                           if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
@@ -368,44 +375,59 @@ class TimelineDayView extends ConsumerWidget {
                                               behavior: HitTestBehavior.opaque,
                                               onTap: () => onConcluir(a.id),
                                               child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                child: Icon(Icons.check_circle_outline, size: 24, color: Colors.grey.shade900),
+                                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
                                               ),
                                             ),
-                                            
                                           if (a.status == AgendamentoStatus.concluido)
                                             GestureDetector(
                                               behavior: HitTestBehavior.opaque,
                                               onTap: () => onReabrir(a.id),
                                               child: Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                                child: Icon(Icons.settings_backup_restore, size: 24, color: Colors.blue.shade100),
+                                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                                child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100),
                                               ),
                                             ),
+                                          const SizedBox(width: 4),
                                         ],
+                                        _buildStatusBadge(a.status, isBloqueio),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
+                                    
+                                    // LINHA 2: Ícone + Nome do Cliente (Oculta excesso automaticamente)
                                     Flexible(
-                                      child: Text(
-                                        '${a.horaInicio}–${a.horaFim}',
-                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 11, color: Colors.black87),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                                      child: Row(
+                                        children: [
+                                          Icon(isBloqueio ? Icons.lock : Icons.person, size: 12, color: corIcone),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              nomeCliente,
+                                              style: TextStyle(fontSize: 12, color: corTexto, fontWeight: FontWeight.w600),
+                                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                    Flexible(
-                                      child: Text(
-                                        a.servico,
-                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: isBloqueio ? FontWeight.bold : FontWeight.w600, color: Colors.black87),
-                                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    if (!isBloqueio)
+                                    const SizedBox(height: 2),
+                                    
+                                    // LINHA 3: Ícone + Serviço (Oculta se não houver espaço)
+                                    if (a.servico.isNotEmpty && !isBloqueio)
                                       Flexible(
-                                        child: Text(
-                                          nomeCliente,
-                                          style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, color: Colors.black87),
-                                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                                        child: Row(
+                                          children: [
+                                            Icon(Icons.back_hand, size: 11, color: corIcone),
+                                            const SizedBox(width: 4),
+                                            Expanded(
+                                              child: Text(
+                                                a.servico,
+                                                style: TextStyle(fontSize: 11, color: corTexto),
+                                                maxLines: 1, overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
                                   ],
@@ -413,8 +435,8 @@ class TimelineDayView extends ConsumerWidget {
                               ),
                             ),
                           );
-                        }).toList(),
-
+                        }),
+                        
                         if (isHoje)
                           StreamBuilder(
                             stream: Stream.periodic(const Duration(minutes: 1)),
