@@ -976,7 +976,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.purple.shade300)),
                               ),
                             ],
-                          ], // 🐛 FIX: Vírgula adicionada aqui (em vez de ; )
+                          ];
                         );
                       },
                     ),
@@ -1079,6 +1079,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   }
 }
 
+// 🎯 A INFRAESTRUTURA DE RECEBIMENTO E REGISTO DE PRODUTOS!
 class ModalFecharComandaForm extends ConsumerStatefulWidget {
   const ModalFecharComandaForm({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
   
@@ -1143,6 +1144,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
+  // 🎯 NOVO MODAL: SELECIONAR PRODUTOS UTILIZADOS COM CATEGORIAS E NOVO ÍCONE
   void _abrirModalProdutosUtilizados(List<Insumo> estoqueGlobal) {
     FocusScope.of(context).unfocus();
     final buscaInsumoController = TextEditingController();
@@ -1155,6 +1157,12 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
           builder: (modalCtx, setModalState) {
             final textoBusca = buscaInsumoController.text.trim().toLowerCase();
             final listaExibicao = textoBusca.isEmpty ? estoqueGlobal : estoqueGlobal.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
+
+            final Map<String, List<Insumo>> agrupados = {};
+            for (final item in listaExibicao) {
+              agrupados.putIfAbsent(item.categoria, () => []).add(item);
+            }
+            final categoriasOrdenadas = agrupados.keys.toList()..sort();
 
             void _toggleInsumo(Insumo item) {
               setModalState(() {
@@ -1192,17 +1200,31 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                     Expanded(
                       child: listaExibicao.isEmpty
                           ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
-                          : ListView.separated(
-                              itemCount: listaExibicao.length, separatorBuilder: (_, __) => const Divider(height: 1),
+                          : ListView.builder(
+                              itemCount: categoriasOrdenadas.length,
                               itemBuilder: (c, i) {
-                                final item = listaExibicao[i];
-                                final isSelected = _produtosUtilizados.contains(item);
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(item.nome, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? Colors.purple.shade900 : Colors.black87)),
-                                  subtitle: Text(item.categoria, style: const TextStyle(fontSize: 12)),
-                                  trailing: Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank, color: isSelected ? Colors.purple : Colors.grey),
-                                  onTap: () => _toggleInsumo(item),
+                                final cat = categoriasOrdenadas[i];
+                                final itens = agrupados[cat]!;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      color: Colors.purple.shade50,
+                                      child: Text(cat, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade900, fontSize: 12)),
+                                    ),
+                                    ...itens.map((item) {
+                                      final isSelected = _produtosUtilizados.contains(item);
+                                      return ListTile(
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                                        title: Text(item.nome, style: TextStyle(fontWeight: FontWeight.w600, color: isSelected ? Colors.purple.shade900 : Colors.black87)),
+                                        subtitle: Text('Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
+                                        trailing: Icon(isSelected ? Icons.check_box : Icons.check_box_outline_blank, color: isSelected ? Colors.purple : Colors.grey),
+                                        onTap: () => _toggleInsumo(item),
+                                      );
+                                    }).toList(),
+                                  ],
                                 );
                               }
                             )
@@ -1224,6 +1246,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     );
   }
 
+  // 🎯 O MODAL DE BAIXA DE ESTOQUE (COM PRÉ-FILTRO E CONFIRMAÇÃO)
   void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
     final TextEditingController buscaInsumoController = TextEditingController();
 
@@ -1235,7 +1258,47 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
           builder: (modalCtx, setModalState) {
             final textoBusca = buscaInsumoController.text.trim().toLowerCase();
             final disponiveis = estoqueGlobal.where((e) => !_insumosAcabaram.any((a) => a.id == e.id)).toList();
-            final listaExibicao = textoBusca.isEmpty ? disponiveis : disponiveis.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
+            
+            final listaExibicao = textoBusca.isEmpty 
+              ? disponiveis 
+              : disponiveis.where((e) => e.nome.toLowerCase().contains(textoBusca) || e.categoria.toLowerCase().contains(textoBusca)).toList();
+
+            final usadosNestaComanda = listaExibicao.where((e) => _produtosUtilizados.any((u) => u.id == e.id)).toList();
+            final outrosEstoque = listaExibicao.where((e) => !_produtosUtilizados.any((u) => u.id == e.id)).toList();
+
+            Widget buildTile(Insumo item) {
+              return ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.delete_sweep, size: 20, color: Colors.red.shade400)),
+                title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text('${item.categoria} • Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
+                trailing: FilledButton.tonal(
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (dialogCtx) => AlertDialog(
+                        title: const Text('Confirmar Baixa'),
+                        content: Text('Tem certeza que o pote de "${item.nome}" acabou?\n\nIsso descontará 1 unidade do estoque imediatamente após fechar a comanda.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                            onPressed: () {
+                              Navigator.pop(dialogCtx);
+                              setState(() => _insumosAcabaram.add(item)); 
+                              Navigator.pop(modalCtx); 
+                            },
+                            child: const Text('Sim, Acabou'),
+                          )
+                        ]
+                      )
+                    );
+                  },
+                  child: const Text('Acabou'),
+                ),
+              );
+            }
 
             return Padding(
               padding: EdgeInsets.only(bottom: MediaQuery.of(modalCtx).viewInsets.bottom),
@@ -1262,42 +1325,30 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                     Expanded(
                       child: listaExibicao.isEmpty
                           ? const Center(child: Text('Nenhum produto encontrado.', style: TextStyle(color: Colors.grey)))
-                          : ListView.separated(
-                              itemCount: listaExibicao.length, separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (c, i) {
-                                final item = listaExibicao[i];
-                                return ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)), child: Icon(Icons.delete_sweep, size: 20, color: Colors.red.shade400)),
-                                  title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('${item.categoria} • Restam: ${item.quantidade} un', style: const TextStyle(fontSize: 12)),
-                                  trailing: FilledButton.tonal(
-                                    style: FilledButton.styleFrom(backgroundColor: Colors.red.shade50, foregroundColor: Colors.red.shade800),
-                                    onPressed: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (dialogCtx) => AlertDialog(
-                                          title: const Text('Confirmar Baixa'),
-                                          content: Text('Tem certeza que o pote de "${item.nome}" acabou?\n\nIsso descontará 1 unidade do estoque imediatamente após fechar a comanda.'),
-                                          actions: [
-                                            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancelar')),
-                                            FilledButton(
-                                              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
-                                              onPressed: () {
-                                                Navigator.pop(dialogCtx);
-                                                setState(() => _insumosAcabaram.add(item)); 
-                                                Navigator.pop(ctx); 
-                                              },
-                                              child: const Text('Sim, Acabou'),
-                                            )
-                                          ]
-                                        )
-                                      );
-                                    },
-                                    child: const Text('Acabou'),
+                          : ListView(
+                              children: [
+                                if (usadosNestaComanda.isNotEmpty && textoBusca.isEmpty) ...[
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    color: Colors.orange.shade50,
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.star, size: 16, color: Colors.orange.shade800),
+                                        const SizedBox(width: 6),
+                                        Text('Utilizados nesta cliente', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900, fontSize: 12)),
+                                      ],
+                                    )
                                   ),
-                                );
-                              }
+                                  ...usadosNestaComanda.map((item) => buildTile(item)).toList(),
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    color: Colors.grey.shade100,
+                                    child: const Text('Outros Produtos do Estoque', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54, fontSize: 12)),
+                                  ),
+                                ],
+                                ...outrosEstoque.map((item) => buildTile(item)).toList(),
+                              ]
                             )
                     )
                   ]
@@ -1367,6 +1418,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
             const Text('Registro de Produtos (Opcional):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 12),
             
+            // 🎯 SECÇÃO 1: PRODUTOS UTILIZADOS
             Container(
               padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.purple.shade200)),
               child: Column(
@@ -1378,15 +1430,29 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                     Wrap(spacing: 8, runSpacing: -8, children: _produtosUtilizados.map((insumo) => Chip(label: Text(insumo.nome, style: TextStyle(fontSize: 11, color: Colors.purple.shade900)), onDeleted: () => setState(() => _produtosUtilizados.remove(insumo)), backgroundColor: Colors.white, side: BorderSide(color: Colors.purple.shade200))).toList()),
                     const SizedBox(height: 8),
                   ],
-                  estoqueAsync.when(loading: () => const LinearProgressIndicator(), error: (_, __) => const Text('Erro.'), data: (estoqueGlobal) { return OutlinedButton.icon(style: OutlinedButton.styleFrom(foregroundColor: Colors.purple.shade800, side: BorderSide(color: Colors.purple.shade200), backgroundColor: Colors.white), onPressed: () => _abrirModalProdutosUtilizados(estoqueGlobal), icon: const Icon(Icons.format_paint, size: 18), label: const Text('Selecionar Produtos Utilizados')); })
+                  estoqueAsync.when(
+                    loading: () => const LinearProgressIndicator(), 
+                    error: (_, __) => const Text('Erro.'), 
+                    data: (estoqueGlobal) { 
+                      return OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.purple.shade800, side: BorderSide(color: Colors.purple.shade200), backgroundColor: Colors.white), 
+                        onPressed: () => _abrirModalProdutosUtilizados(estoqueGlobal), 
+                        // 🎯 ÍCONE ATUALIZADO: Gota d'água/Esmalte
+                        icon: const Icon(Icons.water_drop, size: 18), 
+                        label: const Text('Selecionar Produtos Utilizados')
+                      ); 
+                    }
+                  )
                 ],
               ),
             ),
             
             const SizedBox(height: 12),
             
+            // 🎯 SECÇÃO 2: BAIXA DE ESTOQUE
             Container(
-              padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -1394,10 +1460,30 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                   const Text('Algum produto chegou ao fim neste atendimento?', style: TextStyle(fontSize: 11, color: Colors.grey)),
                   const SizedBox(height: 8),
                   if (_insumosAcabaram.isNotEmpty) ...[
-                    Wrap(spacing: 8, runSpacing: -8, children: _insumosAcabaram.map((insumo) => Chip(label: Text(insumo.nome, style: TextStyle(fontSize: 11, color: Colors.red.shade900, fontWeight: FontWeight.bold)), onDeleted: () => setState(() => _insumosAcabaram.remove(insumo)), backgroundColor: Colors.red.shade50, deleteIconColor: Colors.red.shade300, side: BorderSide(color: Colors.red.shade200))).toList()),
-                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8, runSpacing: -8,
+                      children: _insumosAcabaram.map((insumo) => Chip(
+                        label: Text(insumo.nome, style: TextStyle(fontSize: 11, color: Colors.red.shade900, fontWeight: FontWeight.bold)),
+                        onDeleted: () => setState(() => _insumosAcabaram.remove(insumo)),
+                        backgroundColor: Colors.red.shade50,
+                        deleteIconColor: Colors.red.shade300,
+                        side: BorderSide(color: Colors.red.shade200),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 12),
                   ],
-                  estoqueAsync.when(loading: () => const LinearProgressIndicator(), error: (_, __) => const Text('Erro.'), data: (estoqueGlobal) { return OutlinedButton.icon(style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade800, side: BorderSide(color: Colors.red.shade200), backgroundColor: Colors.white), onPressed: () => _abrirSeletorInsumo(estoqueGlobal), icon: const Icon(Icons.delete_sweep, size: 18), label: const Text('Registrar pote vazio (Baixa)')); })
+                  estoqueAsync.when(
+                    loading: () => const LinearProgressIndicator(),
+                    error: (_, __) => const Text('Erro ao carregar estoque.'),
+                    data: (estoqueGlobal) {
+                      return OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade800, side: BorderSide(color: Colors.red.shade200), backgroundColor: Colors.white),
+                        onPressed: () => _abrirSeletorInsumo(estoqueGlobal),
+                        icon: const Icon(Icons.delete_sweep, size: 18),
+                        label: const Text('Registrar pote vazio (Baixa)')
+                      );
+                    }
+                  )
                 ],
               ),
             ),
@@ -1408,14 +1494,19 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
 
             Row(
               children: [
-                Expanded(flex: 1, child: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 12)), onPressed: () { Navigator.pop(context); widget.onCancelarAtendimento(); }, child: const Text('Cancelar\nAtendimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)))),
+                Expanded(
+                  flex: 1,
+                  child: OutlinedButton(style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red), padding: const EdgeInsets.symmetric(vertical: 12)), onPressed: () { Navigator.pop(context); widget.onCancelarAtendimento(); }, child: const Text('Cancelar\nAtendimento', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 2,
                   child: FilledButton(
                     style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), backgroundColor: _podeConfirmar ? Colors.green.shade700 : Colors.grey),
                     onPressed: _podeConfirmar ? () {
-                      if (_valorRestante > 0.01) _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual});
+                      if (_valorRestante > 0.01) { 
+                        _pagamentos.add({'forma': _formaAtual, 'valor': _valorRestante, 'data': _dataPagamentoAtual}); 
+                      }
                       Navigator.pop(context);
                       widget.onConfirmar(_pagamentos, _valorTotal, _houveAtraso, _insumosAcabaram, _produtosUtilizados);
                     } : null,
