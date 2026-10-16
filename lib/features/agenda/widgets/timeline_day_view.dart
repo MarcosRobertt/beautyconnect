@@ -119,10 +119,10 @@ class TimelineDayView extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block, size: compact ? 10 : 10, color: Colors.grey.shade900),
+            Icon(Icons.block, size: compact ? 10 : 12, color: Colors.grey.shade900),
             if (!compact) ...[
               const SizedBox(width: 3),
-              Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
+              Text('Bloqueado', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
             ]
           ],
         ),
@@ -134,15 +134,15 @@ class TimelineDayView extends ConsumerWidget {
     final badgeColor = _getStatusBadgeColor(status);
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: 2),
+      padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 6, vertical: 3),
       decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(4)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, size: compact ? 10 : 10, color: Colors.grey.shade900),
+          Icon(statusIcon, size: compact ? 12 : 14, color: Colors.grey.shade900),
           if (!compact) ...[
             const SizedBox(width: 3),
-            Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
+            Text(statusText, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
           ]
         ],
       ),
@@ -325,7 +325,7 @@ class TimelineDayView extends ConsumerWidget {
                             top: topPx,
                             left: 4,
                             right: 4,
-                            height: heightPx > 42 ? heightPx : 42, 
+                            height: heightPx > 46 ? heightPx : 46, // Altura mínima ligeiramente aumentada para caber botões
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: () => onEditar(a.id),
@@ -338,7 +338,7 @@ class TimelineDayView extends ConsumerWidget {
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                                 child: isMuitoCurto
                                     // ==========================================
-                                    // MODO ULTRA-COMPACTO (Com as Ações Reinseridas)
+                                    // MODO ULTRA-COMPACTO
                                     // ==========================================
                                     ? Column(
                                         mainAxisSize: MainAxisSize.min,
@@ -363,31 +363,31 @@ class TimelineDayView extends ConsumerWidget {
                                               Expanded(
                                                 child: Text(a.servico, style: TextStyle(fontSize: 10, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
                                               ),
-                                              // 🎯 BOTÕES DE AÇÃO REINSERIDOS AQUI!
+                                              // 🎯 BOTÕES COM ÁREA DE TOQUE AUMENTADA
                                               if (!isBloqueio) ...[
                                                 if (a.status != AgendamentoStatus.concluido)
                                                   GestureDetector(
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
-                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900)),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Icon(Icons.chat_bubble_outline, size: 18, color: isDark ? Colors.greenAccent : Colors.green.shade900)),
                                                   ),
                                                 if (a.status == AgendamentoStatus.agendado)
                                                   GestureDetector(
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () => onConfirmar(a.id),
-                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900)),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Icon(Icons.verified_outlined, size: 18, color: isDark ? Colors.white : Colors.grey.shade900)),
                                                   ),
                                                 if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
                                                   GestureDetector(
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () => onConcluir(a.id),
-                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900)),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Icon(Icons.check_circle_outline, size: 18, color: isDark ? Colors.white : Colors.grey.shade900)),
                                                   ),
                                                 if (a.status == AgendamentoStatus.concluido)
                                                   GestureDetector(
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () => onReabrir(a.id),
-                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100)),
+                                                    child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Icon(Icons.settings_backup_restore, size: 18, color: Colors.blue.shade100)),
                                                   ),
                                               ],
                                             ],
@@ -415,8 +415,8 @@ class TimelineDayView extends ConsumerWidget {
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
                                                     child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                      child: Icon(Icons.chat_bubble_outline, size: 20, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
                                                     ),
                                                   ),
                                                 if (a.status == AgendamentoStatus.agendado)
@@ -424,8 +424,8 @@ class TimelineDayView extends ConsumerWidget {
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () => onConfirmar(a.id),
                                                     child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                      child: Icon(Icons.verified_outlined, size: 20, color: isDark ? Colors.white : Colors.grey.shade900),
                                                     ),
                                                   ),
                                                 if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
@@ -433,8 +433,8 @@ class TimelineDayView extends ConsumerWidget {
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () => onConcluir(a.id),
                                                     child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                      child: Icon(Icons.check_circle_outline, size: 20, color: isDark ? Colors.white : Colors.grey.shade900),
                                                     ),
                                                   ),
                                                 if (a.status == AgendamentoStatus.concluido)
@@ -442,8 +442,8 @@ class TimelineDayView extends ConsumerWidget {
                                                     behavior: HitTestBehavior.opaque,
                                                     onTap: () => onReabrir(a.id),
                                                     child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100),
+                                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                      child: Icon(Icons.settings_backup_restore, size: 20, color: Colors.blue.shade100),
                                                     ),
                                                   ),
                                                 const SizedBox(width: 4),
@@ -455,10 +455,10 @@ class TimelineDayView extends ConsumerWidget {
                                           Flexible(
                                             child: Row(
                                               children: [
-                                                Icon(isBloqueio ? Icons.lock : Icons.person, size: 12, color: corIcone),
+                                                Icon(isBloqueio ? Icons.lock : Icons.person, size: 14, color: corIcone),
                                                 const SizedBox(width: 4),
                                                 Expanded(
-                                                  child: Text(nomeCliente, style: TextStyle(fontSize: 12, color: corTexto, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                  child: Text(nomeCliente, style: TextStyle(fontSize: 13, color: corTexto, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
                                                 ),
                                               ],
                                             ),
@@ -468,10 +468,10 @@ class TimelineDayView extends ConsumerWidget {
                                             Flexible(
                                               child: Row(
                                                 children: [
-                                                  Icon(Icons.back_hand, size: 11, color: corIcone),
+                                                  Icon(Icons.back_hand, size: 12, color: corIcone),
                                                   const SizedBox(width: 4),
                                                   Expanded(
-                                                    child: Text(a.servico, style: TextStyle(fontSize: 11, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                    child: Text(a.servico, style: TextStyle(fontSize: 12, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
                                                   ),
                                                 ],
                                               ),
