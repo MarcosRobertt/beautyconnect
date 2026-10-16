@@ -975,8 +975,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 label: const Text('Adicionar mais serviços nesta comanda'),
                                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.purple.shade300)),
                               ),
-                            ], // 🐛 CORREÇÃO EXATA AQUI: Vírgula adicionada em vez do maldito ponto e vírgula!
-                          ];
+                            ], 
+                          ], // 🎯 FECHAMENTO CORRETO DOS COLCHETES
                         );
                       },
                     ),
@@ -1079,7 +1079,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   }
 }
 
-// 🎯 A INFRAESTRUTURA DE RECEBIMENTO E REGISTO DE PRODUTOS
 class ModalFecharComandaForm extends ConsumerStatefulWidget {
   const ModalFecharComandaForm({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
   
@@ -1144,7 +1143,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
-  // 🎯 O MODAL DE PRODUTOS COM CATEGORIAS E ÍCONE GOTA D'ÁGUA
   void _abrirModalProdutosUtilizados(List<Insumo> estoqueGlobal) {
     FocusScope.of(context).unfocus();
     final buscaInsumoController = TextEditingController();
@@ -1246,7 +1244,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     );
   }
 
-  // 🎯 O MODAL DE BAIXA DE ESTOQUE (COM SUGESTÃO DO QUE FOI USADO)
   void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
     final TextEditingController buscaInsumoController = TextEditingController();
 
