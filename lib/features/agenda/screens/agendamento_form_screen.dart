@@ -976,7 +976,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.purple.shade300)),
                               ),
                             ],
-                          ];
+                          ], // 🐛 FIX: Vírgula adicionada aqui (em vez de ; )
                         );
                       },
                     ),
