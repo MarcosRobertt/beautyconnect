@@ -448,7 +448,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     if (mounted) context.pop();
   }
 
-  // 🚀 MODAL COM BUSCA BLINDADA (Controlador nativo + layout ajustado para teclado)
   void _abrirModalAdicionarServico(List<Servico> todosServicos) {
     FocusScope.of(context).unfocus();
     final buscaModalController = TextEditingController();
@@ -671,79 +670,195 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              controller: _buscaClienteController,
-              decoration: const InputDecoration(
-                labelText: 'Cliente',
-                hintText: 'Buscar cliente por nome ou telefone...',
-                prefixIcon: Icon(Icons.search),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-
-            if (clientesFiltrados.isNotEmpty)
-              SizedBox(
-                height: 180, 
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: clientesFiltrados.length,
-                  itemBuilder: (context, index) {
-                    final cliente = clientesFiltrados[index];
-                    final selecionado = _clienteId == cliente.id;
-
-                    return ListTile(
-                      leading: selecionado ? const Icon(Icons.check_circle, color: Colors.green) : null,
-                      title: Text(cliente.nome),
-                      subtitle: Text(cliente.telefone),
-                      selected: selecionado,
-                      onTap: () {
-                        setState(() {
-                          _clienteId = cliente.id;
-                          _buscaClienteController.clear(); 
-                          FocusScope.of(context).unfocus(); 
-                        });
-                      },
-                    );
-                  },
+            if (!_editando || _clienteId == null) ...[
+              TextField(
+                controller: _buscaClienteController,
+                decoration: const InputDecoration(
+                  labelText: 'Cliente',
+                  hintText: 'Buscar cliente por nome ou telefone...',
+                  prefixIcon: Icon(Icons.search),
                 ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Column(
-                  children: [
-                    const Center(
-                      child: Text(
-                        'Nenhuma cliente encontrada.',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: TextButton.icon(
-                        onPressed: () => context.push(AppRoutes.clienteNovo),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Cadastrar nova cliente'),
-                      ),
-                    ),
-                  ],
-                ),
+                onChanged: (_) => setState(() {}),
               ),
+              const SizedBox(height: 8),
 
+              if (clientesFiltrados.isNotEmpty)
+                SizedBox(
+                  height: 180, 
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: clientesFiltrados.length,
+                    itemBuilder: (context, index) {
+                      final cliente = clientesFiltrados[index];
+                      final selecionado = _clienteId == cliente.id;
+
+                      return ListTile(
+                        leading: selecionado ? const Icon(Icons.check_circle, color: Colors.green) : null,
+                        title: Text(cliente.nome),
+                        subtitle: Text(cliente.telefone),
+                        selected: selecionado,
+                        onTap: () {
+                          setState(() {
+                            _clienteId = cliente.id;
+                            _buscaClienteController.clear(); 
+                            FocusScope.of(context).unfocus(); 
+                          });
+                        },
+                      );
+                    },
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Column(
+                    children: [
+                      const Center(
+                        child: Text(
+                          'Nenhuma cliente encontrada.',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () => context.push(AppRoutes.clienteNovo),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Cadastrar nova cliente'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+
+            // 🎯 O NOVO PAINEL DE CONTROLO DO CLIENTE (Substitui o antigo aviso verde)
             if (_clienteId != null)
               Padding(
                 padding: const EdgeInsets.only(top: 12),
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.green.withOpacity(0.1),
-                    border: Border.all(color: Colors.green),
-                    borderRadius: BorderRadius.circular(4),
+                    color: Colors.white,
+                    border: Border.all(color: Colors.blue.shade200, width: 1.5),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(color: Colors.blue.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 4))
+                    ]
                   ),
-                  child: Text(
-                    '✓ Cliente selecionada: ${clientes.firstWhere((c) => c.id == _clienteId).nome}',
-                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.blue.shade50,
+                            child: Icon(Icons.person, size: 20, color: Colors.blue.shade800),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Cliente Vinculada', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+                                Text(
+                                  clientes.firstWhere((c) => c.id == _clienteId).nome,
+                                  style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 16),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_editando && _original != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: _original!.status == AgendamentoStatus.concluido 
+                                    ? Colors.blue.shade100 
+                                    : (_original!.status == AgendamentoStatus.confirmado ? Colors.green.shade100 : Colors.grey.shade200),
+                                borderRadius: BorderRadius.circular(6)
+                              ),
+                              child: Text(
+                                _original!.status.name.toUpperCase(),
+                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
+                              )
+                            )
+                        ],
+                      ),
+                      
+                      // 🚀 AÇÕES RÁPIDAS NO CORAÇÃO DO ECRA
+                      if (_editando && !_isBloqueio && _original != null) ...[
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 16),
+                          child: Divider(height: 1),
+                        ),
+                        const Text('Ações Rápidas do Agendamento:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            ActionChip(
+                              avatar: const Icon(Icons.chat, size: 16, color: Colors.green),
+                              label: const Text('WhatsApp', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                              backgroundColor: Colors.green.shade50,
+                              side: BorderSide(color: Colors.green.shade200),
+                              onPressed: () {
+                                final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
+                                WhatsAppService.enviarConfirmacao(telefone: clienteAtual.telefone, nomeCliente: clienteAtual.nome, agendamento: _original!);
+                              }
+                            ),
+                            if (_original!.status == AgendamentoStatus.agendado)
+                              ActionChip(
+                                avatar: const Icon(Icons.verified_outlined, size: 16, color: Colors.blue),
+                                label: const Text('Confirmar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                backgroundColor: Colors.blue.shade50,
+                                side: BorderSide(color: Colors.blue.shade200),
+                                onPressed: () async {
+                                  final att = _original!.copyWith(status: AgendamentoStatus.confirmado);
+                                  await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
+                                  setState(() => _original = att);
+                                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Confirmado com sucesso!'), backgroundColor: Colors.green));
+                                }
+                              ),
+                            if (_original!.status == AgendamentoStatus.agendado || _original!.status == AgendamentoStatus.confirmado)
+                              ActionChip(
+                                avatar: const Icon(Icons.check_circle_outline, size: 16, color: Colors.indigo),
+                                label: const Text('Concluir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                backgroundColor: Colors.indigo.shade50,
+                                side: BorderSide(color: Colors.indigo.shade200),
+                                onPressed: () async {
+                                  final att = _original!.copyWith(status: AgendamentoStatus.concluido);
+                                  await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
+                                  setState(() => _original = att);
+                                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Atendimento Concluído!'), backgroundColor: Colors.indigo));
+                                }
+                              ),
+                            if (_original!.status == AgendamentoStatus.concluido)
+                              ActionChip(
+                                avatar: const Icon(Icons.settings_backup_restore, size: 16, color: Colors.orange),
+                                label: const Text('Reabrir', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                backgroundColor: Colors.orange.shade50,
+                                side: BorderSide(color: Colors.orange.shade200),
+                                onPressed: () async {
+                                  final att = _original!.copyWith(status: AgendamentoStatus.agendado);
+                                  await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
+                                  setState(() => _original = att);
+                                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comanda reaberta.'), backgroundColor: Colors.orange));
+                                }
+                              ),
+                            if (_original!.status != AgendamentoStatus.cancelado)
+                              ActionChip(
+                                avatar: const Icon(Icons.cancel_outlined, size: 16, color: Colors.red),
+                                label: const Text('Cancelar', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                backgroundColor: Colors.red.shade50,
+                                side: BorderSide(color: Colors.red.shade200),
+                                onPressed: () => _abrirModalCancelamento(context),
+                              ),
+                          ],
+                        )
+                      ]
+                    ],
                   ),
                 ),
               ),
@@ -762,40 +877,11 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     }
 
     final servicosAsync = ref.watch(servicoControllerProvider);
-    final clientesAsync = ref.watch(clienteControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_editando ? 'Editar Horário' : 'Novo Horário'),
-        actions: [
-          if (_editando && !_isBloqueio && _original != null && _clienteId != null) ...[
-            IconButton(
-              icon: const Icon(Icons.chat, color: Colors.green),
-              tooltip: 'Enviar Confirmação pelo WhatsApp',
-              onPressed: () {
-                final clientes = clientesAsync.value ?? [];
-                try {
-                  final clienteAtual = clientes.firstWhere((c) => c.id == _clienteId);
-                  WhatsAppService.enviarConfirmacao(
-                    telefone: clienteAtual.telefone,
-                    nomeCliente: clienteAtual.nome,
-                    agendamento: _original!,
-                  );
-                } catch (_) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Erro ao localizar telefone da cliente.')),
-                  );
-                }
-              },
-            ),
-            IconButton(
-              icon: const Icon(Icons.cancel_outlined, color: Colors.red),
-              tooltip: 'Cancelar Agendamento',
-              onPressed: () => _abrirModalCancelamento(context),
-            ),
-            const SizedBox(width: 8),
-          ],
-        ],
+        // 🧹 Limpamos as actions duplicadas da AppBar para não poluir o ecrã
       ),
       body: Center(
         child: ConstrainedBox(
