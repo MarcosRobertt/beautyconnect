@@ -146,7 +146,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                         String? alertaInflacao;
                         Color corDoAlerta = Colors.green;
 
-                        // Se o produto já existia e a dona do salão mudou o preço para um valor diferente
                         if (insumoExistente != null && novoPreco != precoAntigo) {
                           final fmt = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
                           final dataAtual = DateFormat('dd/MM/yyyy').format(DateTime.now());
@@ -170,17 +169,16 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                           categoria: categoriaController.text,
                           quantidade: int.tryParse(quantidadeController.text) ?? 1, 
                           estoqueMinimo: semEstoqueMinimo ? -1 : (int.tryParse(estoqueMinimoController.text) ?? 1),
-                          precoPago: novoPreco, // Salva o novo preço 
+                          precoPago: novoPreco,  
                           dataCompra: dataCompra,
                           servicosVinculados: servicosVinculados, 
                           ciclosDeUso: insumoExistente?.ciclosDeUso ?? [], 
-                          historicoPrecos: historicoAuditoria, // ☁️ Envia o dossiê de auditoria para o Firebase
+                          historicoPrecos: historicoAuditoria, 
                         );
 
                         ref.read(estoqueControllerProvider.notifier).salvar(novoInsumo);
                         Navigator.pop(context);
 
-                        // 🔔 LANÇA O AVISO NA TELA DA USUÁRIA
                         if (alertaInflacao != null) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                             content: Text(alertaInflacao, style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -378,7 +376,33 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                         children: [
                           InkWell(onTap: () => _abrirModalInsumo(context, item), child: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey)),
                           const SizedBox(width: 12),
-                          InkWell(onTap: () => ref.read(estoqueControllerProvider.notifier).deletar(item.id), child: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300)),
+                          InkWell(
+                            onTap: () {
+                              showDialog(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Excluir Produto?'),
+                                  content: Text('Tem certeza que deseja excluir "${item.nome}" do estoque?\nEsta ação não poderá ser desfeita.'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    FilledButton(
+                                      style: FilledButton.styleFrom(backgroundColor: Colors.red.shade700),
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        ref.read(estoqueControllerProvider.notifier).deletar(item.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Produto excluído com sucesso!'), backgroundColor: Colors.red));
+                                      },
+                                      child: const Text('Sim, Excluir'),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                            child: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300)
+                          ),
                         ],
                       ),
                     ),
@@ -490,3 +514,4 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 }
+```<FollowUp> <ElicitationsGroup>
