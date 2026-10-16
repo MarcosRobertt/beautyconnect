@@ -975,7 +975,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 label: const Text('Adicionar mais serviços nesta comanda'),
                                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.purple.shade300)),
                               ),
-                            ],
+                            ], // 🐛 CORREÇÃO EXATA AQUI: Vírgula adicionada em vez do maldito ponto e vírgula!
                           ];
                         );
                       },
@@ -1079,7 +1079,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
   }
 }
 
-// 🎯 A INFRAESTRUTURA DE RECEBIMENTO E REGISTO DE PRODUTOS!
+// 🎯 A INFRAESTRUTURA DE RECEBIMENTO E REGISTO DE PRODUTOS
 class ModalFecharComandaForm extends ConsumerStatefulWidget {
   const ModalFecharComandaForm({super.key, required this.agendamento, required this.nomeCliente, required this.onConfirmar, required this.onCancelarAtendimento});
   
@@ -1144,7 +1144,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     setState(() { _pagamentos.removeAt(index); _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); });
   }
 
-  // 🎯 NOVO MODAL: SELECIONAR PRODUTOS UTILIZADOS COM CATEGORIAS E NOVO ÍCONE
+  // 🎯 O MODAL DE PRODUTOS COM CATEGORIAS E ÍCONE GOTA D'ÁGUA
   void _abrirModalProdutosUtilizados(List<Insumo> estoqueGlobal) {
     FocusScope.of(context).unfocus();
     final buscaInsumoController = TextEditingController();
@@ -1246,7 +1246,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
     );
   }
 
-  // 🎯 O MODAL DE BAIXA DE ESTOQUE (COM PRÉ-FILTRO E CONFIRMAÇÃO)
+  // 🎯 O MODAL DE BAIXA DE ESTOQUE (COM SUGESTÃO DO QUE FOI USADO)
   void _abrirSeletorInsumo(List<Insumo> estoqueGlobal) {
     final TextEditingController buscaInsumoController = TextEditingController();
 
@@ -1418,7 +1418,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
             const Text('Registro de Produtos (Opcional):', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             const SizedBox(height: 12),
             
-            // 🎯 SECÇÃO 1: PRODUTOS UTILIZADOS
             Container(
               padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.purple.shade200)),
               child: Column(
@@ -1437,7 +1436,6 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
                       return OutlinedButton.icon(
                         style: OutlinedButton.styleFrom(foregroundColor: Colors.purple.shade800, side: BorderSide(color: Colors.purple.shade200), backgroundColor: Colors.white), 
                         onPressed: () => _abrirModalProdutosUtilizados(estoqueGlobal), 
-                        // 🎯 ÍCONE ATUALIZADO: Gota d'água/Esmalte
                         icon: const Icon(Icons.water_drop, size: 18), 
                         label: const Text('Selecionar Produtos Utilizados')
                       ); 
@@ -1449,10 +1447,8 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
             
             const SizedBox(height: 12),
             
-            // 🎯 SECÇÃO 2: BAIXA DE ESTOQUE
             Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+              padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
