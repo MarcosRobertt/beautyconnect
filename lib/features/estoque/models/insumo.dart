@@ -32,8 +32,6 @@ class Insumo {
   final DateTime dataCompra;
   final List<String> servicosVinculados;
   final List<CicloDeUso> ciclosDeUso;
-  
-  // 🧠 NOVO: A gaveta que vai guardar a inflação (inicia vazia para não quebrar o passado)
   final List<String> historicoPrecos; 
 
   Insumo({
@@ -52,6 +50,33 @@ class Insumo {
   bool get emAlerta => quantidade <= estoqueMinimo;
   bool get temPoteAberto => ciclosDeUso.any((c) => c.dataFim == null);
 
+  // 🎯 O MÉTODO SALVADOR: copyWith injetado para permitir edições sem quebrar o objeto
+  Insumo copyWith({
+    String? id,
+    String? nome,
+    String? categoria,
+    int? quantidade,
+    int? estoqueMinimo,
+    double? precoPago,
+    DateTime? dataCompra,
+    List<String>? servicosVinculados,
+    List<CicloDeUso>? ciclosDeUso,
+    List<String>? historicoPrecos,
+  }) {
+    return Insumo(
+      id: id ?? this.id,
+      nome: nome ?? this.nome,
+      categoria: categoria ?? this.categoria,
+      quantidade: quantidade ?? this.quantidade,
+      estoqueMinimo: estoqueMinimo ?? this.estoqueMinimo,
+      precoPago: precoPago ?? this.precoPago,
+      dataCompra: dataCompra ?? this.dataCompra,
+      servicosVinculados: servicosVinculados ?? this.servicosVinculados,
+      ciclosDeUso: ciclosDeUso ?? this.ciclosDeUso,
+      historicoPrecos: historicoPrecos ?? this.historicoPrecos,
+    );
+  }
+
   factory Insumo.fromMap(Map<String, dynamic> map) {
     return Insumo(
       id: map['id'] ?? '',
@@ -63,7 +88,7 @@ class Insumo {
       dataCompra: map['dataCompra'] is Timestamp ? (map['dataCompra'] as Timestamp).toDate() : (map['dataCompra'] != null ? DateTime.parse(map['dataCompra']) : DateTime.now()),
       servicosVinculados: List<String>.from(map['servicosVinculados'] ?? []),
       ciclosDeUso: (map['ciclosDeUso'] as List<dynamic>? ?? []).map((c) => CicloDeUso.fromMap(c)).toList(),
-      historicoPrecos: List<String>.from(map['historicoPrecos'] ?? []), // 🛡️ Proteção de leitura
+      historicoPrecos: List<String>.from(map['historicoPrecos'] ?? []), 
     );
   }
 
@@ -77,6 +102,6 @@ class Insumo {
     'dataCompra': dataCompra.toIso8601String(),
     'servicosVinculados': servicosVinculados,
     'ciclosDeUso': ciclosDeUso.map((c) => c.toMap()).toList(),
-    'historicoPrecos': historicoPrecos, // ☁️ Gravação na Nuvem
+    'historicoPrecos': historicoPrecos, 
   };
 }
