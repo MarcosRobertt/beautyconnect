@@ -81,8 +81,9 @@ class TimelineDayView extends ConsumerWidget {
   final Function(String id) onCancelar;
   final Function(String id) onReabrir; 
 
-  static const double _pixelsPorMinuto = 2.0;
-  static const double _larguraHorarios = 50.0; // Levemente reduzido para ganhar espaço
+  // 🎯 OTIMIZAÇÃO: Reduzido de 2.0 para 1.6. Os "buracos" vazios da agenda ficam 20% menores!
+  static const double _pixelsPorMinuto = 1.6;
+  static const double _larguraHorarios = 50.0;
 
   int _horaParaMinutos(String hhmm) {
     final partes = hhmm.split(':');
@@ -102,23 +103,15 @@ class TimelineDayView extends ConsumerWidget {
   }
 
   Color _obterCorStatus(AgendamentoStatus status, bool isBloqueio) {
-    if (isBloqueio) {
-      return Colors.grey.shade300;
-    }
-
+    if (isBloqueio) return Colors.grey.shade300;
     switch (status) {
-      case AgendamentoStatus.agendado:
-        return Colors.blue.shade300;
-      case AgendamentoStatus.confirmado:
-        return Colors.green.shade300;
-      case AgendamentoStatus.concluido:
-        return Colors.blue.shade800; 
-      case AgendamentoStatus.cancelado:
-        return Colors.red.shade300;
+      case AgendamentoStatus.agendado: return Colors.blue.shade400;
+      case AgendamentoStatus.confirmado: return Colors.green.shade400;
+      case AgendamentoStatus.concluido: return Colors.blue.shade900; 
+      case AgendamentoStatus.cancelado: return Colors.red.shade300;
     }
   }
 
-  // 🎯 Adicionado parâmetro 'compact' para não esmagar textos em agendas curtas
   Widget _buildStatusBadge(AgendamentoStatus status, bool isBloqueio, {bool compact = false}) {
     if (isBloqueio) {
       return Container(
@@ -127,7 +120,7 @@ class TimelineDayView extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.block, size: compact ? 12 : 10, color: Colors.grey.shade900),
+            Icon(Icons.block, size: compact ? 10 : 10, color: Colors.grey.shade900),
             if (!compact) ...[
               const SizedBox(width: 3),
               Text('Bloqueado', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
@@ -147,7 +140,7 @@ class TimelineDayView extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(statusIcon, size: compact ? 12 : 10, color: Colors.grey.shade900),
+          Icon(statusIcon, size: compact ? 10 : 10, color: Colors.grey.shade900),
           if (!compact) ...[
             const SizedBox(width: 3),
             Text(statusText, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade900)),
@@ -177,8 +170,8 @@ class TimelineDayView extends ConsumerWidget {
 
   Color _getStatusBadgeColor(AgendamentoStatus status) {
     switch (status) {
-      case AgendamentoStatus.agendado: return Colors.blue.shade100;
-      case AgendamentoStatus.confirmado: return Colors.green.shade100;
+      case AgendamentoStatus.agendado: return Colors.blue.shade50;
+      case AgendamentoStatus.confirmado: return Colors.green.shade50;
       case AgendamentoStatus.concluido: return Colors.blue.shade100;
       case AgendamentoStatus.cancelado: return Colors.red.shade100;
     }
@@ -217,6 +210,16 @@ class TimelineDayView extends ConsumerWidget {
 
     final nomeFeriado = FeriadosHelper.verificarFeriado(dataReferencia);
 
+    // 🎯 LÓGICA DE LIMPEZA: Oculta o :30 e calcula as horas exatas para desenhar
+    Set<String> horariosExibir = {};
+    for (int h = horaMinima; h <= horaMaxima; h++) {
+      horariosExibir.add('${h.toString().padLeft(2, '0')}:00');
+    }
+    for (final a in agendamentosAtivos) {
+      if (!a.horaInicio.endsWith(':00')) horariosExibir.add(a.horaInicio);
+      if (!a.horaFim.endsWith(':00')) horariosExibir.add(a.horaFim);
+    }
+
     return SingleChildScrollView(
       key: const PageStorageKey('agenda_scroll_dia_global'), 
       padding: const EdgeInsets.only(bottom: 120),
@@ -227,11 +230,7 @@ class TimelineDayView extends ConsumerWidget {
             Container(
               margin: const EdgeInsets.only(bottom: 16),
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade300),
-              ),
+              decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.orange.shade300)),
               child: Row(
                 children: [
                   Icon(Icons.park, color: Colors.orange.shade800),
@@ -253,71 +252,66 @@ class TimelineDayView extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // COLUNA ESQUERDA: Horários Limpos
               SizedBox(
                 width: _larguraHorarios,
-                child: Column(
-                  children: [
-                    for (int h = horaMinima; h <= horaMaxima; h++)
-                      for (int m = 0; m < 60; m += 30) ...[
-                        // 🎯 LÓGICA DE LIMPEZA VISUAL (Hora a Hora)
-                        Builder(
-                          builder: (context) {
-                            bool showLabel = true;
-                            if (m == 30) {
-                              final timeStr = '${h.toString().padLeft(2, '0')}:30';
-                              // Só exibe o "14:30" se alguma comanda do dia esbarrar nele
-                              showLabel = agendamentosAtivos.any((a) => a.horaInicio == timeStr || a.horaFim == timeStr);
-                            }
-                            return SizedBox(
-                              height: 30 * _pixelsPorMinuto,
-                              child: Align(
-                                alignment: Alignment.topLeft,
-                                child: showLabel ? Text(
-                                  '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}',
-                                  style: Theme.of(context).textTheme.labelSmall,
-                                ) : const SizedBox.shrink(), // Oculta o texto se não for necessário
-                              ),
-                            );
-                          }
+                height: alturaTotal,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: horariosExibir.map((timeStr) {
+                    final topPx = _calcularTop(timeStr, horaMinima);
+                    final isHoraCheia = timeStr.endsWith(':00');
+                    return Positioned(
+                      top: topPx - 7, // Centraliza perfeitamente na linha
+                      left: 0,
+                      right: 8,
+                      child: Text(
+                        timeStr,
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: isHoraCheia ? 11 : 9,
+                          fontWeight: isHoraCheia ? FontWeight.bold : FontWeight.w600,
+                          color: isHoraCheia ? Colors.black87 : Colors.grey.shade500,
                         ),
-                      ]
-                  ],
+                      ),
+                    );
+                  }).toList(),
                 ),
               ),
+              
+              // COLUNA DIREITA: Grade e Cartões
               Expanded(
-                child: SingleChildScrollView(
-                  key: const PageStorageKey('agenda_scroll_dia_interno'), 
-                  scrollDirection: Axis.vertical,
-                  padding: const EdgeInsets.only(bottom: 120),
-                  child: GestureDetector(
-                    onTapUp: (details) {
-                      final yRelativa = details.localPosition.dy;
-                      final minutosDesdeInicio = (yRelativa / _pixelsPorMinuto).toInt();
-                      final minutosAbsolutos = (horaMinima * 60) + minutosDesdeInicio;
-                      final horas = minutosAbsolutos ~/ 60;
-                      final minutos = minutosAbsolutos % 60;
-                      final minutosArredondados = (minutos ~/ 30) * 30;
-                      final horaClicada = '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
-                      onNovoAgendamento(horaClicada);
-                    },
+                child: GestureDetector(
+                  onTapUp: (details) {
+                    final yRelativa = details.localPosition.dy;
+                    final minutosDesdeInicio = (yRelativa / _pixelsPorMinuto).toInt();
+                    final minutosAbsolutos = (horaMinima * 60) + minutosDesdeInicio;
+                    final horas = minutosAbsolutos ~/ 60;
+                    final minutos = minutosAbsolutos % 60;
+                    final minutosArredondados = (minutos ~/ 30) * 30;
+                    final horaClicada = '${horas.toString().padLeft(2, '0')}:${minutosArredondados.toString().padLeft(2, '0')}';
+                    onNovoAgendamento(horaClicada);
+                  },
+                  child: Container(
+                    height: alturaTotal,
+                    color: Colors.transparent,
                     child: Stack(
+                      clipBehavior: Clip.none,
                       children: [
-                        Container(
-                          width: double.infinity,
-                          height: alturaTotal,
-                          color: Colors.transparent,
-                          child: Column(
-                            children: [
-                              for (int i = 0; i < horasVisiveis * 2; i++)
-                                Container(
-                                  height: 30 * _pixelsPorMinuto,
-                                  decoration: BoxDecoration(
-                                    border: Border(bottom: BorderSide(color: Colors.grey.shade200, width: 0.5)),
-                                  ),
+                        // GRADE DE FUNDO: Apenas 1 linha por Hora! Sem marcações de :30 no meio.
+                        Column(
+                          children: [
+                            for (int i = 0; i < horasVisiveis; i++)
+                              Container(
+                                height: 60 * _pixelsPorMinuto,
+                                decoration: BoxDecoration(
+                                  border: Border(top: BorderSide(color: Colors.grey.shade200, width: 0.5)),
                                 ),
-                            ],
-                          ),
+                              ),
+                          ],
                         ),
+
+                        // CARTÕES DE AGENDAMENTO
                         ...agendamentosAtivos.map((a) {
                           final topPx = _calcularTop(a.horaInicio, horaMinima);
                           final heightPx = _calcularAltura(a.horaInicio, a.horaFim);
@@ -331,15 +325,15 @@ class TimelineDayView extends ConsumerWidget {
                           final Color corTexto = isDark ? Colors.white : Colors.black87;
                           final Color corIcone = isDark ? Colors.white70 : Colors.black54;
 
-                          // 🎯 A MÁGICA: Se o procedimento tiver menos de ~28 mins, ele adota o layout Ultra Compacto
+                          // 🎯 MODO ULTRA-COMPACTO: Ativa se o card for menor que ~40 minutos
                           final bool isMuitoCurto = heightPx < 55;
 
                           return Positioned(
                             top: topPx,
                             left: 4,
                             right: 4,
-                            // Garante que pelo menos 46px existam para caber as duas linhas do modo ultra compacto
-                            height: heightPx > 46 ? heightPx : 46,
+                            // Garante altura mínima para não quebrar o Flutter, mesmo sendo um slot de 10 min
+                            height: heightPx > 42 ? heightPx : 42, 
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: () => onEditar(a.id),
@@ -352,7 +346,7 @@ class TimelineDayView extends ConsumerWidget {
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                                 child: isMuitoCurto
                                     // ==========================================
-                                    // 2 LINHAS: MODO ULTRA-COMPACTO (< 30 min)
+                                    // MODO ULTRA-COMPACTO: Limpa os ícones para dar espaço aos nomes
                                     // ==========================================
                                     ? Column(
                                         mainAxisSize: MainAxisSize.min,
@@ -361,9 +355,9 @@ class TimelineDayView extends ConsumerWidget {
                                           Row(
                                             children: [
                                               Text('${a.horaInicio}-${a.horaFim}', style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold)),
-                                              const SizedBox(width: 4),
+                                              const SizedBox(width: 6),
                                               Expanded(
-                                                child: Text(nomeCliente, style: TextStyle(fontSize: 11, color: corTexto, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                                child: Text(nomeCliente, style: TextStyle(fontSize: 11, color: corTexto, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
                                               ),
                                               const SizedBox(width: 4),
                                               _buildStatusBadge(a.status, isBloqueio, compact: true),
@@ -373,11 +367,29 @@ class TimelineDayView extends ConsumerWidget {
                                           Row(
                                             children: [
                                               Icon(isBloqueio ? Icons.lock : Icons.back_hand, size: 10, color: corIcone),
-                                              const SizedBox(width: 2),
+                                              const SizedBox(width: 4),
                                               Expanded(
                                                 child: Text(a.servico, style: TextStyle(fontSize: 10, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
                                               ),
-                                              // Ações continuam disponíveis na segunda linha
+                                            ],
+                                          ),
+                                        ],
+                                      )
+                                    // ==========================================
+                                    // MODO NORMAL (Procedimentos Longos)
+                                    // ==========================================
+                                    : Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            crossAxisAlignment: CrossAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                '${a.horaInicio} - ${a.horaFim}',
+                                                style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold),
+                                              ),
+                                              const Spacer(),
                                               if (!isBloqueio) ...[
                                                 if (a.status != AgendamentoStatus.concluido)
                                                   GestureDetector(
@@ -403,63 +415,6 @@ class TimelineDayView extends ConsumerWidget {
                                                     onTap: () => onReabrir(a.id),
                                                     child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100)),
                                                   ),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
-                                      )
-                                    // ==========================================
-                                    // 3 LINHAS: MODO NORMAL COMPACTO (>= 30 min)
-                                    // ==========================================
-                                    : Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment: CrossAxisAlignment.center,
-                                            children: [
-                                              Text(
-                                                '${a.horaInicio} - ${a.horaFim}',
-                                                style: TextStyle(fontSize: 10, color: corTexto, fontWeight: FontWeight.bold),
-                                              ),
-                                              const Spacer(),
-                                              if (!isBloqueio) ...[
-                                                if (a.status != AgendamentoStatus.concluido)
-                                                  GestureDetector(
-                                                    behavior: HitTestBehavior.opaque,
-                                                    onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.chat_bubble_outline, size: 14, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
-                                                    ),
-                                                  ),
-                                                if (a.status == AgendamentoStatus.agendado)
-                                                  GestureDetector(
-                                                    behavior: HitTestBehavior.opaque,
-                                                    onTap: () => onConfirmar(a.id),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.verified_outlined, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
-                                                    ),
-                                                  ),
-                                                if (a.status == AgendamentoStatus.agendado || a.status == AgendamentoStatus.confirmado)
-                                                  GestureDetector(
-                                                    behavior: HitTestBehavior.opaque,
-                                                    onTap: () => onConcluir(a.id),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.check_circle_outline, size: 14, color: isDark ? Colors.white : Colors.grey.shade900),
-                                                    ),
-                                                  ),
-                                                if (a.status == AgendamentoStatus.concluido)
-                                                  GestureDetector(
-                                                    behavior: HitTestBehavior.opaque,
-                                                    onTap: () => onReabrir(a.id),
-                                                    child: Padding(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                                                      child: Icon(Icons.settings_backup_restore, size: 14, color: Colors.blue.shade100),
-                                                    ),
-                                                  ),
                                                 const SizedBox(width: 4),
                                               ],
                                               _buildStatusBadge(a.status, isBloqueio),
@@ -472,11 +427,7 @@ class TimelineDayView extends ConsumerWidget {
                                                 Icon(isBloqueio ? Icons.lock : Icons.person, size: 12, color: corIcone),
                                                 const SizedBox(width: 4),
                                                 Expanded(
-                                                  child: Text(
-                                                    nomeCliente,
-                                                    style: TextStyle(fontSize: 12, color: corTexto, fontWeight: FontWeight.w600),
-                                                    maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                  ),
+                                                  child: Text(nomeCliente, style: TextStyle(fontSize: 12, color: corTexto, fontWeight: FontWeight.w700), maxLines: 1, overflow: TextOverflow.ellipsis),
                                                 ),
                                               ],
                                             ),
@@ -489,11 +440,7 @@ class TimelineDayView extends ConsumerWidget {
                                                   Icon(Icons.back_hand, size: 11, color: corIcone),
                                                   const SizedBox(width: 4),
                                                   Expanded(
-                                                    child: Text(
-                                                      a.servico,
-                                                      style: TextStyle(fontSize: 11, color: corTexto),
-                                                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                                                    ),
+                                                    child: Text(a.servico, style: TextStyle(fontSize: 11, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
                                                   ),
                                                 ],
                                               ),
@@ -505,6 +452,7 @@ class TimelineDayView extends ConsumerWidget {
                           );
                         }),
                         
+                        // LINHA DO TEMPO ATUAL (Ponteiro Vermelho)
                         if (isHoje)
                           StreamBuilder(
                             stream: Stream.periodic(const Duration(minutes: 1)),
@@ -512,32 +460,16 @@ class TimelineDayView extends ConsumerWidget {
                               final tempoAtual = DateTime.now();
                               final minutosAtual = tempoAtual.hour * 60 + tempoAtual.minute;
                               
-                              if (minutosAtual < horaMinima * 60 || minutosAtual > (horaMaxima + 1) * 60) {
-                                return const SizedBox.shrink();
-                              }
+                              if (minutosAtual < horaMinima * 60 || minutosAtual > (horaMaxima + 1) * 60) return const SizedBox.shrink();
                               
                               final topPxAtual = (minutosAtual - (horaMinima * 60)) * _pixelsPorMinuto;
-                              
                               return Positioned(
                                 top: topPxAtual - 4,
-                                left: 0,
-                                right: 0,
+                                left: 0, right: 0,
                                 child: Row(
                                   children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Container(
-                                        height: 1.5,
-                                        color: Colors.red,
-                                      ),
-                                    ),
+                                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle)),
+                                    Expanded(child: Container(height: 1.5, color: Colors.red)),
                                   ],
                                 ),
                               );
