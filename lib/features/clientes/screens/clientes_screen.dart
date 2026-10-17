@@ -7,7 +7,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/constants/app_constants.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
-import '../../../core/services/whatsapp_service.dart'; // 🎯 Importação do WhatsApp Service
+// 🎯 CORREÇÃO: Apontando para a pasta "storage" correta onde está o seu ficheiro!
+import '../../../core/services/storage/whatsapp_service.dart'; 
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -26,7 +27,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   String _filtroTodos = 'todos'; 
   String _filtroRetencao = 'todos_risco'; 
 
-  // 🎯 MAPAS DE MEMÓRIA (Matemática Dinâmica por Período)
+  // MAPAS DE MEMÓRIA (Matemática Dinâmica por Período)
   List<String> _clientesComAgendamentoPendente = [];
   
   Map<String, int> _visitasSempre = {};
@@ -52,7 +53,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
-  // 🎯 MOTOR DE MÉTRICAS OTIMIZADO: Separa o faturamento por datas!
   Future<void> _carregarMetricasAgendamentos() async {
     try {
       final snap = await FirebaseFirestore.instance.collection('agendamentos')
@@ -86,24 +86,19 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           try { dataAgendamento = DateTime.parse(dataStr); } catch (_) {}
         }
 
-        // Alimenta a Trava de Retenção
         if (status == 'pendente' || status == 'confirmado') {
           setPendentes.add(cId);
         }
         
-        // Alimenta o Ranking VIP (Somente grana no bolso ou garantida)
         if (status == 'confirmado' || status == 'concluido') {
-          // Histórico Completo
           vSempre[cId] = (vSempre[cId] ?? 0) + 1;
           gSempre[cId] = (gSempre[cId] ?? 0.0) + valor;
 
-          // Ano Atual
           if (dataAgendamento.isAfter(inicioAnoAtual) || dataAgendamento.isAtSameMomentAs(inicioAnoAtual)) {
             vAnoAtual[cId] = (vAnoAtual[cId] ?? 0) + 1;
             gAnoAtual[cId] = (gAnoAtual[cId] ?? 0.0) + valor;
           }
 
-          // Últimos 6 Meses
           if (dataAgendamento.isAfter(inicio6Meses) || dataAgendamento.isAtSameMomentAs(inicio6Meses)) {
             v6Meses[cId] = (v6Meses[cId] ?? 0) + 1;
             g6Meses[cId] = (g6Meses[cId] ?? 0.0) + valor;
@@ -155,7 +150,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         data: (todosClientes) {
           final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
-          // 🎯 LÓGICA DO NOVO PÓDIO VIP (Por Período)
           Map<String, int> mapaVisitasAtivo;
           Map<String, double> mapaGastosAtivo;
 
@@ -172,7 +166,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
           final topClientes = List<Cliente>.from(todosClientes.where((c) {
             final v = mapaVisitasAtivo[c.id] ?? 0;
-            return v > 0; // Só aparece se tiver visita confirmada/concluída NO PERÍODO SELECIONADO
+            return v > 0; 
           }));
 
           if (_filtroTop == 'faturamento') {
@@ -189,7 +183,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             });
           }
 
-          // FUNIL DE RETENÇÃO
           final clientesEmRisco = <Cliente>[];
           for (var c in todosClientes) {
             final dataRef = c.ultimaVisita ?? c.createdAt;
@@ -219,9 +212,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // ABA 1: TODOS
-  // =========================================================================
   Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
     List<Cliente> filtradosPorChip = listaBase;
     if (_filtroTodos == 'recentes') {
@@ -289,16 +279,12 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // 🎯 ABA 3: TOP CLIENTES (COM FILTROS TEMPORAIS)
-  // =========================================================================
   Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda, Map<String, int> mapaVisitas, Map<String, double> mapaGastos) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // FILTRO 1: O QUE AVALIAR (Faturamento vs Frequência)
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -322,7 +308,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           ),
           const SizedBox(height: 12),
           
-          // FILTRO 2: PERÍODO DE TEMPO
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -429,9 +414,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // ABA 2: RETENÇÃO
-  // =========================================================================
   Widget _construirAbaRetencao(List<Cliente> listaBase) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
@@ -617,7 +599,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                     icon: const Icon(Icons.chat, size: 16),
                     label: const Text('WhatsApp'),
                     onPressed: () {
-                      // 🎯 MENU DE ESCOLHA DAS MENSAGENS DE RETENÇÃO
                       showModalBottomSheet(
                         context: context,
                         backgroundColor: Colors.white,
@@ -684,9 +665,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // =========================================================================
-  // WIDGET LISTVIEW REUTILIZÁVEL (Apenas Aba Todos)
-  // =========================================================================
   Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool mostrarMetricas = true}) {
     return ListView.separated(
       itemCount: lista.length,
