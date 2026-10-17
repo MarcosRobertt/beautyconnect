@@ -450,7 +450,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                         taxasSalvar[forma] = t;
                       }
 
-                      // ⚡ ACIONA O CÉREBRO PASSANDO O RASCUNHO!
+                      // ⚡ ACIONA O CÉREBRO PASSANDO OS 3 PARÂMETROS!
                       await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
                       
                       if (context.mounted) {
