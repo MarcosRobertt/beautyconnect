@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/constants/app_constants.dart';
 import '../controllers/cliente_controller.dart';
 import '../models/cliente.dart';
+import '../../../core/services/whatsapp_service.dart'; // 🎯 Importação do WhatsApp Service
 
 class ClientesScreen extends ConsumerStatefulWidget {
   const ClientesScreen({super.key});
@@ -21,7 +22,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
   // Filtros de Estado
   String _filtroTop = 'faturamento';
-  String _filtroTempoTop = 'sempre'; // 🎯 NOVO: 'sempre', '6_meses', 'ano_atual'
+  String _filtroTempoTop = 'sempre'; 
   String _filtroTodos = 'todos'; 
   String _filtroRetencao = 'todos_risco'; 
 
@@ -210,7 +211,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             children: [
               _construirAbaTodos(todosClientes, moeda),
               _construirAbaRetencao(clientesEmRisco), 
-              _construirAbaTopClientes(topClientes, moeda, mapaVisitasAtivo, mapaGastosAtivo), // Passa os mapas corretos
+              _construirAbaTopClientes(topClientes, moeda, mapaVisitasAtivo, mapaGastosAtivo), 
             ],
           );
         },
@@ -321,7 +322,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           ),
           const SizedBox(height: 12),
           
-          // 🎯 FILTRO 2: PERÍODO DE TEMPO
+          // FILTRO 2: PERÍODO DE TEMPO
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -360,7 +361,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                       final cliente = listaTop[index];
                       final rank = index + 1;
                       
-                      // Usa a Matemática do Período Selecionado
                       final gasto = mapaGastos[cliente.id] ?? 0.0;
                       final visitas = mapaVisitas[cliente.id] ?? 0;
 
@@ -617,7 +617,53 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                     icon: const Icon(Icons.chat, size: 16),
                     label: const Text('WhatsApp'),
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Abrir WhatsApp para ${cliente.telefone}'), backgroundColor: Colors.green));
+                      // 🎯 MENU DE ESCOLHA DAS MENSAGENS DE RETENÇÃO
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                        builder: (ctx) => SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Text('Escolha a abordagem para enviar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                const SizedBox(height: 16),
+                                ListTile(
+                                  leading: const CircleAvatar(backgroundColor: Colors.pinkAccent, child: Icon(Icons.favorite, color: Colors.white, size: 20)),
+                                  title: const Text('Abordagem: Saudade', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: const Text('Diga que sentiu a falta dela no Studio.'),
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    WhatsAppService.enviarRetencao(telefone: cliente.telefone, nomeCliente: cliente.nome, diasAusente: dias, variante: 1);
+                                  },
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const CircleAvatar(backgroundColor: Colors.orange, child: Icon(Icons.card_giftcard, color: Colors.white, size: 20)),
+                                  title: const Text('Abordagem: Novidades', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: const Text('Atraia com uma promoção ou novidade.'),
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    WhatsAppService.enviarRetencao(telefone: cliente.telefone, nomeCliente: cliente.nome, diasAusente: dias, variante: 2);
+                                  },
+                                ),
+                                const Divider(height: 1),
+                                ListTile(
+                                  leading: const CircleAvatar(backgroundColor: Colors.blue, child: Icon(Icons.help_outline, color: Colors.white, size: 20)),
+                                  title: const Text('Abordagem: Feedback', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  subtitle: const Text('Pergunte carinhosamente o motivo da ausência.'),
+                                  onTap: () {
+                                    Navigator.pop(ctx);
+                                    WhatsAppService.enviarRetencao(telefone: cliente.telefone, nomeCliente: cliente.nome, diasAusente: dias, variante: 3);
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
                     },
                   ),
                 ),
