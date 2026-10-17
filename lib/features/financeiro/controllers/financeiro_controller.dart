@@ -24,7 +24,7 @@ class FinanceiroState {
   final int anoReferencia;
   final List<double> faturamentoAnual;
 
-  // 🎯 NOVOS CAMPOS PARA A CONCILIAÇÃO BANCÁRIA
+  // 🎯 CAMPOS PARA A CONCILIAÇÃO BANCÁRIA
   final Map<String, double> conciliacaoReais;
   final Map<String, double> conciliacaoTaxas;
 
@@ -51,7 +51,6 @@ class FinanceiroState {
     this.conciliacaoTaxas = const {},
   });
 
-  // 🛡️ MÁGICA: O Lucro agora desconta as Despesas (Luz, Água) E o CMV (Custo dos Produtos)
   double get lucro => receitas - despesas - cmv;
   double get lucroMesAnterior => receitasMesAnterior - despesasMesAnterior - cmvMesAnterior;
 
@@ -67,7 +66,6 @@ class FinanceiroState {
   double get variacaoReceitaAno => _calcVariacao(receitas, receitasAnoAnterior);
   double get variacaoDespesaAno => _calcVariacao(despesas, despesasAnoAnterior);
 
-  // 🎯 O Método copyWith permite atualizar a conciliação na tela sem recarregar tudo do banco!
   FinanceiroState copyWith({
     Map<String, double>? conciliacaoReais,
     Map<String, double>? conciliacaoTaxas,
@@ -131,7 +129,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   Future<Map<String, double>> _buscarTotaisPeriodo(DateTime inicio, DateTime fim, GetOptions options) async {
     double recServicos = 0; double des = 0; double recProdutos = 0; double cmvPeriodo = 0;
     
-    // Dispara consultas em paralelo para máxima velocidade! ⚡
     final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
@@ -169,19 +166,16 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     };
   }
 
-  // 🎯 O NOVO MOTOR DE GRAVAÇÃO DA CONCILIAÇÃO
   Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas) async {
     try {
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
       
-      // Guarda no banco de forma independente para não pesar a leitura diária!
       await _db.collection('conciliacoes_mensais').doc(mesAnoStr).set({
         'reais': valoresReais,
         'taxas': taxasInformadas,
         'ultimaAtualizacao': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // Atualiza a tela instantaneamente sem precisar recarregar o banco de dados inteiro ⚡
       if (state.value != null) {
         state = AsyncValue.data(state.value!.copyWith(
           conciliacaoReais: valoresReais,
@@ -214,7 +208,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
 
-      // 🚀 A GRANDE MUDANÇA: Disparar TUDO em Paralelo (Fim do engasgo e da lentidão)
       final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
@@ -225,10 +218,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       final fAnualSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       final fAnualVendasSnap = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       
-      // 🎯 Busca o arquivo levinho de Conciliação
       final fConciliacao = _db.collection('conciliacoes_mensais').doc(mesAnoStr).get(options);
 
-      // Espera pelas respostas todas ao mesmo tempo! O que demorava 4 segundos agora demora menos de 1.
       final agendamentosSnap = await fAgendamentos;
       final vendasSnap = await fVendas;
       final despesasSnap = await fDespesas;
@@ -254,7 +245,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       Map<int, Map<String, double>> fluxoDiario = {};
       for (int i = 1; i <= fimMes.day; i++) fluxoDiario[i] = {'receita': 0.0, 'despesa': 0.0};
 
-      // Processar Serviços
       for (var doc in agendamentosSnap.docs) {
         final data = doc.data();
         if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
@@ -281,7 +271,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         fluxoDiario[dataAgenda.day]!['receita'] = fluxoDiario[dataAgenda.day]!['receita']! + valorLiquido;
       }
 
-      // Processar Vendas de Produtos
       for (var doc in vendasSnap.docs) {
         final data = doc.data();
         final qtd = (data['quantidade'] ?? 1) as int;
@@ -312,7 +301,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         }
       }
 
-      // Gráfico Anual
       List<double> faturamentoMeses = List.filled(12, 0.0);
       for (var doc in anualSnap.docs) {
         final data = doc.data();
@@ -339,7 +327,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         topServicosMap.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value))
       );
 
-      // 🎯 Processar os valores salvos de Conciliação
       Map<String, double> conciliacaoReaisLoad = {};
       Map<String, double> conciliacaoTaxasLoad = {};
       if (conciliacaoSnap.exists) {
