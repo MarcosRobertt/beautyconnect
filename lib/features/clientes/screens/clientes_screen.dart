@@ -47,9 +47,11 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
+  // 🎯 O NOVO CÉREBRO MATEMÁTICO (À Prova de Falhas)
   Future<void> _carregarMetricasAgendamentos() async {
     try {
-      final snap = await FirebaseFirestore.instance.collection('agendamentos').where('status', whereIn: ['pendente', 'confirmado', 'concluido']).get();
+      final snap = await FirebaseFirestore.instance.collection('agendamentos')
+          .where('status', whereIn: ['pendente', 'confirmado', 'concluido']).get();
           
       final setPendentes = <String>{};
       final vSempre = <String, int>{};
@@ -69,12 +71,27 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         
         final cId = data['clienteId'].toString();
         final status = data['status']?.toString().toLowerCase() ?? '';
-        final valor = (data['valor'] ?? 0).toDouble();
         
-        final dataStr = data['data']?.toString() ?? '';
-        DateTime dataAgendamento = hoje;
-        if (dataStr.isNotEmpty) {
-          try { dataAgendamento = DateTime.parse(dataStr); } catch (_) {}
+        // 🛡️ PARSE BLINDADO DO VALOR FINANCEIRO (Aceita Int, Double ou String)
+        double valor = 0.0;
+        final rawValor = data['valor'];
+        if (rawValor != null) {
+          if (rawValor is num) {
+            valor = rawValor.toDouble();
+          } else if (rawValor is String) {
+            valor = double.tryParse(rawValor.replaceAll(',', '.')) ?? 0.0;
+          }
+        }
+        
+        // 🛡️ PARSE BLINDADO DA DATA (Timestamp do Firebase vs ISO String)
+        DateTime dataAgendamento = DateTime(2000); // Passado distante por segurança
+        final rawData = data['data'];
+        if (rawData != null) {
+          if (rawData is Timestamp) {
+            dataAgendamento = rawData.toDate();
+          } else if (rawData is String) {
+            dataAgendamento = DateTime.tryParse(rawData) ?? DateTime(2000);
+          }
         }
 
         if (status == 'pendente' || status == 'confirmado') {
@@ -82,15 +99,19 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         }
         
         if (status == 'confirmado' || status == 'concluido') {
+          // Histórico Completo
           vSempre[cId] = (vSempre[cId] ?? 0) + 1;
           gSempre[cId] = (gSempre[cId] ?? 0.0) + valor;
 
-          if (dataAgendamento.isAfter(inicioAnoAtual) || dataAgendamento.isAtSameMomentAs(inicioAnoAtual)) {
+          // Filtro: Ano Atual
+          if (dataAgendamento.year == hoje.year) {
             vAnoAtual[cId] = (vAnoAtual[cId] ?? 0) + 1;
             gAnoAtual[cId] = (gAnoAtual[cId] ?? 0.0) + valor;
           }
 
-          if (dataAgendamento.isAfter(inicio6Meses) || dataAgendamento.isAtSameMomentAs(inicio6Meses)) {
+          // Filtro: Últimos 6 Meses
+          final diffMeses = (hoje.year - dataAgendamento.year) * 12 + hoje.month - dataAgendamento.month;
+          if (diffMeses <= 6 && diffMeses >= 0) {
             v6Meses[cId] = (v6Meses[cId] ?? 0) + 1;
             g6Meses[cId] = (g6Meses[cId] ?? 0.0) + valor;
           }
@@ -109,7 +130,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         });
       }
     } catch (e) {
-      debugPrint('Erro no motor de métricas: $e');
+      debugPrint('Erro no motor de métricas dinâmicas: $e');
     }
   }
 
@@ -140,6 +161,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           Map<String, int> mapaVisitasAtivo;
           Map<String, double> mapaGastosAtivo;
 
+          // 🛡️ SISTEMA DE HERANÇA PARA CLIENTES ANTIGAS
           if (_filtroTempoTop == 'ano_atual') {
             mapaVisitasAtivo = _visitasAnoAtual;
             mapaGastosAtivo = _gastosAnoAtual;
@@ -147,8 +169,15 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             mapaVisitasAtivo = _visitas6Meses;
             mapaGastosAtivo = _gastos6Meses;
           } else {
-            mapaVisitasAtivo = _visitasSempre;
-            mapaGastosAtivo = _gastosSempre;
+            // Se for 'Sempre', respeita o valor oficial do perfil se a comanda antiga tiver sido apagada
+            mapaVisitasAtivo = {};
+            mapaGastosAtivo = {};
+            for (var c in todosClientes) {
+              final vCalc = _visitasSempre[c.id] ?? 0;
+              final gCalc = _gastosSempre[c.id] ?? 0.0;
+              mapaVisitasAtivo[c.id] = (vCalc > c.totalVisitas) ? vCalc : c.totalVisitas;
+              mapaGastosAtivo[c.id] = (gCalc > c.totalGasto) ? gCalc : c.totalGasto;
+            }
           }
 
           final topClientes = List<Cliente>.from(todosClientes.where((c) {
@@ -433,7 +462,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                     style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600, visualDensity: VisualDensity.compact),
                     icon: const Icon(Icons.chat, size: 16), label: const Text('WhatsApp'),
                     onPressed: () {
-                      // 🎯 MENU COM OS NOMES CORRETOS
                       showModalBottomSheet(
                         context: context, backgroundColor: Colors.white, shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
                         builder: (ctx) => SafeArea(
