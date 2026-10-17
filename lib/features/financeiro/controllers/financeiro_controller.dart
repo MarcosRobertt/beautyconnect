@@ -5,7 +5,8 @@ class FinanceiroState {
   final DateTime mesReferencia;
   final double receitas; 
   final double receitasServicos; 
-  final double receitasProdutos; 
+  final double receitasProdutos;
+  final double receitasAvulsas; // 🟢 NOVO: Entradas da Conciliação 
   final double despesas;
   final double cmv; 
   final double taxasPagas;
@@ -27,12 +28,14 @@ class FinanceiroState {
   // 🎯 CAMPOS PARA A CONCILIAÇÃO BANCÁRIA
   final Map<String, double> conciliacaoReais;
   final Map<String, double> conciliacaoTaxas;
+  final Map<String, List<Map<String, dynamic>>> ajustesConciliacao; // 🎯 A Tabela de Ajustes
 
   FinanceiroState({
     required this.mesReferencia,
     this.receitas = 0.0,
     this.receitasServicos = 0.0,
     this.receitasProdutos = 0.0,
+    this.receitasAvulsas = 0.0,
     this.despesas = 0.0,
     this.cmv = 0.0,
     this.taxasPagas = 0.0,
@@ -49,6 +52,7 @@ class FinanceiroState {
     this.faturamentoAnual = const [],
     this.conciliacaoReais = const {},
     this.conciliacaoTaxas = const {},
+    this.ajustesConciliacao = const {},
   });
 
   double get lucro => receitas - despesas - cmv;
@@ -69,12 +73,14 @@ class FinanceiroState {
   FinanceiroState copyWith({
     Map<String, double>? conciliacaoReais,
     Map<String, double>? conciliacaoTaxas,
+    Map<String, List<Map<String, dynamic>>>? ajustesConciliacao,
   }) {
     return FinanceiroState(
       mesReferencia: mesReferencia,
       receitas: receitas,
       receitasServicos: receitasServicos,
       receitasProdutos: receitasProdutos,
+      receitasAvulsas: receitasAvulsas,
       despesas: despesas,
       cmv: cmv,
       taxasPagas: taxasPagas,
@@ -91,6 +97,7 @@ class FinanceiroState {
       faturamentoAnual: faturamentoAnual,
       conciliacaoReais: conciliacaoReais ?? this.conciliacaoReais,
       conciliacaoTaxas: conciliacaoTaxas ?? this.conciliacaoTaxas,
+      ajustesConciliacao: ajustesConciliacao ?? this.ajustesConciliacao,
     );
   }
 }
@@ -166,22 +173,21 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     };
   }
 
-  Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas) async {
+  // 🎯 MOTOR DE GRAVAÇÃO DO RASCUNHO DE CONCILIAÇÃO
+  Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas, Map<String, List<Map<String, dynamic>>> ajustesConciliacao) async {
     try {
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
       
+      // Guarda Tudo (Reais, Taxas e a Tabela de Ajustes) num único documento leve!
       await _db.collection('conciliacoes_mensais').doc(mesAnoStr).set({
         'reais': valoresReais,
         'taxas': taxasInformadas,
+        'ajustes': ajustesConciliacao,
         'ultimaAtualizacao': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      if (state.value != null) {
-        state = AsyncValue.data(state.value!.copyWith(
-          conciliacaoReais: valoresReais,
-          conciliacaoTaxas: taxasInformadas,
-        ));
-      }
+      // Recarrega os dados completos para que o Painel Geral atualize com as novas Despesas/Entradas da Conciliação
+      await carregarDados(forcarServidor: true);
     } catch (e) {
       throw Exception('Falha ao salvar a conciliação: $e');
     }
@@ -208,6 +214,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
 
+      // Disparar TUDO em Paralelo (Alta Performance)
       final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
@@ -301,34 +308,14 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         }
       }
 
-      List<double> faturamentoMeses = List.filled(12, 0.0);
-      for (var doc in anualSnap.docs) {
-        final data = doc.data();
-        if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
-
-        final bruto = (data['valor'] ?? 0).toDouble();
-        final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
-        final taxa = calcularTaxa(formaRaw, bruto);
-        final liquido = bruto - taxa;
-
-        final dt = DateTime.parse(data['data']);
-        faturamentoMeses[dt.month - 1] += liquido; 
-      }
-
-      for (var doc in anualVendasSnap.docs) {
-        final data = doc.data();
-        final dt = DateTime.parse(data['dataVenda']);
-        final qtd = (data['quantidade'] ?? 1) as int;
-        final preco = (data['precoVendido'] ?? 0).toDouble();
-        faturamentoMeses[dt.month - 1] += (preco * qtd); 
-      }
-
-      var topServicosSorted = Map.fromEntries(
-        topServicosMap.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value))
-      );
-
+      // 🎯 Processar e Injetar a Tabela de Ajustes da Conciliação
       Map<String, double> conciliacaoReaisLoad = {};
       Map<String, double> conciliacaoTaxasLoad = {};
+      Map<String, List<Map<String, dynamic>>> ajustesLoad = {};
+      
+      double totalAjustesEntrada = 0.0;
+      double totalAjustesSaida = 0.0;
+
       if (conciliacaoSnap.exists) {
         final mapData = conciliacaoSnap.data()!;
         if (mapData['reais'] != null) {
@@ -337,13 +324,48 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         if (mapData['taxas'] != null) {
           (mapData['taxas'] as Map<String, dynamic>).forEach((key, value) => conciliacaoTaxasLoad[key] = (value as num).toDouble());
         }
+        if (mapData['ajustes'] != null) {
+          (mapData['ajustes'] as Map<String, dynamic>).forEach((forma, lista) {
+            ajustesLoad[forma] = List<Map<String, dynamic>>.from(lista);
+            
+            // Soma na matemática Global do Aplicativo!
+            for (var ajuste in ajustesLoad[forma]!) {
+              if (ajuste['tipo'] == 'entrada') totalAjustesEntrada += (ajuste['valor'] as num).toDouble();
+              if (ajuste['tipo'] == 'saida') totalAjustesSaida += (ajuste['valor'] as num).toDouble();
+            }
+          });
+        }
       }
+
+      // Aplica os Ajustes Avulsos aos totais reais da empresa
+      totalDespesas += totalAjustesSaida;
+      
+      List<double> faturamentoMeses = List.filled(12, 0.0);
+      for (var doc in anualSnap.docs) {
+        final data = doc.data();
+        if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+        final bruto = (data['valor'] ?? 0).toDouble();
+        final taxa = calcularTaxa(data['formaPagamento']?.toString() ?? 'Outros', bruto);
+        faturamentoMeses[DateTime.parse(data['data']).month - 1] += (bruto - taxa); 
+      }
+      for (var doc in anualVendasSnap.docs) {
+        final data = doc.data();
+        final qtd = (data['quantidade'] ?? 1) as int;
+        final preco = (data['precoVendido'] ?? 0).toDouble();
+        faturamentoMeses[DateTime.parse(data['dataVenda']).month - 1] += (preco * qtd); 
+      }
+      faturamentoMeses[_mesAtual.month - 1] += totalAjustesEntrada; // Soma no gráfico
+
+      var topServicosSorted = Map.fromEntries(
+        topServicosMap.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value))
+      );
 
       state = AsyncValue.data(FinanceiroState(
         mesReferencia: _mesAtual,
-        receitas: totalReceitasServicos + totalReceitasProdutos, 
+        receitas: totalReceitasServicos + totalReceitasProdutos + totalAjustesEntrada, 
         receitasServicos: totalReceitasServicos,
         receitasProdutos: totalReceitasProdutos,
+        receitasAvulsas: totalAjustesEntrada,
         despesas: totalDespesas,
         cmv: totalCMV,
         taxasPagas: totalTaxasRetidas,
@@ -360,6 +382,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         faturamentoAnual: faturamentoMeses,
         conciliacaoReais: conciliacaoReaisLoad, 
         conciliacaoTaxas: conciliacaoTaxasLoad, 
+        ajustesConciliacao: ajustesLoad,
       ));
 
     } catch (e) {
