@@ -167,7 +167,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           Expanded(
             child: listaFinal.isEmpty
                 ? const Center(child: Text('Nenhuma cliente encontrada.', style: TextStyle(color: Colors.grey)))
-                : _construirListView(listaFinal, moeda),
+                // 🎯 AQUI: Informamos que não queremos mostrar as métricas na aba Todos
+                : _construirListView(listaFinal, moeda, mostrarMetricas: false), 
           ),
         ],
       ),
@@ -307,7 +308,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   // =========================================================================
   // WIDGET LISTVIEW REUTILIZÁVEL
   // =========================================================================
-  Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool isInativo = false}) {
+  // 🎯 AQUI: Nova propriedade "mostrarMetricas" controlará a exibição
+  Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool isInativo = false, bool mostrarMetricas = true}) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return ListView.separated(
@@ -339,14 +341,19 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               const SizedBox(height: 4),
               Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  Text('🔄 Visitas: ${cliente.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                  const SizedBox(width: 16),
-                  Text('💰 Gasto: ${moeda.format(cliente.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                ],
-              ),
-              const SizedBox(height: 4),
+              
+              // 🎯 AQUI: Condição para esconder as visitas e gastos na aba "Todos"
+              if (mostrarMetricas) ...[
+                Row(
+                  children: [
+                    Text('🔄 Visitas: ${cliente.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                    const SizedBox(width: 16),
+                    Text('💰 Gasto: ${moeda.format(cliente.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
