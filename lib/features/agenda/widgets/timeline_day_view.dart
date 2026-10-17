@@ -176,6 +176,46 @@ class TimelineDayView extends ConsumerWidget {
     }
   }
 
+  // 🎯 O NOVO MENU DO WHATSAPP (A GAVETA)
+  void _mostrarMenuWhatsApp(BuildContext context, String telefone, String nome, Agendamento agendamento) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Escolha a mensagem para enviar:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.green, child: Icon(Icons.check_circle_outline, color: Colors.white, size: 20)),
+                title: const Text('Confirmação de Agendamento', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Enviada no dia ou na véspera.'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  WhatsAppService.enviarConfirmacao(telefone: telefone, nomeCliente: nome, agendamento: agendamento);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const CircleAvatar(backgroundColor: Colors.redAccent, child: Icon(Icons.cancel_outlined, color: Colors.white, size: 20)),
+                title: const Text('Mensagem de Cancelamento', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Enviada quando desmarcam.'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  WhatsAppService.enviarCancelamento(telefone: telefone, nomeCliente: nome, agendamento: agendamento);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final clientesAsync = ref.watch(clienteControllerProvider);
@@ -325,7 +365,7 @@ class TimelineDayView extends ConsumerWidget {
                             top: topPx,
                             left: 4,
                             right: 4,
-                            height: heightPx > 46 ? heightPx : 46, // Altura mínima ligeiramente aumentada para caber botões
+                            height: heightPx > 46 ? heightPx : 46, 
                             child: GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: () => onEditar(a.id),
@@ -363,12 +403,11 @@ class TimelineDayView extends ConsumerWidget {
                                               Expanded(
                                                 child: Text(a.servico, style: TextStyle(fontSize: 10, color: corTexto), maxLines: 1, overflow: TextOverflow.ellipsis),
                                               ),
-                                              // 🎯 BOTÕES COM ÁREA DE TOQUE AUMENTADA
                                               if (!isBloqueio) ...[
                                                 if (a.status != AgendamentoStatus.concluido)
                                                   GestureDetector(
                                                     behavior: HitTestBehavior.opaque,
-                                                    onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
+                                                    onTap: () => _mostrarMenuWhatsApp(context, telefoneCliente, nomeCliente, a),
                                                     child: Padding(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), child: Icon(Icons.chat_bubble_outline, size: 18, color: isDark ? Colors.greenAccent : Colors.green.shade900)),
                                                   ),
                                                 if (a.status == AgendamentoStatus.agendado)
@@ -413,7 +452,7 @@ class TimelineDayView extends ConsumerWidget {
                                                 if (a.status != AgendamentoStatus.concluido)
                                                   GestureDetector(
                                                     behavior: HitTestBehavior.opaque,
-                                                    onTap: () { WhatsAppService.enviarConfirmacao(telefone: telefoneCliente, nomeCliente: nomeCliente, agendamento: a); },
+                                                    onTap: () => _mostrarMenuWhatsApp(context, telefoneCliente, nomeCliente, a),
                                                     child: Padding(
                                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                                       child: Icon(Icons.chat_bubble_outline, size: 20, color: isDark ? Colors.greenAccent : Colors.green.shade900), 
@@ -446,7 +485,6 @@ class TimelineDayView extends ConsumerWidget {
                                                       child: Icon(Icons.settings_backup_restore, size: 20, color: Colors.blue.shade100),
                                                     ),
                                                   ),
-                                                const SizedBox(width: 4),
                                               ],
                                               _buildStatusBadge(a.status, isBloqueio),
                                             ],
