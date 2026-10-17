@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../controllers/financeiro_controller.dart';
 
 class FinanceiroScreen extends ConsumerStatefulWidget {
@@ -13,10 +14,11 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final _formatMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
   final Color _primaryColor = const Color(0xFF8A2463);
 
-  // 🎯 CONTROLES DE ESTADO PARA A CONCILIAÇÃO BANCÁRIA
+  // 🎯 ESTADOS DA CONCILIAÇÃO
   final Map<String, TextEditingController> _realControllers = {};
   final Map<String, TextEditingController> _taxaControllers = {};
-  String? _mesAberto; // Rastreador para saber quando o mês mudou e atualizar os inputs
+  Map<String, List<Map<String, dynamic>>> _ajustesRascunho = {}; // 🎯 A TABELA DE INVESTIGAÇÃO LOCAL
+  String? _mesAberto; 
 
   @override
   void initState() {
@@ -49,21 +51,15 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
   Widget _buildIndicador(double percentual, {bool inverteCores = false}) {
     if (percentual == 0) return const SizedBox.shrink();
-    
     final bool subiu = percentual > 0;
     final bool positivo = inverteCores ? !subiu : subiu;
-    
     final cor = positivo ? Colors.green.shade700 : Colors.red.shade700;
     final icone = subiu ? Icons.arrow_upward : Icons.arrow_downward;
-    
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icone, size: 12, color: cor),
-        Text(
-          ' ${percentual.abs().toStringAsFixed(1)}%', 
-          style: TextStyle(color: cor, fontSize: 11, fontWeight: FontWeight.bold)
-        ),
+        Text(' ${percentual.abs().toStringAsFixed(1)}%', style: TextStyle(color: cor, fontSize: 11, fontWeight: FontWeight.bold)),
       ],
     );
   }
@@ -78,9 +74,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           title: const Text('Resultados Financeiros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
           bottom: TabBar(
-            labelColor: _primaryColor,
-            indicatorColor: _primaryColor,
-            isScrollable: true, 
+            labelColor: _primaryColor, indicatorColor: _primaryColor, isScrollable: true, 
             tabs: const [
               Tab(icon: Icon(Icons.pie_chart_outline), text: 'Visão Geral'),
               Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Caixa Diário'),
@@ -111,33 +105,16 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left), 
-          onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(state.mesReferencia.year, state.mesReferencia.month - 1))
-        ),
+        IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(state.mesReferencia.year, state.mesReferencia.month - 1))),
         InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: () async {
             final dataSelecionada = await showDatePicker(
-              context: context,
-              initialDate: state.mesReferencia,
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2035),
-              helpText: 'IR PARA O MÊS',
-              builder: (context, child) {
-                return Theme(
-                  data: Theme.of(context).copyWith(
-                    colorScheme: ColorScheme.light(primary: _primaryColor),
-                  ),
-                  child: child!,
-                );
-              },
+              context: context, initialDate: state.mesReferencia, firstDate: DateTime(2020), lastDate: DateTime(2035), helpText: 'IR PARA O MÊS',
+              builder: (context, child) { return Theme(data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: _primaryColor)), child: child!); },
             );
-            
             if (dataSelecionada != null) {
-              ref.read(financeiroControllerProvider.notifier).carregarDados(
-                mes: DateTime(dataSelecionada.year, dataSelecionada.month, 1)
-              );
+              ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(dataSelecionada.year, dataSelecionada.month, 1));
             }
           },
           child: Padding(
@@ -145,48 +122,86 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  DateFormat('MMMM yyyy', 'pt_BR').format(state.mesReferencia).toUpperCase(), 
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down, color: _primaryColor),
+                Text(DateFormat('MMMM yyyy', 'pt_BR').format(state.mesReferencia).toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)),
+                const SizedBox(width: 4), Icon(Icons.arrow_drop_down, color: _primaryColor),
               ],
             ),
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right), 
-          onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(state.mesReferencia.year, state.mesReferencia.month + 1))
-        ),
+        IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(mes: DateTime(state.mesReferencia.year, state.mesReferencia.month + 1))),
       ],
     );
   }
 
   // ===========================================================================
-  // 🎯 MÓDULO 4: CONCILIAÇÃO BANCÁRIA
+  // 🎯 O RASCUNHO DE CONCILIAÇÃO BANCÁRIA
   // ===========================================================================
+  void _abrirModalLancarAjuste(String forma, String tipo) {
+    final descricaoController = TextEditingController();
+    final valorController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(tipo == 'entrada' ? Icons.add_circle : Icons.remove_circle, color: tipo == 'entrada' ? Colors.green : Colors.red),
+            const SizedBox(width: 8),
+            Text(tipo == 'entrada' ? 'Justificar Sobra' : 'Justificar Falta', style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Esta simulação será guardada ao salvar a conciliação.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            const SizedBox(height: 12),
+            TextField(controller: descricaoController, decoration: InputDecoration(labelText: tipo == 'entrada' ? 'Motivo (Ex: Gorjeta, Venda extra)' : 'Motivo (Ex: Quebra de caixa, Café)', border: const OutlineInputBorder(), isDense: true)),
+            const SizedBox(height: 12),
+            TextField(controller: valorController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Valor R\$', border: OutlineInputBorder(), isDense: true)),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: tipo == 'entrada' ? Colors.green : Colors.red),
+            onPressed: () {
+              final v = double.tryParse(valorController.text.replaceAll(',', '.')) ?? 0.0;
+              if (v > 0 && descricaoController.text.isNotEmpty) {
+                setState(() {
+                  _ajustesRascunho.putIfAbsent(forma, () => []);
+                  _ajustesRascunho[forma]!.add({
+                    'id': const Uuid().v4(),
+                    'tipo': tipo,
+                    'descricao': descricaoController.text.trim(),
+                    'valor': v,
+                  });
+                });
+                Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Adicionar à Tabela'),
+          )
+        ],
+      )
+    );
+  }
+
   Widget _buildConciliacao(FinanceiroState state) {
-    // Lógica para repovoar os campos de texto se mudarmos de mês
     final mesStr = '${state.mesReferencia.year}-${state.mesReferencia.month}';
     if (_mesAberto != mesStr) {
       _mesAberto = mesStr;
       
+      // Carrega Rascunho Limpo da Nuvem para o Ecrã
+      _ajustesRascunho = {};
+      state.ajustesConciliacao.forEach((k, v) {
+        _ajustesRascunho[k] = List<Map<String, dynamic>>.from(v);
+      });
+
       for (var forma in state.formasPagamento.keys) {
         final rCtrl = _getRealController(forma);
         final tCtrl = _getTaxaController(forma);
-        
-        if (state.conciliacaoReais.containsKey(forma) && state.conciliacaoReais[forma]! > 0) {
-          rCtrl.text = state.conciliacaoReais[forma]!.toStringAsFixed(2).replaceAll('.', ',');
-        } else {
-          rCtrl.text = '';
-        }
-        
-        if (state.conciliacaoTaxas.containsKey(forma) && state.conciliacaoTaxas[forma]! > 0) {
-          tCtrl.text = state.conciliacaoTaxas[forma]!.toStringAsFixed(2).replaceAll('.', ',');
-        } else {
-          tCtrl.text = '';
-        }
+        rCtrl.text = state.conciliacaoReais.containsKey(forma) && state.conciliacaoReais[forma]! > 0 ? state.conciliacaoReais[forma]!.toStringAsFixed(2).replaceAll('.', ',') : '';
+        tCtrl.text = state.conciliacaoTaxas.containsKey(forma) && state.conciliacaoTaxas[forma]! > 0 ? state.conciliacaoTaxas[forma]!.toStringAsFixed(2).replaceAll('.', ',') : '';
       }
     }
 
@@ -194,6 +209,16 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     double totalReal = 0.0;
     double totalTaxasInformadas = 0.0;
     
+    // Soma Entradas e Saídas do Rascunho para o Painel Geral da Conciliação
+    double rascunhoEntradasGlobais = 0.0;
+    double rascunhoSaidasGlobais = 0.0;
+    _ajustesRascunho.forEach((forma, lista) {
+      for (var aj in lista) {
+        if (aj['tipo'] == 'entrada') rascunhoEntradasGlobais += (aj['valor'] as num).toDouble();
+        if (aj['tipo'] == 'saida') rascunhoSaidasGlobais += (aj['valor'] as num).toDouble();
+      }
+    });
+
     for (var entry in state.formasPagamento.entries) {
       final realCtrl = _getRealController(entry.key);
       final taxaCtrl = _getTaxaController(entry.key);
@@ -201,19 +226,20 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       totalTaxasInformadas += double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.0;
     }
 
-    final double divergencia = (totalReal + totalTaxasInformadas) - totalSistema;
+    // Matemática Perfeita do Saldo: Real - (Sistema + Entradas Avulsas - Saidas Avulsas)
+    final double divergenciaGlobal = (totalReal + totalTaxasInformadas) - (totalSistema + rascunhoEntradasGlobais - rascunhoSaidasGlobais);
     
     Color corDivergencia = Colors.green.shade700;
     String statusTexto = '🟢 Tudo Conciliado! (R\$ 0,00)';
     IconData iconDivergencia = Icons.check_circle;
 
-    if (divergencia < -0.05) {
+    if (divergenciaGlobal < -0.05) {
       corDivergencia = Colors.red.shade700;
-      statusTexto = '⚠️ Faltam: ${_formatMoeda.format(divergencia.abs())}';
+      statusTexto = '⚠️ Faltam: ${_formatMoeda.format(divergenciaGlobal.abs())} (Justifique abaixo)';
       iconDivergencia = Icons.warning_amber_rounded;
-    } else if (divergencia > 0.05) {
+    } else if (divergenciaGlobal > 0.05) {
       corDivergencia = Colors.blue.shade700;
-      statusTexto = '🔵 Sobraram: ${_formatMoeda.format(divergencia)}';
+      statusTexto = '🔵 Sobraram: ${_formatMoeda.format(divergenciaGlobal)} (Justifique abaixo)';
       iconDivergencia = Icons.info_outline;
     }
 
@@ -223,7 +249,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
-        // 📊 CARTÃO DE RESUMO
+        // 📊 CARTÃO DE RESUMO (TERMÔMETRO)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300, width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]),
@@ -233,12 +259,14 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
               const Text('📊 RESUMO DO MÊS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
               const Divider(height: 24),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('📈 Total Bruto (Sistema):', style: TextStyle(color: Colors.black87)), Text(_formatMoeda.format(totalSistema), style: const TextStyle(fontWeight: FontWeight.bold))]),
+              if (rascunhoEntradasGlobais > 0) Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('🔺 Entradas Extras (Tabela):', style: TextStyle(color: Colors.green)), Text('+ ${_formatMoeda.format(rascunhoEntradasGlobais)}', style: const TextStyle(color: Colors.green))]),
+              if (rascunhoSaidasGlobais > 0) Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('🔻 Saídas/Quebras (Tabela):', style: TextStyle(color: Colors.red)), Text('- ${_formatMoeda.format(rascunhoSaidasGlobais)}', style: const TextStyle(color: Colors.red))]),
               const SizedBox(height: 8),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('📉 Taxas de Maquininha:', style: TextStyle(color: Colors.red)), Text('- ${_formatMoeda.format(totalTaxasInformadas)}', style: const TextStyle(color: Colors.red))]),
               const SizedBox(height: 8),
               Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('🏦 Total Líquido (Real):', style: TextStyle(color: Colors.black87)), Text(_formatMoeda.format(totalReal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
               const Divider(height: 24),
-              Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: corDivergencia.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(iconDivergencia, color: corDivergencia, size: 20), const SizedBox(width: 8), Text(statusTexto, style: TextStyle(color: corDivergencia, fontWeight: FontWeight.bold, fontSize: 14))])),
+              Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: corDivergencia.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(iconDivergencia, color: corDivergencia, size: 20), const SizedBox(width: 8), Expanded(child: Text(statusTexto, style: TextStyle(color: corDivergencia, fontWeight: FontWeight.bold, fontSize: 14)))])),
             ],
           ),
         ),
@@ -250,6 +278,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         if (state.formasPagamento.isEmpty)
           const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Nenhum recebimento registrado neste mês.', style: TextStyle(color: Colors.grey)))),
           
+        // 💠 GAVETAS EXPANSÍVEIS
         ...state.formasPagamento.entries.map((e) {
           final forma = e.key;
           final valorEsperado = e.value;
@@ -258,10 +287,20 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
           final valReal = double.tryParse(realCtrl.text.replaceAll(',', '.')) ?? 0.0;
           final valTaxa = double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.0;
-          final diffForma = (valReal + valTaxa) - valorEsperado;
+          
+          final listaAjustesLocal = _ajustesRascunho[forma] ?? [];
+          double totEntradasLocal = 0;
+          double totSaidasLocal = 0;
+          for (var aj in listaAjustesLocal) {
+            if (aj['tipo'] == 'entrada') totEntradasLocal += (aj['valor'] as num).toDouble();
+            if (aj['tipo'] == 'saida') totSaidasLocal += (aj['valor'] as num).toDouble();
+          }
+
+          final valorAjustado = valorEsperado + totEntradasLocal - totSaidasLocal;
+          final diffForma = (valReal + valTaxa) - valorAjustado;
 
           Color corStatusForma = Colors.green;
-          String txtStatusForma = '✅ Bateu certo!';
+          String txtStatusForma = '✅ Bateu certo! (${_formatMoeda.format(valReal)})';
           if (diffForma < -0.05) {
             corStatusForma = Colors.red;
             txtStatusForma = '⚠️ Faltam: ${_formatMoeda.format(diffForma.abs())}';
@@ -279,108 +318,96 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
           return Card(
             elevation: 0, margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: diffForma.abs() > 0.05 ? corStatusForma : Colors.grey.shade300, width: diffForma.abs() > 0.05 ? 1.5 : 1)),
             child: ExpansionTile(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              leading: CircleAvatar(backgroundColor: Colors.grey.shade100, child: Icon(iconeForma, color: _primaryColor, size: 20)),
-              title: Text(forma, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text('Vendido: ${_formatMoeda.format(valorEsperado)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              leading: CircleAvatar(backgroundColor: corStatusForma.withOpacity(0.1), child: Icon(iconeForma, color: corStatusForma, size: 20)),
+              title: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(forma, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  if (diffForma.abs() > 0.05) Text(_formatMoeda.format(diffForma.abs()), style: TextStyle(color: corStatusForma, fontWeight: FontWeight.bold, fontSize: 12))
+                ],
+              ),
+              subtitle: Text('Vendido Sistema: ${_formatMoeda.format(valorEsperado)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
               childrenPadding: const EdgeInsets.all(16),
               children: [
                 Row(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: realCtrl,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(labelText: 'Valor no Extrato / Gaveta', prefixText: 'R\$ ', border: OutlineInputBorder(), isDense: true),
-                      ),
-                    ),
+                    Expanded(child: TextField(controller: realCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'O que está no Banco/Gaveta', prefixText: 'R\$ ', border: OutlineInputBorder(), isDense: true))),
                     if (aceitaTaxa) ...[
                       const SizedBox(width: 12),
-                      Expanded(
-                        child: TextField(
-                          controller: taxaCtrl,
-                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                          decoration: InputDecoration(labelText: 'Taxas da Maquininha', prefixText: 'R\$ ', border: const OutlineInputBorder(), isDense: true, fillColor: Colors.red.shade50, filled: true),
-                        ),
-                      ),
+                      Expanded(child: TextField(controller: taxaCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'Taxas da Maquininha', prefixText: 'R\$ ', border: const OutlineInputBorder(), isDense: true, fillColor: Colors.red.shade50, filled: true))),
                     ],
                   ],
                 ),
-                const SizedBox(height: 12),
                 
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.grey.shade50, border: Border.all(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(8)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Área de Investigação & Tabela de Ajustes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      const SizedBox(height: 8),
+                      
+                      // 🎯 A TABELA VISUAL
+                      if (listaAjustesLocal.isEmpty)
+                        const Text('Nenhum ajuste registado.', style: TextStyle(fontSize: 11, color: Colors.grey))
+                      else
+                        ...listaAjustesLocal.map((aj) {
+                          final isEntrada = aj['tipo'] == 'entrada';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Row(
+                              children: [
+                                Icon(isEntrada ? Icons.add_circle : Icons.remove_circle, size: 14, color: isEntrada ? Colors.green : Colors.red),
+                                const SizedBox(width: 6),
+                                Expanded(child: Text(aj['descricao'], style: const TextStyle(fontSize: 12))),
+                                Text(_formatMoeda.format(aj['valor']), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isEntrada ? Colors.green : Colors.red)),
+                                const SizedBox(width: 8),
+                                InkWell(
+                                  onTap: () {
+                                    setState(() => _ajustesRascunho[forma]!.removeWhere((x) => x['id'] == aj['id']));
+                                  },
+                                  child: const Icon(Icons.close, size: 16, color: Colors.grey),
+                                )
+                              ],
+                            ),
+                          );
+                        }),
+                      
+                      const Divider(),
+                      Wrap(
+                        spacing: 8, runSpacing: 8,
+                        children: [
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.search, size: 14), label: const Text('Auditar Comandas', style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: Size.zero),
+                            onPressed: () { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lista de comandas de $forma no mês.'), backgroundColor: Colors.blue)); },
+                          ),
+                          OutlinedButton.icon(
+                            icon: Icon(Icons.remove, size: 14, color: Colors.red.shade700), label: Text('Justificar Falta', style: TextStyle(fontSize: 11, color: Colors.red.shade700)),
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: Size.zero, side: BorderSide(color: Colors.red.shade200)),
+                            onPressed: () => _abrirModalLancarAjuste(forma, 'saida'),
+                          ),
+                          OutlinedButton.icon(
+                            icon: Icon(Icons.add, size: 14, color: Colors.green.shade700), label: Text('Justificar Sobra', style: TextStyle(fontSize: 11, color: Colors.green.shade700)),
+                            style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8), minimumSize: Size.zero, side: BorderSide(color: Colors.green.shade200)),
+                            onPressed: () => _abrirModalLancarAjuste(forma, 'entrada'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
                 Container(
                   width: double.infinity, padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: corStatusForma.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
                   child: Text(txtStatusForma, style: TextStyle(color: corStatusForma, fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center),
-                ),
-                const SizedBox(height: 16),
-                
-                const Text('Ajustes e Verificações:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
-                const SizedBox(height: 8),
-                
-                Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: [
-                    OutlinedButton.icon(
-                      icon: const Icon(Icons.search, size: 16),
-                      label: const Text('Ver Comandas', style: TextStyle(fontSize: 12)),
-                      onPressed: () {
-                        // Pop-up de Segurança / Informação
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Ação de Verificação'),
-                            content: Text('Isso abrirá o relatório das comandas de $forma deste mês para auditoria. Deseja prosseguir?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-                              FilledButton(onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo em construção.'), backgroundColor: Colors.blue)); }, child: const Text('Sim, Prosseguir'))
-                            ]
-                          )
-                        );
-                      },
-                    ),
-                    OutlinedButton.icon(
-                      icon: Icon(Icons.arrow_downward, size: 16, color: Colors.red.shade700),
-                      label: Text('Lançar Despesa', style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
-                      style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.red.shade200)),
-                      onPressed: () {
-                        // Pop-up de Segurança
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Lançar Saída Avulsa'),
-                            content: const Text('Você está prestes a lançar uma saída/despesa avulsa que afetará o saldo deste caixa. Confirmar?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-                              FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo em construção.'), backgroundColor: Colors.red)); }, child: const Text('Sim, Lançar'))
-                            ]
-                          )
-                        );
-                      },
-                    ),
-                    OutlinedButton.icon(
-                      icon: Icon(Icons.arrow_upward, size: 16, color: Colors.green.shade700),
-                      label: Text('Lançar Entrada', style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
-                      style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.green.shade200)),
-                      onPressed: () {
-                        // Pop-up de Segurança
-                        showDialog(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Lançar Entrada Avulsa'),
-                            content: const Text('Você está prestes a lançar uma entrada avulsa que não pertence a nenhuma comanda (Ex: Venda extra, Gorjeta). Confirmar?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
-                              FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.green), onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo em construção.'), backgroundColor: Colors.green)); }, child: const Text('Sim, Lançar'))
-                            ]
-                          )
-                        );
-                      },
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -395,7 +422,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           icon: const Icon(Icons.save),
           label: const Text('Salvar Conciliação do Mês', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           onPressed: () {
-            // POP-UP DE SEGURANÇA OBRIGATÓRIO ANTES DE SALVAR NO BANCO
             showDialog(
               context: context,
               builder: (ctx) => AlertDialog(
@@ -403,24 +429,17 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                   children: [
                     Icon(Icons.save_as, color: _primaryColor),
                     const SizedBox(width: 8),
-                    const Text('Confirmar Atualização?'),
+                    const Text('Confirmar Auditoria?'),
                   ],
                 ),
-                content: const Text(
-                  'Você está prestes a salvar os valores de extrato e taxas informados.\n\n'
-                  'Isso registrará a conciliação do caixa deste mês na base de dados. Deseja continuar?'
-                ),
+                content: const Text('Você está prestes a gravar a Tabela de Ajustes, Extratos e Taxas.\n\nIsso atualizará os saldos gerais do seu sistema (Painel Visão Geral). Deseja continuar?'),
                 actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx), 
-                    child: const Text('Revisar Valores')
-                  ),
+                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar')),
                   FilledButton(
                     style: FilledButton.styleFrom(backgroundColor: _primaryColor),
                     onPressed: () async {
-                      Navigator.pop(ctx); // Fecha o aviso
+                      Navigator.pop(ctx);
                       
-                      // 1. Coleta os valores digitados na tela
                       Map<String, double> reaisSalvar = {};
                       Map<String, double> taxasSalvar = {};
                       
@@ -431,16 +450,14 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                         taxasSalvar[forma] = t;
                       }
 
-                      // 2. Aciona o Cérebro para salvar na Nuvem ⚡
-                      await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar);
+                      // ⚡ ACIONA O CÉREBRO PASSANDO O RASCUNHO!
+                      await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
                       
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('✅ Conciliação salva com sucesso no Banco de Dados!'), backgroundColor: Colors.green)
-                        );
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Auditoria financeira gravada com sucesso!'), backgroundColor: Colors.green));
                       }
                     }, 
-                    child: const Text('Sim, Salvar Conciliação')
+                    child: const Text('Sim, Gravar Sistema')
                   )
                 ],
               )
@@ -453,7 +470,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   }
 
   // ===========================================================================
-  // MÉTODOS ANTERIORES INTACTOS
+  // MÉTODOS ANTERIORES INTACTOS (Visão Geral, Diário, Anual)
   // ===========================================================================
 
   Widget _buildVisaoGeral(FinanceiroState state) {
@@ -523,7 +540,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       children: [
                         Icon(Icons.money_off, size: 14, color: Colors.red.shade700),
                         const SizedBox(width: 4),
-                        const Text('Despesas', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                        const Text('Despesas Globais', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -583,8 +600,22 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        
+        if (state.receitasAvulsas > 0) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(children: [Icon(Icons.add_circle, size: 18, color: Colors.green.shade400), const SizedBox(width: 8), Text('Sobra de Caixa (Conciliação)', style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.w600))]),
+                Text(_formatMoeda.format(state.receitasAvulsas), style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ],
 
+        const SizedBox(height: 24),
         const Text('🏦 Formas de Recebimento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 8),
         ...state.formasPagamento.entries.map((e) => ListTile(
