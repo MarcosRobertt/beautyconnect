@@ -11,7 +11,12 @@ class WhatsAppConfigScreen extends StatefulWidget {
 class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
   final _ctrlConfirmacao = TextEditingController();
   final _ctrlCancelamento = TextEditingController();
-  final _ctrlRetencao = TextEditingController();
+  
+  // 🎯 AS 3 OPÇÕES DE RETENÇÃO
+  final _ctrlRetencao1 = TextEditingController();
+  final _ctrlRetencao2 = TextEditingController();
+  final _ctrlRetencao3 = TextEditingController();
+  
   bool _carregando = true;
   bool _salvando = false;
 
@@ -27,13 +32,19 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
       if (doc.exists) {
         _ctrlConfirmacao.text = doc['msg_confirmacao'] ?? '';
         _ctrlCancelamento.text = doc['msg_cancelamento'] ?? '';
-        _ctrlRetencao.text = doc['msg_retencao'] ?? '';
+        _ctrlRetencao1.text = doc['msg_retencao_1'] ?? '';
+        _ctrlRetencao2.text = doc['msg_retencao_2'] ?? '';
+        _ctrlRetencao3.text = doc['msg_retencao_3'] ?? '';
       } else {
-        // Textos Padrão caso seja o primeiro acesso
         _ctrlConfirmacao.text = "Olá, [NOME]! Tudo bem? 💅\n\nPassando para confirmar o seu agendamento:\n🗓️ Data: [DATA] ([DIA_SEMANA])\n⏰ Horário: [HORA]\n✨ Serviço: [SERVICO]\n\nPodemos confirmar a sua presença?";
         _ctrlCancelamento.text = "Olá, [NOME]. Seu agendamento para [DATA] foi cancelado com sucesso. Caso queira remarcar, estamos à disposição! 🌸";
-        _ctrlRetencao.text = "Olá, [NOME]! Tudo bem? Sentimos a sua falta no Studio Condeza! 🥰\n\nNotamos que faz um tempinho desde a sua última visita. Vamos agendar um horário para cuidar de você esta semana?";
       }
+      
+      // Se as retenções vierem vazias, injeta os padrões
+      if (_ctrlRetencao1.text.isEmpty) _ctrlRetencao1.text = "Olá, [NOME]! Tudo bem? Sentimos a sua falta no Studio Condeza! 🥰\n\nNotamos que faz [DIAS] dias desde a sua última visita. Vamos agendar um horário para cuidar de você esta semana?";
+      if (_ctrlRetencao2.text.isEmpty) _ctrlRetencao2.text = "Oi, [NOME]! Sumida! 👀 Passando para avisar que temos algumas novidades maravilhosas. Que tal tirar um tempinho para você e vir dar uma olhadinha na nossa agenda?";
+      if (_ctrlRetencao3.text.isEmpty) _ctrlRetencao3.text = "Olá, [NOME]! Tudo bem? Como faz um tempinho que não nos vemos, queríamos saber se aconteceu algo ou se podemos ajudar. Sua presença é muito importante para nós! 💖";
+      
     } catch (e) {
       debugPrint('Erro ao carregar mensagens: $e');
     } finally {
@@ -42,14 +53,14 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
   }
 
   Future<void> _salvarConfiguracoes() async {
-    if (_ctrlConfirmacao.text.trim().isEmpty) return;
-
     setState(() => _salvando = true);
     try {
       await FirebaseFirestore.instance.collection('configuracoes').doc('whatsapp').set({
         'msg_confirmacao': _ctrlConfirmacao.text.trim(),
         'msg_cancelamento': _ctrlCancelamento.text.trim(),
-        'msg_retencao': _ctrlRetencao.text.trim(),
+        'msg_retencao_1': _ctrlRetencao1.text.trim(),
+        'msg_retencao_2': _ctrlRetencao2.text.trim(),
+        'msg_retencao_3': _ctrlRetencao3.text.trim(),
         'ultima_atualizacao': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
@@ -64,7 +75,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
     }
   }
 
-  Widget _buildEditor(String titulo, TextEditingController controller, String descricao, String tags) {
+  Widget _buildEditor(String titulo, TextEditingController controller, String descricao, String tags, {IconData icone = Icons.chat_bubble_outline}) {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 24),
@@ -74,7 +85,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [const Icon(Icons.chat_bubble_outline, color: Color(0xFF8A2463), size: 20), const SizedBox(width: 8), Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+            Row(children: [Icon(icone, color: const Color(0xFF8A2463), size: 20), const SizedBox(width: 8), Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
             const SizedBox(height: 8),
             Text(descricao, style: const TextStyle(fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 12),
@@ -84,7 +95,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: controller, maxLines: 6,
+              controller: controller, maxLines: 5,
               decoration: InputDecoration(
                 hintText: 'Digite a mensagem...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), filled: true, fillColor: Colors.white,
               ),
@@ -105,23 +116,20 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                const Text('Edite o texto das mensagens. O sistema vai trocar automaticamente os textos com colchetes [ ] pelos dados reais da cliente.', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                const Text('Edite os textos. O sistema vai trocar os colchetes [ ] pelos dados reais da cliente na hora do envio.', style: TextStyle(fontSize: 13, color: Colors.grey)),
                 const SizedBox(height: 16),
-                _buildEditor(
-                  'Confirmação de Agendamento', _ctrlConfirmacao,
-                  'Mensagem enviada no dia do procedimento ou na véspera.',
-                  '[NOME], [DATA], [DIA_SEMANA], [HORA], [SERVICO]'
-                ),
-                _buildEditor(
-                  'Mensagem de Cancelamento', _ctrlCancelamento,
-                  'Enviada quando um agendamento é cancelado pelo sistema.',
-                  '[NOME], [DATA], [SERVICO]'
-                ),
-                _buildEditor(
-                  'Mensagem de Retenção (Resgate)', _ctrlRetencao,
-                  'Aba Clientes > Botão WhatsApp para clientes sumidas.',
-                  '[NOME], [DIAS]'
-                ),
+                
+                _buildEditor('Confirmação de Agendamento', _ctrlConfirmacao, 'Enviada no dia ou na véspera.', '[NOME], [DATA], [DIA_SEMANA], [HORA], [SERVICO]', icone: Icons.check_circle_outline),
+                _buildEditor('Mensagem de Cancelamento', _ctrlCancelamento, 'Enviada quando desmarcam.', '[NOME], [DATA], [SERVICO]', icone: Icons.cancel_outlined),
+                
+                const Divider(height: 40, thickness: 2),
+                const Text('🎯 MENSAGENS DE RESGATE (RETENÇÃO)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple)),
+                const SizedBox(height: 16),
+
+                _buildEditor('Opção 1: Saudade (Padrão)', _ctrlRetencao1, 'Foco em mostrar que sentiu falta da cliente.', '[NOME], [DIAS]', icone: Icons.favorite_border),
+                _buildEditor('Opção 2: Novidades / Mimo', _ctrlRetencao2, 'Foco em atrair com novidades ou uma promoção.', '[NOME], [DIAS]', icone: Icons.card_giftcard),
+                _buildEditor('Opção 3: Feedback', _ctrlRetencao3, 'Foco em descobrir o motivo do sumiço.', '[NOME], [DIAS]', icone: Icons.help_outline),
+                
                 const SizedBox(height: 24),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(backgroundColor: const Color(0xFF8A2463), padding: const EdgeInsets.symmetric(vertical: 16)),
