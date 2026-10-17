@@ -24,14 +24,14 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   String _filtroTodos = 'todos'; 
   String _filtroRetencao = 'todos_risco'; 
 
-  // 🎯 TRAVA INTELIGENTE: Lista de IDs de clientes com agendamentos futuros
-  List<String> _clientesComAgendamentoFuturo = [];
+  // 🎯 TRAVA INTELIGENTE
+  List<String> _clientesComAgendamentoPendente = [];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _buscarAgendamentosFuturos(); // Aciona a trava de segurança ao abrir a tela
+    _buscarAgendamentosPendentes(); 
   }
 
   @override
@@ -41,35 +41,27 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
-  // 🎯 O MOTOR DA TRAVA INTELIGENTE
-  Future<void> _buscarAgendamentosFuturos() async {
+  // 🎯 MOTOR DA TRAVA ATUALIZADO: Pega TUDO que está Pendente ou Confirmado (Até do passado)
+  Future<void> _buscarAgendamentosPendentes() async {
     try {
-      final hoje = DateTime.now();
-      final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
-      
-      // Busca hiper leve: Pega apenas do dia de hoje para frente
       final snap = await FirebaseFirestore.instance.collection('agendamentos')
-          .where('data', isGreaterThanOrEqualTo: hojeZerado.toIso8601String())
+          .where('status', whereIn: ['pendente', 'confirmado'])
           .get();
           
-      final setFuturos = <String>{};
+      final setPendentes = <String>{};
       for(var doc in snap.docs) {
-        final status = doc.data().containsKey('status') ? doc['status'].toString().toLowerCase() : '';
-        // Se a cliente tem algo marcado para o futuro (Pendente ou Confirmado), ela está salva!
-        if (status == 'pendente' || status == 'confirmado') {
-          if (doc.data().containsKey('clienteId')) {
-            setFuturos.add(doc['clienteId'].toString());
-          }
+        if (doc.data().containsKey('clienteId')) {
+          setPendentes.add(doc['clienteId'].toString());
         }
       }
       
       if (mounted) {
         setState(() {
-          _clientesComAgendamentoFuturo = setFuturos.toList();
+          _clientesComAgendamentoPendente = setPendentes.toList();
         });
       }
     } catch (e) {
-      debugPrint('Erro na trava de agendamentos futuros: $e');
+      debugPrint('Erro na trava de agendamentos: $e');
     }
   }
 
@@ -109,19 +101,18 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
           }
 
-          // 🎯 O NOVO FUNIL DE RETENÇÃO BLINDADO
+          // 🎯 FUNIL DE RETENÇÃO BLINDADO
           final clientesEmRisco = <Cliente>[];
           for (var c in todosClientes) {
             final dataRef = c.ultimaVisita ?? c.createdAt;
             final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
             final dias = hojeZerado.difference(refZerada).inDays;
 
-            // Se sumiu há 20 dias E NÃO TEM agendamento futuro marcado
-            if (dias >= 20 && !_clientesComAgendamentoFuturo.contains(c.id)) {
+            if (dias >= 20 && !_clientesComAgendamentoPendente.contains(c.id)) {
               clientesEmRisco.add(c);
             }
           }
-          // Ordenar as mais críticas primeiro (as que não vêm há mais tempo)
+          
           clientesEmRisco.sort((a, b) {
             final dataA = a.ultimaVisita ?? a.createdAt;
             final dataB = b.ultimaVisita ?? b.createdAt;
@@ -142,7 +133,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // ABA 1: TODOS (Catálogo Limpo)
+  // ABA 1: TODOS
   // =========================================================================
   Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
     List<Cliente> filtradosPorChip = listaBase;
@@ -240,7 +231,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // 🎯 ABA 3: RETENÇÃO (BLINDADA CONTRA FALSOS POSITIVOS)
+  // ABA 3: RETENÇÃO
   // =========================================================================
   Widget _construirAbaRetencao(List<Cliente> listaBase) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -252,7 +243,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
       if (_filtroRetencao == '20') return dias >= 20 && dias <= 29;
       if (_filtroRetencao == '30') return dias == 30 || dias == 31;
       if (_filtroRetencao == '31_mais') return dias > 31;
-      return true; // 'todos_risco'
+      return true; 
     }).toList();
 
     final textoBusca = _buscaController.text.trim().toLowerCase();
@@ -338,7 +329,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // 🎯 CARTÃO DE RESGATE
+  // 🎯 CARTÃO DE RESGATE (ATUALIZADO SEM ERRO DE ÍNDICE)
   Widget _buildCartaoRetencao(Cliente cliente, DateTime hojeZerado) {
     final ref = cliente.ultimaVisita ?? cliente.createdAt;
     final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
@@ -374,12 +365,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 12),
             
+            // 🎯 A BUSCA FOI SIMPLIFICADA PARA DRIBLAR A TRAVA DO FIREBASE
             FutureBuilder<QuerySnapshot>(
               future: FirebaseFirestore.instance.collection('agendamentos')
                   .where('clienteId', isEqualTo: cliente.id)
-                  .where('status', isEqualTo: 'concluido')
-                  .orderBy('data', descending: true)
-                  .limit(2)
                   .get(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -390,7 +379,27 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                   return const Text('Nenhum serviço registrado nas comandas.', style: TextStyle(fontSize: 12, color: Colors.grey));
                 }
 
-                final servicos = snapshot.data!.docs.map((doc) => doc['servico']?.toString() ?? 'Serviço').toList();
+                // Fazemos a ordenação e o filtro na memória do telemóvel!
+                final agendamentos = snapshot.data!.docs.where((d) {
+                  final map = d.data() as Map<String, dynamic>;
+                  return map['status']?.toString().toLowerCase() == 'concluido';
+                }).toList();
+
+                if (agendamentos.isEmpty) {
+                  return const Text('Nenhum serviço concluído registrado.', style: TextStyle(fontSize: 12, color: Colors.grey));
+                }
+
+                agendamentos.sort((a, b) {
+                  final dataA = (a.data() as Map<String, dynamic>)['data']?.toString() ?? '';
+                  final dataB = (b.data() as Map<String, dynamic>)['data']?.toString() ?? '';
+                  return dataB.compareTo(dataA); // Mais recente primeiro
+                });
+
+                final servicos = agendamentos.take(2).map((d) {
+                  final map = d.data() as Map<String, dynamic>;
+                  return map['servico']?.toString() ?? 'Serviço';
+                }).toList();
+
                 return RichText(
                   text: TextSpan(
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
