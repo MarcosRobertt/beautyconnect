@@ -14,7 +14,8 @@ import '../../financeiro/screens/financeiro_screen.dart';
 import '../../estoque/screens/estoque_screen.dart';
 import '../controllers/backup_controller.dart';
 import '../../produtos/screens/produtos_screen.dart'; 
-import 'metas_screen.dart'; // 🎯 Importamos a Tela Nova
+import 'metas_screen.dart'; 
+import 'whatsapp_config_screen.dart'; // 🎯 Importámos a nossa nova tela!
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -236,7 +237,15 @@ class ConfiguracoesScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
             child: Column(
               children: [
-                // 🎯 AQUI O NOSSO NOVO BOTÃO DE METAS!
+                // 🎯 O NOSSO NOVO BOTÃO DE MENSAGENS DO WHATSAPP!
+                ListTile(
+                  leading: const Icon(Icons.wechat, color: Colors.green),
+                  title: const Text('Mensagens do WhatsApp', style: TextStyle(fontWeight: FontWeight.w600)),
+                  subtitle: const Text('Personalize textos automáticos', style: TextStyle(fontSize: 11)),
+                  trailing: const Icon(Icons.chevron_right, size: 20),
+                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const WhatsAppConfigScreen())),
+                ),
+                const Divider(height: 1, indent: 56),
                 ListTile(
                   leading: const Icon(Icons.track_changes, color: Colors.blue),
                   title: const Text('Planejamento e Metas', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -256,7 +265,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App', style: TextStyle(fontWeight: FontWeight.w600)),
-                  trailing: const Text('v1.0.8 (Sync Automático)', style: TextStyle(color: Colors.grey, fontSize: 12)), 
+                  trailing: const Text('v1.0.9 (Sync WhatsApp)', style: TextStyle(color: Colors.grey, fontSize: 12)), 
                   onTap: () {},
                 ),
               ],
