@@ -41,7 +41,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
-  // 🎯 MOTOR DA TRAVA ATUALIZADO: Pega TUDO que está Pendente ou Confirmado (Até do passado)
+  // 🎯 MOTOR DA TRAVA: Pega TUDO que está Pendente ou Confirmado 
   Future<void> _buscarAgendamentosPendentes() async {
     try {
       final snap = await FirebaseFirestore.instance.collection('agendamentos')
@@ -329,7 +329,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // 🎯 CARTÃO DE RESGATE (ATUALIZADO SEM ERRO DE ÍNDICE)
+  // 🎯 CARTÃO DE RESGATE (Aba Retenção)
   Widget _buildCartaoRetencao(Cliente cliente, DateTime hojeZerado) {
     final ref = cliente.ultimaVisita ?? cliente.createdAt;
     final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
@@ -365,7 +365,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 12),
             
-            // 🎯 A BUSCA FOI SIMPLIFICADA PARA DRIBLAR A TRAVA DO FIREBASE
             FutureBuilder<QuerySnapshot>(
               future: FirebaseFirestore.instance.collection('agendamentos')
                   .where('clienteId', isEqualTo: cliente.id)
@@ -379,7 +378,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                   return const Text('Nenhum serviço registrado nas comandas.', style: TextStyle(fontSize: 12, color: Colors.grey));
                 }
 
-                // Fazemos a ordenação e o filtro na memória do telemóvel!
                 final agendamentos = snapshot.data!.docs.where((d) {
                   final map = d.data() as Map<String, dynamic>;
                   return map['status']?.toString().toLowerCase() == 'concluido';
@@ -392,7 +390,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                 agendamentos.sort((a, b) {
                   final dataA = (a.data() as Map<String, dynamic>)['data']?.toString() ?? '';
                   final dataB = (b.data() as Map<String, dynamic>)['data']?.toString() ?? '';
-                  return dataB.compareTo(dataA); // Mais recente primeiro
+                  return dataB.compareTo(dataA); 
                 });
 
                 final servicos = agendamentos.take(2).map((d) {
@@ -443,20 +441,14 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // WIDGET LISTVIEW REUTILIZÁVEL (Usado na Aba Todos e Top Clientes)
+  // 🎯 WIDGET LISTVIEW DINÂMICO (Usado na Aba Todos e Top Clientes)
   // =========================================================================
   Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool mostrarMetricas = true}) {
-    final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
-
     return ListView.separated(
       itemCount: lista.length,
       separatorBuilder: (_, __) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final cliente = lista[index];
-        
-        final dataFormatada = cliente.ultimaVisita != null 
-            ? DateFormat('dd/MM/yyyy').format(cliente.ultimaVisita!) 
-            : 'Nenhum atendimento';
 
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
@@ -487,9 +479,49 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text(
-                      '📅 Última visita: $dataFormatada', 
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                    // 🎯 NOVA MÁGICA: Busca diretamente na agenda a data do último atendimento confirmado/concluído!
+                    child: FutureBuilder<QuerySnapshot>(
+                      future: FirebaseFirestore.instance.collection('agendamentos')
+                          .where('clienteId', isEqualTo: cliente.id)
+                          .get(),
+                      builder: (context, snapshot) {
+                        DateTime? dataCalculada = cliente.ultimaVisita;
+
+                        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+                          final agendamentos = snapshot.data!.docs.where((d) {
+                            final map = d.data() as Map<String, dynamic>;
+                            final status = map['status']?.toString().toLowerCase() ?? '';
+                            return status == 'concluido' || status == 'confirmado';
+                          }).toList();
+
+                          if (agendamentos.isNotEmpty) {
+                            agendamentos.sort((a, b) {
+                              final dataA = (a.data() as Map<String, dynamic>)['data']?.toString() ?? '';
+                              final dataB = (b.data() as Map<String, dynamic>)['data']?.toString() ?? '';
+                              return dataB.compareTo(dataA); 
+                            });
+
+                            final dataStr = (agendamentos.first.data() as Map<String, dynamic>)['data']?.toString();
+                            if (dataStr != null && dataStr.isNotEmpty) {
+                              dataCalculada = DateTime.parse(dataStr);
+                            }
+                          }
+                        }
+
+                        final dataFormatada = dataCalculada != null 
+                            ? DateFormat('dd/MM/yyyy').format(dataCalculada!) 
+                            : 'Nenhum atendimento';
+
+                        final textoExibicao = snapshot.connectionState == ConnectionState.waiting
+                            ? 'Buscando data...'
+                            : '📅 Última visita: $dataFormatada';
+
+                        return Text(
+                          textoExibicao, 
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        );
+                      },
                     ),
                   ),
                   Row(
