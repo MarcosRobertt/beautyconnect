@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 🎯 Necessário para a busca dos últimos procedimentos
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../controllers/cliente_controller.dart';
@@ -22,12 +22,16 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   // Filtros de Estado
   String _filtroTop = 'faturamento';
   String _filtroTodos = 'todos'; 
-  String _filtroRetencao = 'todos_risco'; // 🎯 NOVO: 'todos_risco', '20', '30', '31_mais'
+  String _filtroRetencao = 'todos_risco'; 
+
+  // 🎯 TRAVA INTELIGENTE: Lista de IDs de clientes com agendamentos futuros
+  List<String> _clientesComAgendamentoFuturo = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this); // 🎯 Reduzido para 3 abas
+    _tabController = TabController(length: 3, vsync: this);
+    _buscarAgendamentosFuturos(); // Aciona a trava de segurança ao abrir a tela
   }
 
   @override
@@ -35,6 +39,38 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     _tabController.dispose();
     _buscaController.dispose();
     super.dispose();
+  }
+
+  // 🎯 O MOTOR DA TRAVA INTELIGENTE
+  Future<void> _buscarAgendamentosFuturos() async {
+    try {
+      final hoje = DateTime.now();
+      final hojeZerado = DateTime(hoje.year, hoje.month, hoje.day);
+      
+      // Busca hiper leve: Pega apenas do dia de hoje para frente
+      final snap = await FirebaseFirestore.instance.collection('agendamentos')
+          .where('data', isGreaterThanOrEqualTo: hojeZerado.toIso8601String())
+          .get();
+          
+      final setFuturos = <String>{};
+      for(var doc in snap.docs) {
+        final status = doc.data().containsKey('status') ? doc['status'].toString().toLowerCase() : '';
+        // Se a cliente tem algo marcado para o futuro (Pendente ou Confirmado), ela está salva!
+        if (status == 'pendente' || status == 'confirmado') {
+          if (doc.data().containsKey('clienteId')) {
+            setFuturos.add(doc['clienteId'].toString());
+          }
+        }
+      }
+      
+      if (mounted) {
+        setState(() {
+          _clientesComAgendamentoFuturo = setFuturos.toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Erro na trava de agendamentos futuros: $e');
+    }
   }
 
   @override
@@ -51,7 +87,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           tabs: const [
             Tab(text: 'Todos'),
             Tab(text: 'Top Clientes'),
-            Tab(text: '🎯 Retenção'), // 🎯 NOVA ABA
+            Tab(text: '🎯 Retenção'), 
           ],
         ),
       ),
@@ -73,18 +109,19 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
           }
 
-          // 🎯 O Novo Funil de Retenção (Clientes sumidas há 20 dias ou mais)
+          // 🎯 O NOVO FUNIL DE RETENÇÃO BLINDADO
           final clientesEmRisco = <Cliente>[];
           for (var c in todosClientes) {
             final dataRef = c.ultimaVisita ?? c.createdAt;
             final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
             final dias = hojeZerado.difference(refZerada).inDays;
 
-            if (dias >= 20) {
+            // Se sumiu há 20 dias E NÃO TEM agendamento futuro marcado
+            if (dias >= 20 && !_clientesComAgendamentoFuturo.contains(c.id)) {
               clientesEmRisco.add(c);
             }
           }
-          // Ordenar as mais antigas primeiro
+          // Ordenar as mais críticas primeiro (as que não vêm há mais tempo)
           clientesEmRisco.sort((a, b) {
             final dataA = a.ultimaVisita ?? a.createdAt;
             final dataB = b.ultimaVisita ?? b.createdAt;
@@ -96,7 +133,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             children: [
               _construirAbaTodos(todosClientes, moeda),
               _construirAbaTopClientes(topClientes, moeda),
-              _construirAbaRetencao(clientesEmRisco), // 🎯 NOVA ABA DE GESTÃO DE CHURN
+              _construirAbaRetencao(clientesEmRisco), 
             ],
           );
         },
@@ -203,7 +240,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // 🎯 ABA 3: RETENÇÃO (O NOVO CENTRO DE RESGATE)
+  // 🎯 ABA 3: RETENÇÃO (BLINDADA CONTRA FALSOS POSITIVOS)
   // =========================================================================
   Widget _construirAbaRetencao(List<Cliente> listaBase) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -301,7 +338,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // 🎯 CARTÃO DE RESGATE (Exclusivo da Aba Retenção)
+  // 🎯 CARTÃO DE RESGATE
   Widget _buildCartaoRetencao(Cliente cliente, DateTime hojeZerado) {
     final ref = cliente.ultimaVisita ?? cliente.createdAt;
     final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
@@ -337,7 +374,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
             const SizedBox(height: 12),
             
-            // 🎯 MICRO-BUSCA: Procura os últimos 2 agendamentos diretamente no banco de forma leve
             FutureBuilder<QuerySnapshot>(
               future: FirebaseFirestore.instance.collection('agendamentos')
                   .where('clienteId', isEqualTo: cliente.id)
@@ -376,7 +412,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                     icon: const Icon(Icons.chat, size: 16),
                     label: const Text('WhatsApp'),
                     onPressed: () {
-                      // 💡 Aqui no futuro você pode acionar o seu whatsapp_service.dart
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Abrir WhatsApp para ${cliente.telefone}'), backgroundColor: Colors.green));
                     },
                   ),
