@@ -13,10 +13,37 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final _formatMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
   final Color _primaryColor = const Color(0xFF8A2463);
 
+  // 🎯 CONTROLES DE ESTADO PARA A CONCILIAÇÃO BANCÁRIA
+  final Map<String, TextEditingController> _realControllers = {};
+  final Map<String, TextEditingController> _taxaControllers = {};
+
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(financeiroControllerProvider.notifier).carregarDados());
+  }
+
+  @override
+  void dispose() {
+    for (var c in _realControllers.values) { c.dispose(); }
+    for (var c in _taxaControllers.values) { c.dispose(); }
+    super.dispose();
+  }
+
+  TextEditingController _getRealController(String forma) {
+    if (!_realControllers.containsKey(forma)) {
+      _realControllers[forma] = TextEditingController();
+      _realControllers[forma]!.addListener(() => setState(() {}));
+    }
+    return _realControllers[forma]!;
+  }
+
+  TextEditingController _getTaxaController(String forma) {
+    if (!_taxaControllers.containsKey(forma)) {
+      _taxaControllers[forma] = TextEditingController();
+      _taxaControllers[forma]!.addListener(() => setState(() {}));
+    }
+    return _taxaControllers[forma]!;
   }
 
   Widget _buildIndicador(double percentual, {bool inverteCores = false}) {
@@ -43,7 +70,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4, // 🎯 AGORA SÃO 4 ABAS
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF0F4),
         appBar: AppBar(
@@ -52,10 +79,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           bottom: TabBar(
             labelColor: _primaryColor,
             indicatorColor: _primaryColor,
+            isScrollable: true, // Para caberem as 4 abas tranquilamente em telas menores
             tabs: const [
               Tab(icon: Icon(Icons.pie_chart_outline), text: 'Visão Geral'),
               Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Caixa Diário'),
               Tab(icon: Icon(Icons.bar_chart), text: 'Anual'),
+              Tab(icon: Icon(Icons.account_balance_wallet_outlined), text: 'Conciliação'), // 🎯 NOVA ABA
             ],
           ),
         ),
@@ -68,6 +97,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 _buildVisaoGeral(state),
                 _buildCaixaDiario(state),
                 _buildVisaoAnual(state),
+                _buildConciliacao(state), // 🎯 NOVA TELA DE CONCILIAÇÃO
               ],
             );
           },
@@ -131,6 +161,196 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       ],
     );
   }
+
+  // ===========================================================================
+  // 🎯 MÓDULO 4: CONCILIAÇÃO BANCÁRIA (O NOVO CORAÇÃO FINANCEIRO)
+  // ===========================================================================
+  Widget _buildConciliacao(FinanceiroState state) {
+    double totalSistema = state.formasPagamento.values.fold(0.0, (a, b) => a + b);
+    
+    double totalReal = 0.0;
+    double totalTaxasInformadas = 0.0;
+    
+    for (var entry in state.formasPagamento.entries) {
+      final realCtrl = _getRealController(entry.key);
+      final taxaCtrl = _getTaxaController(entry.key);
+      totalReal += double.tryParse(realCtrl.text.replaceAll(',', '.')) ?? 0.0;
+      totalTaxasInformadas += double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.0;
+    }
+
+    final double divergencia = (totalReal + totalTaxasInformadas) - totalSistema;
+    
+    Color corDivergencia = Colors.green.shade700;
+    String statusTexto = '🟢 Tudo Conciliado! (R\$ 0,00)';
+    IconData iconDivergencia = Icons.check_circle;
+
+    if (divergencia < -0.05) {
+      corDivergencia = Colors.red.shade700;
+      statusTexto = '⚠️ Faltam: ${_formatMoeda.format(divergencia.abs())}';
+      iconDivergencia = Icons.warning_amber_rounded;
+    } else if (divergencia > 0.05) {
+      corDivergencia = Colors.blue.shade700;
+      statusTexto = '🔵 Sobraram: ${_formatMoeda.format(divergencia)}';
+      iconDivergencia = Icons.info_outline;
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _buildSeletorMes(state),
+        const SizedBox(height: 16),
+
+        // 📊 CARTÃO DE RESUMO (O TERMÔMETRO DA EMPRESA)
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300, width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('📊 RESUMO DO MÊS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey)),
+              const Divider(height: 24),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('📈 Total Bruto (Sistema):', style: TextStyle(color: Colors.black87)), Text(_formatMoeda.format(totalSistema), style: const TextStyle(fontWeight: FontWeight.bold))]),
+              const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('📉 Taxas de Maquininha:', style: TextStyle(color: Colors.red)), Text('- ${_formatMoeda.format(totalTaxasInformadas)}', style: const TextStyle(color: Colors.red))]),
+              const SizedBox(height: 8),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('🏦 Total Líquido (Real):', style: TextStyle(color: Colors.black87)), Text(_formatMoeda.format(totalReal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+              const Divider(height: 24),
+              Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: corDivergencia.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(iconDivergencia, color: corDivergencia, size: 20), const SizedBox(width: 8), Text(statusTexto, style: TextStyle(color: corDivergencia, fontWeight: FontWeight.bold, fontSize: 14))])),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        const Text('Confronte os valores com o seu extrato:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54)),
+        const SizedBox(height: 12),
+
+        // 💠 GAVETAS EXPANSÍVEIS DE CONCILIAÇÃO
+        if (state.formasPagamento.isEmpty)
+          const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Nenhum recebimento registrado neste mês.', style: TextStyle(color: Colors.grey)))),
+          
+        ...state.formasPagamento.entries.map((e) {
+          final forma = e.key;
+          final valorEsperado = e.value;
+          final realCtrl = _getRealController(forma);
+          final taxaCtrl = _getTaxaController(forma);
+
+          final valReal = double.tryParse(realCtrl.text.replaceAll(',', '.')) ?? 0.0;
+          final valTaxa = double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.0;
+          final diffForma = (valReal + valTaxa) - valorEsperado;
+
+          Color corStatusForma = Colors.green;
+          String txtStatusForma = '✅ Bateu certo!';
+          if (diffForma < -0.05) {
+            corStatusForma = Colors.red;
+            txtStatusForma = '⚠️ Faltam: ${_formatMoeda.format(diffForma.abs())}';
+          } else if (diffForma > 0.05) {
+            corStatusForma = Colors.blue;
+            txtStatusForma = '🔵 Sobraram: ${_formatMoeda.format(diffForma)}';
+          }
+
+          IconData iconeForma = Icons.payments;
+          if (forma.toLowerCase().contains('pix')) iconeForma = Icons.pix;
+          if (forma.toLowerCase().contains('cartão') || forma.toLowerCase().contains('credito') || forma.toLowerCase().contains('debito')) iconeForma = Icons.credit_card;
+          if (forma.toLowerCase().contains('dinheiro')) iconeForma = Icons.attach_money;
+
+          final bool aceitaTaxa = forma.toLowerCase().contains('cartão') || forma.toLowerCase().contains('credito') || forma.toLowerCase().contains('debito');
+
+          return Card(
+            elevation: 0, margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+            child: ExpansionTile(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              leading: CircleAvatar(backgroundColor: Colors.grey.shade100, child: Icon(iconeForma, color: _primaryColor, size: 20)),
+              title: Text(forma, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('Vendido: ${_formatMoeda.format(valorEsperado)}', style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              childrenPadding: const EdgeInsets.all(16),
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: realCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: const InputDecoration(labelText: 'Valor no Extrato / Gaveta', prefixText: 'R\$ ', border: OutlineInputBorder(), isDense: true),
+                      ),
+                    ),
+                    if (aceitaTaxa) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: taxaCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: InputDecoration(labelText: 'Taxas da Maquininha', prefixText: 'R\$ ', border: const OutlineInputBorder(), isDense: true, fillColor: Colors.red.shade50, filled: true),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                
+                // Resultado Matemático da Forma
+                Container(
+                  width: double.infinity, padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: corStatusForma.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Text(txtStatusForma, style: TextStyle(color: corStatusForma, fontWeight: FontWeight.bold, fontSize: 13), textAlign: TextAlign.center),
+                ),
+                const SizedBox(height: 16),
+                
+                const Text('Ajustes e Verificações:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                const SizedBox(height: 8),
+                
+                // Botões de Ação
+                Wrap(
+                  spacing: 8, runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      icon: const Icon(Icons.search, size: 16),
+                      label: const Text('Ver Comandas', style: TextStyle(fontSize: 12)),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lista de comandas de $forma no mês.'), backgroundColor: Colors.blue));
+                      },
+                    ),
+                    OutlinedButton.icon(
+                      icon: Icon(Icons.arrow_downward, size: 16, color: Colors.red.shade700),
+                      label: Text('Lançar Despesa', style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
+                      style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.red.shade200)),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lançar despesa avulsa em $forma.'), backgroundColor: Colors.red));
+                      },
+                    ),
+                    OutlinedButton.icon(
+                      icon: Icon(Icons.arrow_upward, size: 16, color: Colors.green.shade700),
+                      label: Text('Lançar Entrada', style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+                      style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.green.shade200)),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lançar entrada avulsa em $forma.'), backgroundColor: Colors.green));
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+
+        const SizedBox(height: 24),
+        FilledButton.icon(
+          style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
+          icon: const Icon(Icons.save),
+          label: const Text('Salvar Conciliação do Mês', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          onPressed: () {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valores guardados na memória local! A conexão com Firebase será ativada a seguir.'), backgroundColor: Colors.green));
+          },
+        ),
+        const SizedBox(height: 40),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // MÉTODOS ANTERIORES INTACTOS
+  // ===========================================================================
 
   Widget _buildVisaoGeral(FinanceiroState state) {
     return ListView(
@@ -236,7 +456,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
-        // 💰 LUCRO LÍQUIDO (Matematicamente Blindado)
+        // 💰 LUCRO LÍQUIDO
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: _primaryColor, borderRadius: BorderRadius.circular(16)),
