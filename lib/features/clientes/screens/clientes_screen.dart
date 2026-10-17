@@ -21,19 +21,27 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
   // Filtros de Estado
   String _filtroTop = 'faturamento';
+  String _filtroTempoTop = 'sempre'; // 🎯 NOVO: 'sempre', '6_meses', 'ano_atual'
   String _filtroTodos = 'todos'; 
   String _filtroRetencao = 'todos_risco'; 
 
-  // 🎯 MAPAS DE MEMÓRIA (Matemática Dinâmica em Tempo Real)
+  // 🎯 MAPAS DE MEMÓRIA (Matemática Dinâmica por Período)
   List<String> _clientesComAgendamentoPendente = [];
-  Map<String, int> _visitasReais = {};
-  Map<String, double> _gastoReal = {};
+  
+  Map<String, int> _visitasSempre = {};
+  Map<String, double> _gastosSempre = {};
+  
+  Map<String, int> _visitasAnoAtual = {};
+  Map<String, double> _gastosAnoAtual = {};
+  
+  Map<String, int> _visitas6Meses = {};
+  Map<String, double> _gastos6Meses = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _carregarMetricasAgendamentos(); // 🎯 O Novo Motor Dinâmico
+    _carregarMetricasAgendamentos(); 
   }
 
   @override
@@ -43,7 +51,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
-  // 🎯 NOVO MOTOR: Puxa Confirmados e Concluídos para calcular as VIPs
+  // 🎯 MOTOR DE MÉTRICAS OTIMIZADO: Separa o faturamento por datas!
   Future<void> _carregarMetricasAgendamentos() async {
     try {
       final snap = await FirebaseFirestore.instance.collection('agendamentos')
@@ -51,8 +59,17 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           .get();
           
       final setPendentes = <String>{};
-      final visitas = <String, int>{};
-      final gastos = <String, double>{};
+      
+      final vSempre = <String, int>{};
+      final gSempre = <String, double>{};
+      final vAnoAtual = <String, int>{};
+      final gAnoAtual = <String, double>{};
+      final v6Meses = <String, int>{};
+      final g6Meses = <String, double>{};
+
+      final hoje = DateTime.now();
+      final inicioAnoAtual = DateTime(hoje.year, 1, 1);
+      final inicio6Meses = DateTime(hoje.year, hoje.month - 6, hoje.day); 
 
       for(var doc in snap.docs) {
         final data = doc.data();
@@ -61,27 +78,51 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         final cId = data['clienteId'].toString();
         final status = data['status']?.toString().toLowerCase() ?? '';
         final valor = (data['valor'] ?? 0).toDouble();
+        
+        final dataStr = data['data']?.toString() ?? '';
+        DateTime dataAgendamento = hoje;
+        if (dataStr.isNotEmpty) {
+          try { dataAgendamento = DateTime.parse(dataStr); } catch (_) {}
+        }
 
-        // Alimenta a trava de Retenção
+        // Alimenta a Trava de Retenção
         if (status == 'pendente' || status == 'confirmado') {
           setPendentes.add(cId);
         }
-        // Alimenta o Ranking VIP com as comandas que deram dinheiro ou vão dar
+        
+        // Alimenta o Ranking VIP (Somente grana no bolso ou garantida)
         if (status == 'confirmado' || status == 'concluido') {
-          visitas[cId] = (visitas[cId] ?? 0) + 1;
-          gastos[cId] = (gastos[cId] ?? 0.0) + valor;
+          // Histórico Completo
+          vSempre[cId] = (vSempre[cId] ?? 0) + 1;
+          gSempre[cId] = (gSempre[cId] ?? 0.0) + valor;
+
+          // Ano Atual
+          if (dataAgendamento.isAfter(inicioAnoAtual) || dataAgendamento.isAtSameMomentAs(inicioAnoAtual)) {
+            vAnoAtual[cId] = (vAnoAtual[cId] ?? 0) + 1;
+            gAnoAtual[cId] = (gAnoAtual[cId] ?? 0.0) + valor;
+          }
+
+          // Últimos 6 Meses
+          if (dataAgendamento.isAfter(inicio6Meses) || dataAgendamento.isAtSameMomentAs(inicio6Meses)) {
+            v6Meses[cId] = (v6Meses[cId] ?? 0) + 1;
+            g6Meses[cId] = (g6Meses[cId] ?? 0.0) + valor;
+          }
         }
       }
       
       if (mounted) {
         setState(() {
           _clientesComAgendamentoPendente = setPendentes.toList();
-          _visitasReais = visitas;
-          _gastoReal = gastos;
+          _visitasSempre = vSempre;
+          _gastosSempre = gSempre;
+          _visitasAnoAtual = vAnoAtual;
+          _gastosAnoAtual = gAnoAtual;
+          _visitas6Meses = v6Meses;
+          _gastos6Meses = g6Meses;
         });
       }
     } catch (e) {
-      debugPrint('Erro no motor de métricas dinâmicas: $e');
+      debugPrint('Erro no motor de métricas: $e');
     }
   }
 
@@ -99,7 +140,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           tabs: const [
             Tab(text: 'Todos'),
             Tab(text: '🎯 Retenção'), 
-            Tab(text: '🏆 Top Clientes'), // 🎯 ORDEM ALTERADA
+            Tab(text: '🏆 Top Clientes'), 
           ],
         ),
       ),
@@ -113,27 +154,41 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         data: (todosClientes) {
           final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
-          // 🎯 TOP CLIENTES (Usando a Matemática Dinâmica)
+          // 🎯 LÓGICA DO NOVO PÓDIO VIP (Por Período)
+          Map<String, int> mapaVisitasAtivo;
+          Map<String, double> mapaGastosAtivo;
+
+          if (_filtroTempoTop == 'ano_atual') {
+            mapaVisitasAtivo = _visitasAnoAtual;
+            mapaGastosAtivo = _gastosAnoAtual;
+          } else if (_filtroTempoTop == '6_meses') {
+            mapaVisitasAtivo = _visitas6Meses;
+            mapaGastosAtivo = _gastos6Meses;
+          } else {
+            mapaVisitasAtivo = _visitasSempre;
+            mapaGastosAtivo = _gastosSempre;
+          }
+
           final topClientes = List<Cliente>.from(todosClientes.where((c) {
-            final v = _visitasReais[c.id] ?? c.totalVisitas;
-            return v > 0;
+            final v = mapaVisitasAtivo[c.id] ?? 0;
+            return v > 0; // Só aparece se tiver visita confirmada/concluída NO PERÍODO SELECIONADO
           }));
 
           if (_filtroTop == 'faturamento') {
             topClientes.sort((a, b) {
-              final gA = _gastoReal[a.id] ?? a.totalGasto;
-              final gB = _gastoReal[b.id] ?? b.totalGasto;
+              final gA = mapaGastosAtivo[a.id] ?? 0.0;
+              final gB = mapaGastosAtivo[b.id] ?? 0.0;
               return gB.compareTo(gA);
             });
           } else {
             topClientes.sort((a, b) {
-              final vA = _visitasReais[a.id] ?? a.totalVisitas;
-              final vB = _visitasReais[b.id] ?? b.totalVisitas;
+              final vA = mapaVisitasAtivo[a.id] ?? 0;
+              final vB = mapaVisitasAtivo[b.id] ?? 0;
               return vB.compareTo(vA);
             });
           }
 
-          // FUNIL DE RETENÇÃO BLINDADO
+          // FUNIL DE RETENÇÃO
           final clientesEmRisco = <Cliente>[];
           for (var c in todosClientes) {
             final dataRef = c.ultimaVisita ?? c.createdAt;
@@ -154,8 +209,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             controller: _tabController,
             children: [
               _construirAbaTodos(todosClientes, moeda),
-              _construirAbaRetencao(clientesEmRisco), // ABA 2 AGORA
-              _construirAbaTopClientes(topClientes, moeda), // ABA 3 AGORA
+              _construirAbaRetencao(clientesEmRisco), 
+              _construirAbaTopClientes(topClientes, moeda, mapaVisitasAtivo, mapaGastosAtivo), // Passa os mapas corretos
             ],
           );
         },
@@ -234,14 +289,15 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // 🎯 ABA 3: TOP CLIENTES (O NOVO PÓDIO VIP)
+  // 🎯 ABA 3: TOP CLIENTES (COM FILTROS TEMPORAIS)
   // =========================================================================
-  Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda) {
+  Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda, Map<String, int> mapaVisitas, Map<String, double> mapaGastos) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // FILTRO 1: O QUE AVALIAR (Faturamento vs Frequência)
           Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
@@ -251,7 +307,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             ),
             child: SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'faturamento', label: Text('🏆 Maior Gasto (R\$)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                ButtonSegment(value: 'faturamento', label: Text('🏆 Maior Gasto', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
                 ButtonSegment(value: 'frequencia', label: Text('🔄 Mais Visitas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
               ],
               selected: {_filtroTop},
@@ -263,19 +319,50 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               onSelectionChanged: (set) => setState(() => _filtroTop = set.first),
             ),
           ),
+          const SizedBox(height: 12),
+          
+          // 🎯 FILTRO 2: PERÍODO DE TEMPO
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                ChoiceChip(
+                  label: const Text('Todo Histórico', style: TextStyle(fontSize: 12)),
+                  selected: _filtroTempoTop == 'sempre',
+                  selectedColor: Colors.amber.shade200,
+                  onSelected: (val) => setState(() => _filtroTempoTop = 'sempre'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Últimos 6 Meses', style: TextStyle(fontSize: 12)),
+                  selected: _filtroTempoTop == '6_meses',
+                  selectedColor: Colors.amber.shade200,
+                  onSelected: (val) => setState(() => _filtroTempoTop = '6_meses'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('Ano Atual', style: TextStyle(fontSize: 12)),
+                  selected: _filtroTempoTop == 'ano_atual',
+                  selectedColor: Colors.amber.shade200,
+                  onSelected: (val) => setState(() => _filtroTempoTop = 'ano_atual'),
+                ),
+              ],
+            ),
+          ),
+          
           const SizedBox(height: 16),
           Expanded(
             child: listaTop.isEmpty
-                ? const Center(child: Text('Nenhuma cliente com histórico de visitas.', style: TextStyle(color: Colors.grey)))
+                ? Center(child: Text('Nenhum agendamento confirmado no período.', style: TextStyle(color: Colors.grey.shade600)))
                 : ListView.builder(
                     itemCount: listaTop.length,
                     itemBuilder: (context, index) {
                       final cliente = listaTop[index];
                       final rank = index + 1;
                       
-                      // Usa a Matemática Dinâmica!
-                      final gasto = _gastoReal[cliente.id] ?? cliente.totalGasto;
-                      final visitas = _visitasReais[cliente.id] ?? cliente.totalVisitas;
+                      // Usa a Matemática do Período Selecionado
+                      final gasto = mapaGastos[cliente.id] ?? 0.0;
+                      final visitas = mapaVisitas[cliente.id] ?? 0;
 
                       Widget rankBadge;
                       if (rank == 1) rankBadge = const Text('🥇', style: TextStyle(fontSize: 32));
