@@ -15,7 +15,7 @@ import '../../estoque/screens/estoque_screen.dart';
 import '../controllers/backup_controller.dart';
 import '../../produtos/screens/produtos_screen.dart'; 
 import 'metas_screen.dart'; 
-import 'whatsapp_config_screen.dart'; // 🎯 Importámos a nossa nova tela!
+import 'whatsapp_config_screen.dart'; 
 
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
@@ -237,7 +237,6 @@ class ConfiguracoesScreen extends ConsumerWidget {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
             child: Column(
               children: [
-                // 🎯 O NOSSO NOVO BOTÃO DE MENSAGENS DO WHATSAPP!
                 ListTile(
                   leading: const Icon(Icons.wechat, color: Colors.green),
                   title: const Text('Mensagens do WhatsApp', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -265,7 +264,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App', style: TextStyle(fontWeight: FontWeight.w600)),
-                  trailing: const Text('v1.0.9 (Sync WhatsApp)', style: TextStyle(color: Colors.grey, fontSize: 12)), 
+                  trailing: const Text('v1.1.0 (CRM & Retenção)', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)), 
                   onTap: () {},
                 ),
               ],
