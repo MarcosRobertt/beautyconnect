@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🎯 Necessário para a busca dos últimos procedimentos
 
 import '../../../core/constants/app_constants.dart';
 import '../controllers/cliente_controller.dart';
@@ -20,13 +21,13 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
   // Filtros de Estado
   String _filtroTop = 'faturamento';
-  String _filtroTodos = 'todos'; // 'todos' ou 'recentes'
-  String _filtroInativos = 'todos_inativos'; // 'todos_inativos', '45', '90'
+  String _filtroTodos = 'todos'; 
+  String _filtroRetencao = 'todos_risco'; // 🎯 NOVO: 'todos_risco', '20', '30', '31_mais'
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 3, vsync: this); // 🎯 Reduzido para 3 abas
   }
 
   @override
@@ -38,7 +39,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    // 🚀 Carrega APENAS a lista de clientes. Sem chamadas pesadas de histórico!
     final clientesAsync = ref.watch(clienteControllerProvider);
     final moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
 
@@ -51,8 +51,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           tabs: const [
             Tab(text: 'Todos'),
             Tab(text: 'Top Clientes'),
-            Tab(text: 'Recorrência'),
-            Tab(text: 'Inativos'),
+            Tab(text: '🎯 Retenção'), // 🎯 NOVA ABA
           ],
         ),
       ),
@@ -74,29 +73,30 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
           }
 
-          // Recorrência e Inativos
-          final recorrencia = <Cliente>[];
-          final inativos = <Cliente>[];
-
+          // 🎯 O Novo Funil de Retenção (Clientes sumidas há 20 dias ou mais)
+          final clientesEmRisco = <Cliente>[];
           for (var c in todosClientes) {
             final dataRef = c.ultimaVisita ?? c.createdAt;
             final refZerada = DateTime(dataRef.year, dataRef.month, dataRef.day);
             final dias = hojeZerado.difference(refZerada).inDays;
 
-            if (dias >= 15 && dias < 30) {
-              recorrencia.add(c);
-            } else if (dias >= 30) {
-              inativos.add(c);
+            if (dias >= 20) {
+              clientesEmRisco.add(c);
             }
           }
+          // Ordenar as mais antigas primeiro
+          clientesEmRisco.sort((a, b) {
+            final dataA = a.ultimaVisita ?? a.createdAt;
+            final dataB = b.ultimaVisita ?? b.createdAt;
+            return dataA.compareTo(dataB); 
+          });
 
           return TabBarView(
             controller: _tabController,
             children: [
               _construirAbaTodos(todosClientes, moeda),
               _construirAbaTopClientes(topClientes, moeda),
-              _construirAbaListaSimples(recorrencia, 'Clientes sem agendar entre 15 e 30 dias', moeda),
-              _construirAbaInativos(inativos, moeda),
+              _construirAbaRetencao(clientesEmRisco), // 🎯 NOVA ABA DE GESTÃO DE CHURN
             ],
           );
         },
@@ -105,7 +105,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // ABA 1: TODOS (Filtros Rápidos e Busca Local)
+  // ABA 1: TODOS (Catálogo Limpo)
   // =========================================================================
   Widget _construirAbaTodos(List<Cliente> listaBase, NumberFormat moeda) {
     List<Cliente> filtradosPorChip = listaBase;
@@ -167,7 +167,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           Expanded(
             child: listaFinal.isEmpty
                 ? const Center(child: Text('Nenhuma cliente encontrada.', style: TextStyle(color: Colors.grey)))
-                // 🎯 AQUI: Informamos que não queremos mostrar as métricas na aba Todos
                 : _construirListView(listaFinal, moeda, mostrarMetricas: false), 
           ),
         ],
@@ -204,18 +203,19 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // ABA 3: INATIVOS
+  // 🎯 ABA 3: RETENÇÃO (O NOVO CENTRO DE RESGATE)
   // =========================================================================
-  Widget _construirAbaInativos(List<Cliente> listaBase, NumberFormat moeda) {
+  Widget _construirAbaRetencao(List<Cliente> listaBase) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     List<Cliente> filtradosPorChip = listaBase.where((c) {
       final ref = c.ultimaVisita ?? c.createdAt;
       final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
 
-      if (_filtroInativos == '45') return dias >= 45;
-      if (_filtroInativos == '90') return dias >= 90;
-      return true;
+      if (_filtroRetencao == '20') return dias >= 20 && dias <= 29;
+      if (_filtroRetencao == '30') return dias == 30 || dias == 31;
+      if (_filtroRetencao == '31_mais') return dias > 31;
+      return true; // 'todos_risco'
     }).toList();
 
     final textoBusca = _buscaController.text.trim().toLowerCase();
@@ -234,7 +234,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           TextField(
             controller: _buscaController,
             decoration: InputDecoration(
-              hintText: 'Buscar nas inativas...',
+              hintText: 'Buscar cliente sumida...',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: textoBusca.isNotEmpty
                   ? IconButton(icon: const Icon(Icons.clear), onPressed: () { _buscaController.clear(); setState(() {}); })
@@ -250,24 +250,32 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             child: Row(
               children: [
                 ChoiceChip(
-                  label: const Text('Todas Inativas', style: TextStyle(fontSize: 12)),
-                  selected: _filtroInativos == 'todos_inativos',
-                  selectedColor: Colors.purple.shade100,
-                  onSelected: (val) => setState(() => _filtroInativos = 'todos_inativos'),
+                  label: const Text('Risco Geral', style: TextStyle(fontSize: 12)),
+                  selected: _filtroRetencao == 'todos_risco',
+                  selectedColor: Colors.orange.shade100,
+                  onSelected: (val) => setState(() => _filtroRetencao = 'todos_risco'),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('> 45 dias', style: TextStyle(fontSize: 12)),
-                  selected: _filtroInativos == '45',
-                  selectedColor: Colors.purple.shade100,
-                  onSelected: (val) => setState(() => _filtroInativos = '45'),
+                  label: const Text('🟡 20 a 29 Dias', style: TextStyle(fontSize: 12)),
+                  selected: _filtroRetencao == '20',
+                  selectedColor: Colors.yellow.shade600,
+                  onSelected: (val) => setState(() => _filtroRetencao = '20'),
                 ),
                 const SizedBox(width: 8),
                 ChoiceChip(
-                  label: const Text('> 90 dias', style: TextStyle(fontSize: 12)),
-                  selected: _filtroInativos == '90',
-                  selectedColor: Colors.purple.shade100,
-                  onSelected: (val) => setState(() => _filtroInativos = '90'),
+                  label: const Text('🟠 30 Dias', style: TextStyle(fontSize: 12)),
+                  selected: _filtroRetencao == '30',
+                  selectedColor: Colors.orange.shade400,
+                  onSelected: (val) => setState(() => _filtroRetencao = '30'),
+                ),
+                const SizedBox(width: 8),
+                ChoiceChip(
+                  label: const Text('🔴 + de 31 Dias', style: TextStyle(fontSize: 12, color: Colors.white)),
+                  selected: _filtroRetencao == '31_mais',
+                  selectedColor: Colors.red.shade700,
+                  backgroundColor: Colors.red.shade100,
+                  onSelected: (val) => setState(() => _filtroRetencao = '31_mais'),
                 ),
               ],
             ),
@@ -276,40 +284,124 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           if (listaFinal.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text('⚠️ ${listaFinal.length} Clientes encontradas', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+              child: Text('⚠️ ${listaFinal.length} Clientes necessitam de contato', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade800)),
             ),
           Expanded(
             child: listaFinal.isEmpty
-                ? const Center(child: Text('Nenhuma cliente inativa encontrada.', style: TextStyle(color: Colors.grey)))
-                : _construirListView(listaFinal, moeda, isInativo: true),
+                ? const Center(child: Text('Nenhuma cliente em risco encontrada! Parabéns!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)))
+                : ListView.builder(
+                    itemCount: listaFinal.length,
+                    itemBuilder: (context, index) {
+                      return _buildCartaoRetencao(listaFinal[index], hojeZerado);
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  // =========================================================================
-  // ABA AUXILIAR: LISTA SIMPLES (Recorrência)
-  // =========================================================================
-  Widget _construirAbaListaSimples(List<Cliente> listaBase, String subtitulo, NumberFormat moeda) {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(subtitulo, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple.shade700)),
-          const SizedBox(height: 12),
-          Expanded(child: _construirListView(listaBase, moeda)),
-        ],
+  // 🎯 CARTÃO DE RESGATE (Exclusivo da Aba Retenção)
+  Widget _buildCartaoRetencao(Cliente cliente, DateTime hojeZerado) {
+    final ref = cliente.ultimaVisita ?? cliente.createdAt;
+    final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
+    
+    Color corAlerta = Colors.orange.shade700;
+    String nivel = 'ATENÇÃO';
+    if (dias > 31) {
+      corAlerta = Colors.red.shade700;
+      nivel = 'CRÍTICO';
+    }
+
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: corAlerta.withOpacity(0.3))),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(cliente.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: corAlerta.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                  child: Text('⏳ $dias dias ($nivel)', style: TextStyle(color: corAlerta, fontWeight: FontWeight.bold, fontSize: 11)),
+                )
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 12),
+            
+            // 🎯 MICRO-BUSCA: Procura os últimos 2 agendamentos diretamente no banco de forma leve
+            FutureBuilder<QuerySnapshot>(
+              future: FirebaseFirestore.instance.collection('agendamentos')
+                  .where('clienteId', isEqualTo: cliente.id)
+                  .where('status', isEqualTo: 'concluido')
+                  .orderBy('data', descending: true)
+                  .limit(2)
+                  .get(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Text('Procurando últimos serviços...', style: TextStyle(fontSize: 12, color: Colors.grey));
+                }
+                
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Text('Nenhum serviço registrado nas comandas.', style: TextStyle(fontSize: 12, color: Colors.grey));
+                }
+
+                final servicos = snapshot.data!.docs.map((doc) => doc['servico']?.toString() ?? 'Serviço').toList();
+                return RichText(
+                  text: TextSpan(
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+                    children: [
+                      const TextSpan(text: '💅 Últimos procedimentos: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      TextSpan(text: servicos.join(', ')),
+                    ],
+                  ),
+                );
+              },
+            ),
+            
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(backgroundColor: Colors.green.shade600, visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.chat, size: 16),
+                    label: const Text('WhatsApp'),
+                    onPressed: () {
+                      // 💡 Aqui no futuro você pode acionar o seu whatsapp_service.dart
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Abrir WhatsApp para ${cliente.telefone}'), backgroundColor: Colors.green));
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
+                    icon: const Icon(Icons.history, size: 16),
+                    label: const Text('Histórico'),
+                    onPressed: () => context.push('${AppRoutes.clienteHistorico}/${cliente.id}'),
+                  ),
+                ),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
 
   // =========================================================================
-  // WIDGET LISTVIEW REUTILIZÁVEL
+  // WIDGET LISTVIEW REUTILIZÁVEL (Usado na Aba Todos e Top Clientes)
   // =========================================================================
-  // 🎯 AQUI: Nova propriedade "mostrarMetricas" controlará a exibição
-  Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool isInativo = false, bool mostrarMetricas = true}) {
+  Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool mostrarMetricas = true}) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
     return ListView.separated(
@@ -322,12 +414,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             ? DateFormat('dd/MM/yyyy').format(cliente.ultimaVisita!) 
             : 'Nenhum atendimento';
 
-        int dias = 0;
-        if (cliente.ultimaVisita != null) {
-           final ref = DateTime(cliente.ultimaVisita!.year, cliente.ultimaVisita!.month, cliente.ultimaVisita!.day);
-           dias = hojeZerado.difference(ref).inDays;
-        }
-
         return Padding(
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
@@ -335,14 +421,13 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             children: [
               Text(
                 cliente.nome, 
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInativo ? Colors.red.shade800 : Colors.black87),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
                 maxLines: 1, overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
               
-              // 🎯 AQUI: Condição para esconder as visitas e gastos na aba "Todos"
               if (mostrarMetricas) ...[
                 Row(
                   children: [
@@ -359,8 +444,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                 children: [
                   Expanded(
                     child: Text(
-                      isInativo ? 'Sem agendar há $dias dias (Último: $dataFormatada)' : '📅 Última visita: $dataFormatada', 
-                      style: TextStyle(fontSize: 12, color: isInativo ? Colors.red.shade600 : Colors.grey.shade600, fontWeight: FontWeight.bold),
+                      '📅 Última visita: $dataFormatada', 
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold),
                     ),
                   ),
                   Row(
