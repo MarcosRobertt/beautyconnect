@@ -24,14 +24,16 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   String _filtroTodos = 'todos'; 
   String _filtroRetencao = 'todos_risco'; 
 
-  // 🎯 TRAVA INTELIGENTE
+  // 🎯 MAPAS DE MEMÓRIA (Matemática Dinâmica em Tempo Real)
   List<String> _clientesComAgendamentoPendente = [];
+  Map<String, int> _visitasReais = {};
+  Map<String, double> _gastoReal = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
-    _buscarAgendamentosPendentes(); 
+    _carregarMetricasAgendamentos(); // 🎯 O Novo Motor Dinâmico
   }
 
   @override
@@ -41,27 +43,45 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     super.dispose();
   }
 
-  // 🎯 MOTOR DA TRAVA: Pega TUDO que está Pendente ou Confirmado 
-  Future<void> _buscarAgendamentosPendentes() async {
+  // 🎯 NOVO MOTOR: Puxa Confirmados e Concluídos para calcular as VIPs
+  Future<void> _carregarMetricasAgendamentos() async {
     try {
       final snap = await FirebaseFirestore.instance.collection('agendamentos')
-          .where('status', whereIn: ['pendente', 'confirmado'])
+          .where('status', whereIn: ['pendente', 'confirmado', 'concluido'])
           .get();
           
       final setPendentes = <String>{};
+      final visitas = <String, int>{};
+      final gastos = <String, double>{};
+
       for(var doc in snap.docs) {
-        if (doc.data().containsKey('clienteId')) {
-          setPendentes.add(doc['clienteId'].toString());
+        final data = doc.data();
+        if (!data.containsKey('clienteId')) continue;
+        
+        final cId = data['clienteId'].toString();
+        final status = data['status']?.toString().toLowerCase() ?? '';
+        final valor = (data['valor'] ?? 0).toDouble();
+
+        // Alimenta a trava de Retenção
+        if (status == 'pendente' || status == 'confirmado') {
+          setPendentes.add(cId);
+        }
+        // Alimenta o Ranking VIP com as comandas que deram dinheiro ou vão dar
+        if (status == 'confirmado' || status == 'concluido') {
+          visitas[cId] = (visitas[cId] ?? 0) + 1;
+          gastos[cId] = (gastos[cId] ?? 0.0) + valor;
         }
       }
       
       if (mounted) {
         setState(() {
           _clientesComAgendamentoPendente = setPendentes.toList();
+          _visitasReais = visitas;
+          _gastoReal = gastos;
         });
       }
     } catch (e) {
-      debugPrint('Erro na trava de agendamentos: $e');
+      debugPrint('Erro no motor de métricas dinâmicas: $e');
     }
   }
 
@@ -78,8 +98,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
           isScrollable: true,
           tabs: const [
             Tab(text: 'Todos'),
-            Tab(text: 'Top Clientes'),
             Tab(text: '🎯 Retenção'), 
+            Tab(text: '🏆 Top Clientes'), // 🎯 ORDEM ALTERADA
           ],
         ),
       ),
@@ -93,15 +113,27 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
         data: (todosClientes) {
           final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
 
-          // Top Clientes
-          final topClientes = List<Cliente>.from(todosClientes.where((c) => c.totalVisitas > 0));
+          // 🎯 TOP CLIENTES (Usando a Matemática Dinâmica)
+          final topClientes = List<Cliente>.from(todosClientes.where((c) {
+            final v = _visitasReais[c.id] ?? c.totalVisitas;
+            return v > 0;
+          }));
+
           if (_filtroTop == 'faturamento') {
-            topClientes.sort((a, b) => b.totalGasto.compareTo(a.totalGasto));
+            topClientes.sort((a, b) {
+              final gA = _gastoReal[a.id] ?? a.totalGasto;
+              final gB = _gastoReal[b.id] ?? b.totalGasto;
+              return gB.compareTo(gA);
+            });
           } else {
-            topClientes.sort((a, b) => b.totalVisitas.compareTo(a.totalVisitas));
+            topClientes.sort((a, b) {
+              final vA = _visitasReais[a.id] ?? a.totalVisitas;
+              final vB = _visitasReais[b.id] ?? b.totalVisitas;
+              return vB.compareTo(vA);
+            });
           }
 
-          // 🎯 FUNIL DE RETENÇÃO BLINDADO
+          // FUNIL DE RETENÇÃO BLINDADO
           final clientesEmRisco = <Cliente>[];
           for (var c in todosClientes) {
             final dataRef = c.ultimaVisita ?? c.createdAt;
@@ -112,7 +144,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               clientesEmRisco.add(c);
             }
           }
-          
           clientesEmRisco.sort((a, b) {
             final dataA = a.ultimaVisita ?? a.createdAt;
             final dataB = b.ultimaVisita ?? b.createdAt;
@@ -123,8 +154,8 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
             controller: _tabController,
             children: [
               _construirAbaTodos(todosClientes, moeda),
-              _construirAbaTopClientes(topClientes, moeda),
-              _construirAbaRetencao(clientesEmRisco), 
+              _construirAbaRetencao(clientesEmRisco), // ABA 2 AGORA
+              _construirAbaTopClientes(topClientes, moeda), // ABA 3 AGORA
             ],
           );
         },
@@ -203,7 +234,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // ABA 2: TOP CLIENTES
+  // 🎯 ABA 3: TOP CLIENTES (O NOVO PÓDIO VIP)
   // =========================================================================
   Widget _construirAbaTopClientes(List<Cliente> listaTop, NumberFormat moeda) {
     return Padding(
@@ -211,19 +242,100 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'faturamento', label: Text('Maior Gasto (R\$)', style: TextStyle(fontSize: 12))),
-              ButtonSegment(value: 'frequencia', label: Text('Mais Visitas', style: TextStyle(fontSize: 12))),
-            ],
-            selected: {_filtroTop},
-            onSelectionChanged: (set) => setState(() => _filtroTop = set.first),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade300)
+            ),
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'faturamento', label: Text('🏆 Maior Gasto (R\$)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                ButtonSegment(value: 'frequencia', label: Text('🔄 Mais Visitas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+              ],
+              selected: {_filtroTop},
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: const Color(0xFF8A2463).withOpacity(0.15),
+                foregroundColor: const Color(0xFF8A2463),
+                side: BorderSide.none,
+              ),
+              onSelectionChanged: (set) => setState(() => _filtroTop = set.first),
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           Expanded(
             child: listaTop.isEmpty
                 ? const Center(child: Text('Nenhuma cliente com histórico de visitas.', style: TextStyle(color: Colors.grey)))
-                : _construirListView(listaTop, moeda),
+                : ListView.builder(
+                    itemCount: listaTop.length,
+                    itemBuilder: (context, index) {
+                      final cliente = listaTop[index];
+                      final rank = index + 1;
+                      
+                      // Usa a Matemática Dinâmica!
+                      final gasto = _gastoReal[cliente.id] ?? cliente.totalGasto;
+                      final visitas = _visitasReais[cliente.id] ?? cliente.totalVisitas;
+
+                      Widget rankBadge;
+                      if (rank == 1) rankBadge = const Text('🥇', style: TextStyle(fontSize: 32));
+                      else if (rank == 2) rankBadge = const Text('🥈', style: TextStyle(fontSize: 32));
+                      else if (rank == 3) rankBadge = const Text('🥉', style: TextStyle(fontSize: 32));
+                      else rankBadge = CircleAvatar(radius: 16, backgroundColor: Colors.grey.shade300, child: Text('$rankº', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black54)));
+
+                      final bool isGasto = _filtroTop == 'faturamento';
+                      
+                      return Card(
+                        elevation: rank <= 3 ? 2 : 0,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16), 
+                          side: BorderSide(color: rank <= 3 ? const Color(0xFF8A2463).withOpacity(0.5) : Colors.grey.shade200)
+                        ),
+                        child: Container(
+                          decoration: rank <= 3 ? BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            gradient: LinearGradient(
+                              colors: [Colors.orange.shade50.withOpacity(0.5), Colors.white],
+                              begin: Alignment.topLeft, end: Alignment.bottomRight,
+                            ),
+                          ) : null,
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              rankBadge,
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(cliente.nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: rank <= 3 ? const Color(0xFF8A2463) : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    const SizedBox(height: 4),
+                                    Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    isGasto ? moeda.format(gasto) : '$visitas visitas', 
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isGasto ? Colors.green.shade700 : Colors.blue.shade700),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    isGasto ? '🔄 $visitas visitas' : '💰 ${moeda.format(gasto)}', 
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -231,7 +343,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // ABA 3: RETENÇÃO
+  // ABA 2: RETENÇÃO
   // =========================================================================
   Widget _construirAbaRetencao(List<Cliente> listaBase) {
     final hojeZerado = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -329,7 +441,6 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
     );
   }
 
-  // 🎯 CARTÃO DE RESGATE (Aba Retenção)
   Widget _buildCartaoRetencao(Cliente cliente, DateTime hojeZerado) {
     final ref = cliente.ultimaVisita ?? cliente.createdAt;
     final dias = hojeZerado.difference(DateTime(ref.year, ref.month, ref.day)).inDays;
@@ -441,7 +552,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
   }
 
   // =========================================================================
-  // 🎯 WIDGET LISTVIEW DINÂMICO (Usado na Aba Todos e Top Clientes)
+  // WIDGET LISTVIEW REUTILIZÁVEL (Apenas Aba Todos)
   // =========================================================================
   Widget _construirListView(List<Cliente> lista, NumberFormat moeda, {bool mostrarMetricas = true}) {
     return ListView.separated(
@@ -464,22 +575,10 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
               Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
               const SizedBox(height: 4),
               
-              if (mostrarMetricas) ...[
-                Row(
-                  children: [
-                    Text('🔄 Visitas: ${cliente.totalVisitas}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                    const SizedBox(width: 16),
-                    Text('💰 Gasto: ${moeda.format(cliente.totalGasto)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
-
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    // 🎯 NOVA MÁGICA: Busca diretamente na agenda a data do último atendimento confirmado/concluído!
                     child: FutureBuilder<QuerySnapshot>(
                       future: FirebaseFirestore.instance.collection('agendamentos')
                           .where('clienteId', isEqualTo: cliente.id)
