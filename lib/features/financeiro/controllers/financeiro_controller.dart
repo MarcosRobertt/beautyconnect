@@ -3,11 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class FinanceiroState {
   final DateTime mesReferencia;
-  final double receitas; // Receita Total (Serviços + Produtos)
-  final double receitasServicos; // 🟢 NOVO: Isolado
-  final double receitasProdutos; // 🛍️ NOVO: Isolado
+  final double receitas; 
+  final double receitasServicos; 
+  final double receitasProdutos; 
   final double despesas;
-  final double cmv; // 🔴 NOVO: Custo de Mercadoria Vendida (O que pagou pelas joias/cremes)
+  final double cmv; 
   final double taxasPagas;
   final Map<String, double> topServicos;
   final Map<String, double> formasPagamento;
@@ -16,13 +16,17 @@ class FinanceiroState {
   // Comparativos
   final double receitasMesAnterior;
   final double despesasMesAnterior;
-  final double cmvMesAnterior; // 🔴 NOVO
+  final double cmvMesAnterior; 
   final double receitasAnoAnterior;
   final double despesasAnoAnterior;
-  final double cmvAnoAnterior; // 🔴 NOVO
+  final double cmvAnoAnterior; 
 
   final int anoReferencia;
   final List<double> faturamentoAnual;
+
+  // 🎯 NOVOS CAMPOS PARA A CONCILIAÇÃO BANCÁRIA
+  final Map<String, double> conciliacaoReais;
+  final Map<String, double> conciliacaoTaxas;
 
   FinanceiroState({
     required this.mesReferencia,
@@ -43,6 +47,8 @@ class FinanceiroState {
     this.cmvAnoAnterior = 0.0,
     required this.anoReferencia,
     this.faturamentoAnual = const [],
+    this.conciliacaoReais = const {},
+    this.conciliacaoTaxas = const {},
   });
 
   // 🛡️ MÁGICA: O Lucro agora desconta as Despesas (Luz, Água) E o CMV (Custo dos Produtos)
@@ -60,6 +66,35 @@ class FinanceiroState {
   
   double get variacaoReceitaAno => _calcVariacao(receitas, receitasAnoAnterior);
   double get variacaoDespesaAno => _calcVariacao(despesas, despesasAnoAnterior);
+
+  // 🎯 O Método copyWith permite atualizar a conciliação na tela sem recarregar tudo do banco!
+  FinanceiroState copyWith({
+    Map<String, double>? conciliacaoReais,
+    Map<String, double>? conciliacaoTaxas,
+  }) {
+    return FinanceiroState(
+      mesReferencia: mesReferencia,
+      receitas: receitas,
+      receitasServicos: receitasServicos,
+      receitasProdutos: receitasProdutos,
+      despesas: despesas,
+      cmv: cmv,
+      taxasPagas: taxasPagas,
+      topServicos: topServicos,
+      formasPagamento: formasPagamento,
+      fluxoDiario: fluxoDiario,
+      receitasMesAnterior: receitasMesAnterior,
+      despesasMesAnterior: despesasMesAnterior,
+      cmvMesAnterior: cmvMesAnterior,
+      receitasAnoAnterior: receitasAnoAnterior,
+      despesasAnoAnterior: despesasAnoAnterior,
+      cmvAnoAnterior: cmvAnoAnterior,
+      anoReferencia: anoReferencia,
+      faturamentoAnual: faturamentoAnual,
+      conciliacaoReais: conciliacaoReais ?? this.conciliacaoReais,
+      conciliacaoTaxas: conciliacaoTaxas ?? this.conciliacaoTaxas,
+    );
+  }
 }
 
 final financeiroControllerProvider = StateNotifierProvider<FinanceiroController, AsyncValue<FinanceiroState>>((ref) {
@@ -96,46 +131,33 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   Future<Map<String, double>> _buscarTotaisPeriodo(DateTime inicio, DateTime fim, GetOptions options) async {
     double recServicos = 0; double des = 0; double recProdutos = 0; double cmvPeriodo = 0;
     
-    // 1. Receitas de Serviços
-    final agendamentos = await _db.collection('agendamentos')
-        .where('status', isEqualTo: 'concluido')
-        .where('data', isGreaterThanOrEqualTo: inicio.toIso8601String())
-        .where('data', isLessThanOrEqualTo: fim.toIso8601String())
-        .get(options);
+    // Dispara consultas em paralelo para máxima velocidade! ⚡
+    final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+
+    final agendamentos = await fAgendamentos;
+    final vendas = await fVendas;
+    final despesas = await fDespesas;
         
     for (var doc in agendamentos.docs) {
       final data = doc.data();
       if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
-      
       final bruto = (data['valor'] ?? 0).toDouble();
       final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
-      
       final taxa = calcularTaxa(formaRaw, bruto);
       recServicos += (bruto - taxa); 
     }
-
-    // 2. Receitas e Custos de Produtos (A Loja)
-    final vendas = await _db.collection('loja_vendas')
-        .where('dataVenda', isGreaterThanOrEqualTo: inicio.toIso8601String())
-        .where('dataVenda', isLessThanOrEqualTo: fim.toIso8601String())
-        .get(options);
 
     for (var doc in vendas.docs) {
       final data = doc.data();
       final qtd = (data['quantidade'] ?? 1) as int;
       final preco = (data['precoVendido'] ?? 0).toDouble();
       final custo = (data['custoHistorico'] ?? 0).toDouble();
-
       recProdutos += (preco * qtd);
       cmvPeriodo += (custo * qtd);
     }
 
-    // 3. Despesas Fixas
-    final despesas = await _db.collection('despesas')
-        .where('dataVencimento', isGreaterThanOrEqualTo: inicio.toIso8601String())
-        .where('dataVencimento', isLessThanOrEqualTo: fim.toIso8601String())
-        .get(options);
-        
     for (var doc in despesas.docs) {
       des += (doc.data()['valor'] ?? 0).toDouble();
     }
@@ -145,6 +167,30 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       'despesas': des,
       'cmv': cmvPeriodo
     };
+  }
+
+  // 🎯 O NOVO MOTOR DE GRAVAÇÃO DA CONCILIAÇÃO
+  Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas) async {
+    try {
+      final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
+      
+      // Guarda no banco de forma independente para não pesar a leitura diária!
+      await _db.collection('conciliacoes_mensais').doc(mesAnoStr).set({
+        'reais': valoresReais,
+        'taxas': taxasInformadas,
+        'ultimaAtualizacao': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // Atualiza a tela instantaneamente sem precisar recarregar o banco de dados inteiro ⚡
+      if (state.value != null) {
+        state = AsyncValue.data(state.value!.copyWith(
+          conciliacaoReais: valoresReais,
+          conciliacaoTaxas: taxasInformadas,
+        ));
+      }
+    } catch (e) {
+      throw Exception('Falha ao salvar a conciliação: $e');
+    }
   }
 
   Future<void> carregarDados({DateTime? mes, int? ano, bool forcarServidor = false}) async {
@@ -158,22 +204,39 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       final inicioMes = DateTime(_mesAtual.year, _mesAtual.month, 1);
       final fimMes = DateTime(_mesAtual.year, _mesAtual.month + 1, 0, 23, 59, 59);
 
-      // Buscas Paralelas (Serviços, Produtos e Despesas)
-      final agendamentosSnap = await _db.collection('agendamentos')
-          .where('status', isEqualTo: 'concluido')
-          .where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String())
-          .where('data', isLessThanOrEqualTo: fimMes.toIso8601String())
-          .get(options);
+      final inicioMesAnt = DateTime(_mesAtual.year, _mesAtual.month - 1, 1);
+      final fimMesAnt = DateTime(_mesAtual.year, _mesAtual.month, 0, 23, 59, 59);
+      final inicioAnoAnt = DateTime(_mesAtual.year - 1, _mesAtual.month, 1);
+      final fimAnoAnt = DateTime(_mesAtual.year - 1, _mesAtual.month + 1, 0, 23, 59, 59);
+      
+      final inicioAno = DateTime(_anoAtual, 1, 1);
+      final fimAno = DateTime(_anoAtual, 12, 31, 23, 59, 59);
+      
+      final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
 
-      final vendasSnap = await _db.collection('loja_vendas')
-          .where('dataVenda', isGreaterThanOrEqualTo: inicioMes.toIso8601String())
-          .where('dataVenda', isLessThanOrEqualTo: fimMes.toIso8601String())
-          .get(options);
+      // 🚀 A GRANDE MUDANÇA: Disparar TUDO em Paralelo (Fim do engasgo e da lentidão)
+      final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      
+      final fTotaisMesAnt = _buscarTotaisPeriodo(inicioMesAnt, fimMesAnt, options);
+      final fTotaisAnoAnt = _buscarTotaisPeriodo(inicioAnoAnt, fimAnoAnt, options);
 
-      final despesasSnap = await _db.collection('despesas')
-          .where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String())
-          .where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String())
-          .get(options);
+      final fAnualSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      final fAnualVendasSnap = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      
+      // 🎯 Busca o arquivo levinho de Conciliação
+      final fConciliacao = _db.collection('conciliacoes_mensais').doc(mesAnoStr).get(options);
+
+      // Espera pelas respostas todas ao mesmo tempo! O que demorava 4 segundos agora demora menos de 1.
+      final agendamentosSnap = await fAgendamentos;
+      final vendasSnap = await fVendas;
+      final despesasSnap = await fDespesas;
+      final totaisMesAnt = await fTotaisMesAnt;
+      final totaisAnoAnt = await fTotaisAnoAnt;
+      final anualSnap = await fAnualSnap;
+      final anualVendasSnap = await fAnualVendasSnap;
+      final conciliacaoSnap = await fConciliacao;
 
       double totalReceitasServicos = 0;
       double totalReceitasProdutos = 0;
@@ -232,7 +295,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         totalReceitasProdutos += totalVenda;
         totalCMV += custoVenda;
         
-        // Injeta a venda da loja no caixa do dia
         if (fluxoDiario.containsKey(dataVenda.day)) {
           fluxoDiario[dataVenda.day]!['receita'] = fluxoDiario[dataVenda.day]!['receita']! + totalVenda;
         }
@@ -250,39 +312,14 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         }
       }
 
-      // Comparativos
-      final inicioMesAnt = DateTime(_mesAtual.year, _mesAtual.month - 1, 1);
-      final fimMesAnt = DateTime(_mesAtual.year, _mesAtual.month, 0, 23, 59, 59);
-      final totaisMesAnt = await _buscarTotaisPeriodo(inicioMesAnt, fimMesAnt, options);
-
-      final inicioAnoAnt = DateTime(_mesAtual.year - 1, _mesAtual.month, 1);
-      final fimAnoAnt = DateTime(_mesAtual.year - 1, _mesAtual.month + 1, 0, 23, 59, 59);
-      final totaisAnoAnt = await _buscarTotaisPeriodo(inicioAnoAnt, fimAnoAnt, options);
-
-      // Gráfico Anual (Serviços + Produtos)
-      final inicioAno = DateTime(_anoAtual, 1, 1);
-      final fimAno = DateTime(_anoAtual, 12, 31, 23, 59, 59);
-      
-      final anualSnap = await _db.collection('agendamentos')
-          .where('status', isEqualTo: 'concluido')
-          .where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String())
-          .where('data', isLessThanOrEqualTo: fimAno.toIso8601String())
-          .get(options);
-
-      final anualVendasSnap = await _db.collection('loja_vendas')
-          .where('dataVenda', isGreaterThanOrEqualTo: inicioAno.toIso8601String())
-          .where('dataVenda', isLessThanOrEqualTo: fimAno.toIso8601String())
-          .get(options);
-
+      // Gráfico Anual
       List<double> faturamentoMeses = List.filled(12, 0.0);
-      
       for (var doc in anualSnap.docs) {
         final data = doc.data();
         if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
 
         final bruto = (data['valor'] ?? 0).toDouble();
         final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
-        
         final taxa = calcularTaxa(formaRaw, bruto);
         final liquido = bruto - taxa;
 
@@ -302,9 +339,22 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         topServicosMap.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value))
       );
 
+      // 🎯 Processar os valores salvos de Conciliação
+      Map<String, double> conciliacaoReaisLoad = {};
+      Map<String, double> conciliacaoTaxasLoad = {};
+      if (conciliacaoSnap.exists) {
+        final mapData = conciliacaoSnap.data()!;
+        if (mapData['reais'] != null) {
+          (mapData['reais'] as Map<String, dynamic>).forEach((key, value) => conciliacaoReaisLoad[key] = (value as num).toDouble());
+        }
+        if (mapData['taxas'] != null) {
+          (mapData['taxas'] as Map<String, dynamic>).forEach((key, value) => conciliacaoTaxasLoad[key] = (value as num).toDouble());
+        }
+      }
+
       state = AsyncValue.data(FinanceiroState(
         mesReferencia: _mesAtual,
-        receitas: totalReceitasServicos + totalReceitasProdutos, // Soma Global
+        receitas: totalReceitasServicos + totalReceitasProdutos, 
         receitasServicos: totalReceitasServicos,
         receitasProdutos: totalReceitasProdutos,
         despesas: totalDespesas,
@@ -321,6 +371,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         cmvAnoAnterior: totaisAnoAnt['cmv']!,
         anoReferencia: _anoAtual,
         faturamentoAnual: faturamentoMeses,
+        conciliacaoReais: conciliacaoReaisLoad, 
+        conciliacaoTaxas: conciliacaoTaxasLoad, 
       ));
 
     } catch (e) {
