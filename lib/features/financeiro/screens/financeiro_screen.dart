@@ -16,6 +16,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   // 🎯 CONTROLES DE ESTADO PARA A CONCILIAÇÃO BANCÁRIA
   final Map<String, TextEditingController> _realControllers = {};
   final Map<String, TextEditingController> _taxaControllers = {};
+  String? _mesAberto; // Rastreador para saber quando o mês mudou e atualizar os inputs
 
   @override
   void initState() {
@@ -70,7 +71,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4, // 🎯 AGORA SÃO 4 ABAS
+      length: 4, 
       child: Scaffold(
         backgroundColor: const Color(0xFFFAF0F4),
         appBar: AppBar(
@@ -79,12 +80,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           bottom: TabBar(
             labelColor: _primaryColor,
             indicatorColor: _primaryColor,
-            isScrollable: true, // Para caberem as 4 abas tranquilamente em telas menores
+            isScrollable: true, 
             tabs: const [
               Tab(icon: Icon(Icons.pie_chart_outline), text: 'Visão Geral'),
               Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Caixa Diário'),
               Tab(icon: Icon(Icons.bar_chart), text: 'Anual'),
-              Tab(icon: Icon(Icons.account_balance_wallet_outlined), text: 'Conciliação'), // 🎯 NOVA ABA
+              Tab(icon: Icon(Icons.account_balance_wallet_outlined), text: 'Conciliação'), 
             ],
           ),
         ),
@@ -97,7 +98,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 _buildVisaoGeral(state),
                 _buildCaixaDiario(state),
                 _buildVisaoAnual(state),
-                _buildConciliacao(state), // 🎯 NOVA TELA DE CONCILIAÇÃO
+                _buildConciliacao(state), 
               ],
             );
           },
@@ -122,7 +123,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
               initialDate: state.mesReferencia,
               firstDate: DateTime(2020),
               lastDate: DateTime(2035),
-              helpText: 'IR PARA O MÊS (Escolha qualquer dia)',
+              helpText: 'IR PARA O MÊS',
               builder: (context, child) {
                 return Theme(
                   data: Theme.of(context).copyWith(
@@ -163,11 +164,33 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   }
 
   // ===========================================================================
-  // 🎯 MÓDULO 4: CONCILIAÇÃO BANCÁRIA (O NOVO CORAÇÃO FINANCEIRO)
+  // 🎯 MÓDULO 4: CONCILIAÇÃO BANCÁRIA
   // ===========================================================================
   Widget _buildConciliacao(FinanceiroState state) {
+    // Lógica para repovoar os campos de texto se mudarmos de mês
+    final mesStr = '${state.mesReferencia.year}-${state.mesReferencia.month}';
+    if (_mesAberto != mesStr) {
+      _mesAberto = mesStr;
+      
+      for (var forma in state.formasPagamento.keys) {
+        final rCtrl = _getRealController(forma);
+        final tCtrl = _getTaxaController(forma);
+        
+        if (state.conciliacaoReais.containsKey(forma) && state.conciliacaoReais[forma]! > 0) {
+          rCtrl.text = state.conciliacaoReais[forma]!.toStringAsFixed(2).replaceAll('.', ',');
+        } else {
+          rCtrl.text = '';
+        }
+        
+        if (state.conciliacaoTaxas.containsKey(forma) && state.conciliacaoTaxas[forma]! > 0) {
+          tCtrl.text = state.conciliacaoTaxas[forma]!.toStringAsFixed(2).replaceAll('.', ',');
+        } else {
+          tCtrl.text = '';
+        }
+      }
+    }
+
     double totalSistema = state.formasPagamento.values.fold(0.0, (a, b) => a + b);
-    
     double totalReal = 0.0;
     double totalTaxasInformadas = 0.0;
     
@@ -200,7 +223,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
-        // 📊 CARTÃO DE RESUMO (O TERMÔMETRO DA EMPRESA)
+        // 📊 CARTÃO DE RESUMO
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300, width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]),
@@ -224,7 +247,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         const Text('Confronte os valores com o seu extrato:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black54)),
         const SizedBox(height: 12),
 
-        // 💠 GAVETAS EXPANSÍVEIS DE CONCILIAÇÃO
         if (state.formasPagamento.isEmpty)
           const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Nenhum recebimento registrado neste mês.', style: TextStyle(color: Colors.grey)))),
           
@@ -289,7 +311,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 ),
                 const SizedBox(height: 12),
                 
-                // Resultado Matemático da Forma
                 Container(
                   width: double.infinity, padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: corStatusForma.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
@@ -300,7 +321,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 const Text('Ajustes e Verificações:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
                 const SizedBox(height: 8),
                 
-                // Botões de Ação
                 Wrap(
                   spacing: 8, runSpacing: 8,
                   children: [
@@ -308,7 +328,18 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       icon: const Icon(Icons.search, size: 16),
                       label: const Text('Ver Comandas', style: TextStyle(fontSize: 12)),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lista de comandas de $forma no mês.'), backgroundColor: Colors.blue));
+                        // Pop-up de Segurança / Informação
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Ação de Verificação'),
+                            content: Text('Isso abrirá o relatório das comandas de $forma deste mês para auditoria. Deseja prosseguir?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                              FilledButton(onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo em construção.'), backgroundColor: Colors.blue)); }, child: const Text('Sim, Prosseguir'))
+                            ]
+                          )
+                        );
                       },
                     ),
                     OutlinedButton.icon(
@@ -316,7 +347,18 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       label: Text('Lançar Despesa', style: TextStyle(fontSize: 12, color: Colors.red.shade700)),
                       style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.red.shade200)),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lançar despesa avulsa em $forma.'), backgroundColor: Colors.red));
+                        // Pop-up de Segurança
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Lançar Saída Avulsa'),
+                            content: const Text('Você está prestes a lançar uma saída/despesa avulsa que afetará o saldo deste caixa. Confirmar?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                              FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.red), onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo em construção.'), backgroundColor: Colors.red)); }, child: const Text('Sim, Lançar'))
+                            ]
+                          )
+                        );
                       },
                     ),
                     OutlinedButton.icon(
@@ -324,7 +366,18 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       label: Text('Lançar Entrada', style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
                       style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.green.shade200)),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Em breve: Lançar entrada avulsa em $forma.'), backgroundColor: Colors.green));
+                        // Pop-up de Segurança
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Lançar Entrada Avulsa'),
+                            content: const Text('Você está prestes a lançar uma entrada avulsa que não pertence a nenhuma comanda (Ex: Venda extra, Gorjeta). Confirmar?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+                              FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.green), onPressed: () { Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Módulo em construção.'), backgroundColor: Colors.green)); }, child: const Text('Sim, Lançar'))
+                            ]
+                          )
+                        );
                       },
                     ),
                   ],
@@ -335,12 +388,63 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         }).toList(),
 
         const SizedBox(height: 24),
+        
+        // 🎯 O BOTÃO PRINCIPAL COM PROTEÇÃO (POP-UP DE CONFIRMAÇÃO)
         FilledButton.icon(
           style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
           icon: const Icon(Icons.save),
           label: const Text('Salvar Conciliação do Mês', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Valores guardados na memória local! A conexão com Firebase será ativada a seguir.'), backgroundColor: Colors.green));
+            // POP-UP DE SEGURANÇA OBRIGATÓRIO ANTES DE SALVAR NO BANCO
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.save_as, color: _primaryColor),
+                    const SizedBox(width: 8),
+                    const Text('Confirmar Atualização?'),
+                  ],
+                ),
+                content: const Text(
+                  'Você está prestes a salvar os valores de extrato e taxas informados.\n\n'
+                  'Isso registrará a conciliação do caixa deste mês na base de dados. Deseja continuar?'
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx), 
+                    child: const Text('Revisar Valores')
+                  ),
+                  FilledButton(
+                    style: FilledButton.styleFrom(backgroundColor: _primaryColor),
+                    onPressed: () async {
+                      Navigator.pop(ctx); // Fecha o aviso
+                      
+                      // 1. Coleta os valores digitados na tela
+                      Map<String, double> reaisSalvar = {};
+                      Map<String, double> taxasSalvar = {};
+                      
+                      for (var forma in state.formasPagamento.keys) {
+                        final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
+                        final t = double.tryParse(_getTaxaController(forma).text.replaceAll(',', '.')) ?? 0.0;
+                        reaisSalvar[forma] = r;
+                        taxasSalvar[forma] = t;
+                      }
+
+                      // 2. Aciona o Cérebro para salvar na Nuvem ⚡
+                      await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar);
+                      
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('✅ Conciliação salva com sucesso no Banco de Dados!'), backgroundColor: Colors.green)
+                        );
+                      }
+                    }, 
+                    child: const Text('Sim, Salvar Conciliação')
+                  )
+                ],
+              )
+            );
           },
         ),
         const SizedBox(height: 40),
@@ -359,7 +463,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
-        // 🟢 BLOCO DE ENTRADAS (RECEITAS)
         Row(
           children: [
             Expanded(
@@ -406,7 +509,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           ],
         ),
         
-        // 🔴 BLOCO DE SAÍDAS E CUSTOS
         const SizedBox(height: 12),
         Row(
           children: [
@@ -456,7 +558,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
-        // 💰 LUCRO LÍQUIDO
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: _primaryColor, borderRadius: BorderRadius.circular(16)),
