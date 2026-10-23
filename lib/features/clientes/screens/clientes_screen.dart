@@ -291,7 +291,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                 ButtonSegment(value: 'frequencia', label: Text('🔄 Mais Visitas', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
               ],
               selected: {_filtroTop},
-              style: SegmentedButton.styleFrom(selectedBackgroundColor: const Color(0xFF8A2463).withOpacity(0.15), foregroundColor: const Color(0xFF8A2463), side: BorderSide.none),
+              style: SegmentedButton.styleFrom(selectedBackgroundColor: const Color(0xFF627970).withOpacity(0.15), foregroundColor: const Color(0xFF627970), side: BorderSide.none),
               onSelectionChanged: (set) => setState(() => _filtroTop = set.first),
             ),
           ),
@@ -325,7 +325,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                       return Card(
                         elevation: rank <= 3 ? 2 : 0,
                         margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: rank <= 3 ? const Color(0xFF8A2463).withOpacity(0.5) : Colors.grey.shade200)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: rank <= 3 ? const Color(0xFF627970).withOpacity(0.5) : Colors.grey.shade200)),
                         child: Container(
                           decoration: rank <= 3 ? BoxDecoration(borderRadius: BorderRadius.circular(16), gradient: LinearGradient(colors: [Colors.orange.shade50.withOpacity(0.5), Colors.white], begin: Alignment.topLeft, end: Alignment.bottomRight)) : null,
                           padding: const EdgeInsets.all(16.0),
@@ -336,7 +336,7 @@ class _ClientesScreenState extends ConsumerState<ClientesScreen> with SingleTick
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(cliente.nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: rank <= 3 ? const Color(0xFF8A2463) : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    Text(cliente.nome, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: rank <= 3 ? const Color(0xFF627970) : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
                                     const SizedBox(height: 4), Text('📱 ${cliente.telefone}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                                   ],
                                 ),
