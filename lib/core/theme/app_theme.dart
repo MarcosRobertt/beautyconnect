@@ -79,7 +79,8 @@ class AppTheme {
         iconTheme: const IconThemeData(color: primary),
       ),
       
-      tabBarTheme: TabBarTheme(
+      // 🎯 CORREÇÃO APLICADA AQUI: Utilização de TabBarThemeData
+      tabBarTheme: TabBarThemeData(
         labelColor: primary,
         unselectedLabelColor: Colors.grey.shade600,
         indicatorColor: primary,
