@@ -96,7 +96,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF8A2463);
+    const primaryColor = Color(0xFF627970);
     final produtosAsync = ref.watch(produtoControllerProvider);
     final vendasAsync = ref.watch(vendaControllerProvider);
 
@@ -511,7 +511,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
       child: Column(
         mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(widget.produtoEdit != null ? '✏️️ Editar Produto' : '🛍 Novo Produto', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))),
+          Text(widget.produtoEdit != null ? '✏️️ Editar Produto' : '🛍 Novo Produto', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF627970))),
           const SizedBox(height: 16),
           
           Row(
@@ -568,7 +568,7 @@ class _FormularioProdutoState extends ConsumerState<_FormularioProduto> {
               children: [
                 SwitchListTile(
                   title: const Text('Produto tem validade?', style: TextStyle(fontSize: 14)),
-                  value: _temValidade, activeColor: const Color(0xFF8A2463),
+                  value: _temValidade, activeColor: const Color(0xFF627970),
                   onChanged: (val) => setState(() => _temValidade = val),
                 ),
                 if (_temValidade) ...[
