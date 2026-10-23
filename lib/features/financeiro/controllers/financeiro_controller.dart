@@ -173,20 +173,48 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     };
   }
 
-  // 🎯 MOTOR DE GRAVAÇÃO DO RASCUNHO DE CONCILIAÇÃO
-  Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas, Map<String, List<Map<String, dynamic>>> ajustesConciliacao) async {
+  // 🎯 MOTOR DE GRAVAÇÃO DO RASCUNHO (NOVA FUNÇÃO)
+  // Guarda no Firestore sem forçar o recarregamento do Painel de Visão Geral (Modo Invisível/Seguro)
+  Future<void> salvarRascunhoConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas, Map<String, List<Map<String, dynamic>>> ajustesConciliacao) async {
     try {
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
       
-      // Guarda Tudo (Reais, Taxas e a Tabela de Ajustes) num único documento leve!
       await _db.collection('conciliacoes_mensais').doc(mesAnoStr).set({
         'reais': valoresReais,
         'taxas': taxasInformadas,
         'ajustes': ajustesConciliacao,
+        'status': 'rascunho', // Marcador de que não é oficial
         'ultimaAtualizacao': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // Recarrega os dados completos para que o Painel Geral atualize com as novas Despesas/Entradas da Conciliação
+      // Atualiza apenas o estado local (ram) sem consultar novamente o servidor, poupando processamento
+      if (state.hasValue) {
+        state = AsyncValue.data(state.value!.copyWith(
+          conciliacaoReais: valoresReais,
+          conciliacaoTaxas: taxasInformadas,
+          ajustesConciliacao: ajustesConciliacao,
+        ));
+      }
+
+    } catch (e) {
+      throw Exception('Falha ao salvar rascunho: $e');
+    }
+  }
+
+  // 🎯 MOTOR DE FINALIZAÇÃO (Gravação Oficial)
+  Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas, Map<String, List<Map<String, dynamic>>> ajustesConciliacao) async {
+    try {
+      final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
+      
+      await _db.collection('conciliacoes_mensais').doc(mesAnoStr).set({
+        'reais': valoresReais,
+        'taxas': taxasInformadas,
+        'ajustes': ajustesConciliacao,
+        'status': 'finalizado', // Marcador oficial
+        'ultimaAtualizacao': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      // ⚡ AQUI SIM: Recarrega os dados completos para que o Painel Geral atualize com os totais!
       await carregarDados(forcarServidor: true);
     } catch (e) {
       throw Exception('Falha ao salvar a conciliação: $e');
@@ -328,16 +356,18 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
           (mapData['ajustes'] as Map<String, dynamic>).forEach((forma, lista) {
             ajustesLoad[forma] = List<Map<String, dynamic>>.from(lista);
             
-            // Soma na matemática Global do Aplicativo!
-            for (var ajuste in ajustesLoad[forma]!) {
-              if (ajuste['tipo'] == 'entrada') totalAjustesEntrada += (ajuste['valor'] as num).toDouble();
-              if (ajuste['tipo'] == 'saida') totalAjustesSaida += (ajuste['valor'] as num).toDouble();
+            // Só somamos à matemática Global do Aplicativo SE O STATUS FOR FINALIZADO!
+            if (mapData['status'] == 'finalizado') {
+              for (var ajuste in ajustesLoad[forma]!) {
+                if (ajuste['tipo'] == 'entrada') totalAjustesEntrada += (ajuste['valor'] as num).toDouble();
+                if (ajuste['tipo'] == 'saida') totalAjustesSaida += (ajuste['valor'] as num).toDouble();
+              }
             }
           });
         }
       }
 
-      // Aplica os Ajustes Avulsos aos totais reais da empresa
+      // Aplica os Ajustes Avulsos OFICIAIS aos totais da empresa
       totalDespesas += totalAjustesSaida;
       
       List<double> faturamentoMeses = List.filled(12, 0.0);
