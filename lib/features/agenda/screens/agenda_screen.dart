@@ -273,20 +273,29 @@ class AgendaScreen extends ConsumerWidget {
           String detalhePagamentoStr = '';
 
           if (pagamentos.isNotEmpty) {
+            // Descobre a forma principal de pagamento
             final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
             formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
-            
             final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+
+            // 🎯 LÓGICA DE AGRUPAMENTO DE PAGAMENTOS RESTAURADA (Padrão Original)
+            Map<String, List<String>> pagamentosPorData = {};
             
-            final listaDetalhes = pagamentos.map((p) {
+            for (var p in pagamentos) {
               final d = p['data'] as DateTime;
               final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
               final f = (p['forma'] as FormaPagamento).rotulo;
               final v = formataMoeda(p['valor'] as double);
-              return '[$dStr] $f: $v';
-            }).join(' | ');
-            
-            detalhePagamentoStr = '[Baixa Financeira: $listaDetalhes]';
+
+              pagamentosPorData.putIfAbsent(dStr, () => []).add('$f: $v');
+            }
+
+            List<String> blocosDeData = [];
+            pagamentosPorData.forEach((dataStr, detalhes) {
+              blocosDeData.add('$dataStr -> ${detalhes.join(' | ')}');
+            });
+
+            detalhePagamentoStr = '[Baixa Financeira: ${blocosDeData.join(' || ')}]';
           }
 
           if (detalhePagamentoStr.isNotEmpty) {
