@@ -129,7 +129,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
     final usuario = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF0F4),
+      backgroundColor: const Color(0xFFF7F8F4),
       appBar: AppBar(
         title: const Text('Menu', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
