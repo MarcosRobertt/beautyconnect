@@ -85,7 +85,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [Icon(icone, color: const Color(0xFF8A2463), size: 20), const SizedBox(width: 8), Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+            Row(children: [Icon(icone, color: const Color(0xFF627970), size: 20), const SizedBox(width: 8), Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
             const SizedBox(height: 8),
             Text(descricao, style: const TextStyle(fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 12),
@@ -132,7 +132,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
                 
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF8A2463), padding: const EdgeInsets.symmetric(vertical: 16)),
+                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF627970), padding: const EdgeInsets.symmetric(vertical: 16)),
                   icon: _salvando ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.save),
                   label: Text(_salvando ? 'Salvando...' : 'Salvar Alterações Gerais'),
                   onPressed: _salvando ? null : _salvarConfiguracoes,
