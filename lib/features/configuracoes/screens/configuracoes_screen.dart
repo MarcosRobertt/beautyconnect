@@ -158,7 +158,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  const CircleAvatar(radius: 28, backgroundColor: Color(0xFFF5E1EC), child: Icon(Icons.storefront, size: 30, color: primaryColor)),
+                  const CircleAvatar(radius: 28, backgroundColor: Color(0xFFE6EBE4), child: Icon(Icons.storefront, size: 30, color: primaryColor)),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
