@@ -29,7 +29,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
 
   void _mostrarStatusBackup(BuildContext context, WidgetRef ref) {
     final backupController = ref.read(backupControllerProvider);
-    const primaryColor = Color(0xFF8A2463);
+    const primaryColor = Color(0xFF627970);
 
     showDialog(
       context: context,
@@ -125,7 +125,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const primaryColor = Color(0xFF8A2463);
+    const primaryColor = Color(0xFF627970);
     final usuario = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
