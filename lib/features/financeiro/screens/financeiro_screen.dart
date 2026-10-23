@@ -416,53 +416,86 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 24),
         
-        // 🎯 O BOTÃO PRINCIPAL COM PROTEÇÃO (POP-UP DE CONFIRMAÇÃO)
-        FilledButton.icon(
-          style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-          icon: const Icon(Icons.save),
-          label: const Text('Salvar Conciliação do Mês', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: Row(
-                  children: [
-                    Icon(Icons.save_as, color: _primaryColor),
-                    const SizedBox(width: 8),
-                    const Text('Confirmar Auditoria?'),
-                  ],
-                ),
-                content: const Text('Você está prestes a gravar a Tabela de Ajustes, Extratos e Taxas.\n\nIsso atualizará os saldos gerais do seu sistema (Painel Visão Geral). Deseja continuar?'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar')),
-                  FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: _primaryColor),
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      
-                      Map<String, double> reaisSalvar = {};
-                      Map<String, double> taxasSalvar = {};
-                      
-                      for (var forma in state.formasPagamento.keys) {
-                        final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
-                        final t = double.tryParse(_getTaxaController(forma).text.replaceAll(',', '.')) ?? 0.0;
-                        reaisSalvar[forma] = r;
-                        taxasSalvar[forma] = t;
-                      }
+        // 🎯 OS BOTÕES DE SALVAR RASCUNHO E FINALIZAR
+        Row(
+          children: [
+            Expanded(
+              flex: 1,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), side: BorderSide(color: _primaryColor)),
+                icon: Icon(Icons.cloud_upload_outlined, color: _primaryColor, size: 20),
+                label: Text('Salvar\nRascunho', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _primaryColor)),
+                onPressed: () async {
+                  Map<String, double> reaisSalvar = {};
+                  Map<String, double> taxasSalvar = {};
+                  
+                  for (var forma in state.formasPagamento.keys) {
+                    final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
+                    final t = double.tryParse(_getTaxaController(forma).text.replaceAll(',', '.')) ?? 0.0;
+                    reaisSalvar[forma] = r;
+                    taxasSalvar[forma] = t;
+                  }
 
-                      // ⚡ ACIONA O CÉREBRO PASSANDO OS 3 PARÂMETROS!
-                      await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
-                      
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Auditoria financeira gravada com sucesso!'), backgroundColor: Colors.green));
-                      }
-                    }, 
-                    child: const Text('Sim, Gravar Sistema')
-                  )
-                ],
-              )
-            );
-          },
+                  // ⚡ CHAMA O MÉTODO NOVO DO CONTROLLER (Requer implementação no financeiro_controller.dart)
+                  await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
+                  
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('📝 Progresso salvo na nuvem! Pode voltar mais tarde.'), backgroundColor: Colors.blue));
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 2,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: _primaryColor),
+                icon: const Icon(Icons.save),
+                label: const Text('FINALIZAR E GRAVAR MÊS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: Row(
+                        children: [
+                          Icon(Icons.gavel, color: _primaryColor),
+                          const SizedBox(width: 8),
+                          const Expanded(child: Text('Finalizar Auditoria?', style: TextStyle(fontSize: 18))),
+                        ],
+                      ),
+                      content: const Text('Você está prestes a gravar a Conciliação como OFICIAL.\n\nIsso atualizará os saldos gerais do seu sistema (Painel Visão Geral). Deseja continuar?'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Voltar')),
+                        FilledButton(
+                          style: FilledButton.styleFrom(backgroundColor: _primaryColor),
+                          onPressed: () async {
+                            Navigator.pop(ctx);
+                            
+                            Map<String, double> reaisSalvar = {};
+                            Map<String, double> taxasSalvar = {};
+                            
+                            for (var forma in state.formasPagamento.keys) {
+                              final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
+                              final t = double.tryParse(_getTaxaController(forma).text.replaceAll(',', '.')) ?? 0.0;
+                              reaisSalvar[forma] = r;
+                              taxasSalvar[forma] = t;
+                            }
+
+                            await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
+                            
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Conciliação finalizada e saldos atualizados!'), backgroundColor: Colors.green));
+                            }
+                          }, 
+                          child: const Text('Sim, Gravar Sistema')
+                        )
+                      ],
+                    )
+                  );
+                },
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 40),
       ],
