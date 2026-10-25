@@ -215,7 +215,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                 final ag = historicoCliente[index];
                                 final isCancelado = ag.status == AgendamentoStatus.cancelado;
 
-                                // 🎯 TÚNEL DIRETO COM O BANCO DE DADOS
                                 return StreamBuilder<DocumentSnapshot>(
                                   stream: FirebaseFirestore.instance.collection('agendamentos').doc(ag.id).snapshots(),
                                   builder: (context, snapshot) {
@@ -223,7 +222,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                     String obsExibicao = ag.observacao;
                                     String dataDaBaixaFormatada = '';
                                     
-                                    // Puxa exatamente o que está na nuvem
                                     if (snapshot.hasData && snapshot.data!.exists) {
                                       final mapDados = snapshot.data!.data() as Map<String, dynamic>;
                                       
@@ -231,7 +229,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                         obsExibicao = mapDados['observacao'].toString();
                                       }
                                       
-                                      // Captura a data real da baixa para mostrar na tela
                                       if (mapDados.containsKey('dataPagamento') && mapDados['dataPagamento'] != null) {
                                         try {
                                           final dtPagamento = DateTime.parse(mapDados['dataPagamento'].toString());
@@ -281,7 +278,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                                 ),
                                               ),
                                               
-                                              // 🎯 DATA DA BAIXA FINANCEIRA EM DESTAQUE (Verde Vivo)
                                               if (dataDaBaixaFormatada.isNotEmpty && !isCancelado)
                                                 Padding(
                                                   padding: const EdgeInsets.only(top: 4.0),
@@ -291,7 +287,6 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                                   ),
                                                 ),
                                               
-                                              // 🎯 A CAIXA DA OBSERVAÇÃO COM O REGISTRO DO PAGAMENTO
                                               if (obsExibicao.isNotEmpty)
                                                 Padding(
                                                   padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
