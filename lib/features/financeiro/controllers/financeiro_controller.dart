@@ -136,17 +136,37 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   Future<Map<String, double>> _buscarTotaisPeriodo(DateTime inicio, DateTime fim, GetOptions options) async {
     double recServicos = 0; double des = 0; double recProdutos = 0; double cmvPeriodo = 0;
     
-    final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    // 🎯 MOTOR DUPLO (Busca pela data antiga de agenda E pela data nova de pagamento)
+    final fAgendamentosData = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    final fAgendamentosPag = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    
     final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
 
-    final agendamentos = await fAgendamentos;
+    final agendamentosDataSnap = await fAgendamentosData;
+    final agendamentosPagSnap = await fAgendamentosPag;
     final vendas = await fVendas;
     final despesas = await fDespesas;
         
-    for (var doc in agendamentos.docs) {
-      final data = doc.data();
+    // Fundir as duas listas para evitar perdas
+    final Map<String, Map<String, dynamic>> mapAgendamentos = {};
+    for (var doc in agendamentosDataSnap.docs) mapAgendamentos[doc.id] = doc.data();
+    for (var doc in agendamentosPagSnap.docs) mapAgendamentos[doc.id] = doc.data();
+
+    for (var data in mapAgendamentos.values) {
       if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+      
+      // 🎯 FILTRO NA MEMÓRIA: Assegurar que só consideramos a data do pagamento se ela existir
+      DateTime dataReal;
+      if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
+        dataReal = DateTime.parse(data['dataPagamento']);
+      } else {
+        dataReal = DateTime.parse(data['data']);
+      }
+      
+      // Bloqueio de Segurança: Ignora se a data real não pertencer a este período
+      if (dataReal.isBefore(inicio) || dataReal.isAfter(fim)) continue;
+
       final bruto = (data['valor'] ?? 0).toDouble();
       final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
       final taxa = calcularTaxa(formaRaw, bruto);
@@ -242,25 +262,32 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
 
-      // Disparar TUDO em Paralelo (Alta Performance)
-      final fAgendamentos = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      // 🎯 BUSCAS DUPLAS PARALELAS MENSAL (Para não perder dados passados nem futuros)
+      final fAgendamentosMesData = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      final fAgendamentosMesPag = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      
       final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       
       final fTotaisMesAnt = _buscarTotaisPeriodo(inicioMesAnt, fimMesAnt, options);
       final fTotaisAnoAnt = _buscarTotaisPeriodo(inicioAnoAnt, fimAnoAnt, options);
 
-      final fAnualSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      // 🎯 BUSCAS DUPLAS PARALELAS ANUAL
+      final fAnualDataSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      final fAnualPagSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      
       final fAnualVendasSnap = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       
       final fConciliacao = _db.collection('conciliacoes_mensais').doc(mesAnoStr).get(options);
 
-      final agendamentosSnap = await fAgendamentos;
+      final agendamentosMesDataSnap = await fAgendamentosMesData;
+      final agendamentosMesPagSnap = await fAgendamentosMesPag;
       final vendasSnap = await fVendas;
       final despesasSnap = await fDespesas;
       final totaisMesAnt = await fTotaisMesAnt;
       final totaisAnoAnt = await fTotaisAnoAnt;
-      final anualSnap = await fAnualSnap;
+      final anualDataSnap = await fAnualDataSnap;
+      final anualPagSnap = await fAnualPagSnap;
       final anualVendasSnap = await fAnualVendasSnap;
       final conciliacaoSnap = await fConciliacao;
 
@@ -280,15 +307,29 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       Map<int, Map<String, double>> fluxoDiario = {};
       for (int i = 1; i <= fimMes.day; i++) fluxoDiario[i] = {'receita': 0.0, 'despesa': 0.0};
 
-      for (var doc in agendamentosSnap.docs) {
-        final data = doc.data();
+      // 🎯 FUNDIR AS BUSCAS DO MÊS
+      final Map<String, Map<String, dynamic>> mapMesAgendamentos = {};
+      for (var doc in agendamentosMesDataSnap.docs) mapMesAgendamentos[doc.id] = doc.data();
+      for (var doc in agendamentosMesPagSnap.docs) mapMesAgendamentos[doc.id] = doc.data();
+
+      for (var data in mapMesAgendamentos.values) {
         if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+
+        // 🎯 O SEGREDO DO CAIXA DIÁRIO ESTÁ AQUI
+        DateTime dataReal;
+        if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
+          dataReal = DateTime.parse(data['dataPagamento']);
+        } else {
+          dataReal = DateTime.parse(data['data']);
+        }
+
+        // Se a data real de recebimento não cair no mês atual do gráfico, pula
+        if (dataReal.isBefore(inicioMes) || dataReal.isAfter(fimMes)) continue;
 
         final valorBruto = (data['valor'] ?? 0).toDouble();
         final servico = data['servico'] ?? 'Outros';
         final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
         final formaNormalizada = _normalizarFormaPagamento(formaRaw);
-        final dataAgenda = DateTime.parse(data['data']);
 
         final taxaCalculada = calcularTaxa(formaRaw, valorBruto);
         final valorLiquido = valorBruto - taxaCalculada;
@@ -303,7 +344,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
           formasPgtoMap[formaNormalizada] = valorLiquido;
         }
         
-        fluxoDiario[dataAgenda.day]!['receita'] = fluxoDiario[dataAgenda.day]!['receita']! + valorLiquido;
+        // 🎯 ATRIBUI O DINHEIRO AO DIA EXATO DO PAGAMENTO NO CAIXA DIÁRIO
+        fluxoDiario[dataReal.day]!['receita'] = fluxoDiario[dataReal.day]!['receita']! + valorLiquido;
       }
 
       for (var doc in vendasSnap.docs) {
@@ -370,14 +412,29 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       // Aplica os Ajustes Avulsos OFICIAIS aos totais da empresa
       totalDespesas += totalAjustesSaida;
       
+      // 🎯 FUNDIR AS BUSCAS DO ANO
+      final Map<String, Map<String, dynamic>> mapAnualAgendamentos = {};
+      for (var doc in anualDataSnap.docs) mapAnualAgendamentos[doc.id] = doc.data();
+      for (var doc in anualPagSnap.docs) mapAnualAgendamentos[doc.id] = doc.data();
+
       List<double> faturamentoMeses = List.filled(12, 0.0);
-      for (var doc in anualSnap.docs) {
-        final data = doc.data();
+      for (var data in mapAnualAgendamentos.values) {
         if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
+        
+        DateTime dataReal;
+        if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
+          dataReal = DateTime.parse(data['dataPagamento']);
+        } else {
+          dataReal = DateTime.parse(data['data']);
+        }
+
+        if (dataReal.isBefore(inicioAno) || dataReal.isAfter(fimAno)) continue;
+
         final bruto = (data['valor'] ?? 0).toDouble();
         final taxa = calcularTaxa(data['formaPagamento']?.toString() ?? 'Outros', bruto);
-        faturamentoMeses[DateTime.parse(data['data']).month - 1] += (bruto - taxa); 
+        faturamentoMeses[dataReal.month - 1] += (bruto - taxa); 
       }
+
       for (var doc in anualVendasSnap.docs) {
         final data = doc.data();
         final qtd = (data['quantidade'] ?? 1) as int;
