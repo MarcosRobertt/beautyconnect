@@ -229,10 +229,10 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                     },
                                     child: ListTile(
                                       leading: CircleAvatar(
-                                        backgroundColor: isCancelado ? Colors.red.shade100 : Colors.purple.shade50,
+                                        backgroundColor: isCancelado ? Colors.red.shade100 : const Color(0xFFE6EBE4), // Usa o Verde Suave Condeza
                                         child: Icon(
                                           isCancelado ? Icons.cancel : Icons.calendar_today,
-                                          color: isCancelado ? Colors.red : Colors.purple,
+                                          color: isCancelado ? Colors.red : const Color(0xFF627970), // Verde Principal Condeza
                                           size: 20,
                                         ),
                                       ),
@@ -255,8 +255,41 @@ class HistoricoClienteScreen extends ConsumerWidget {
                                               color: isCancelado ? Colors.grey : Colors.black54,
                                             ),
                                           ),
+                                          
+                                          // 🎯 NOVO BLOCO: VISUAL DA BAIXA FINANCEIRA NO HISTÓRICO
                                           if (ag.observacao.isNotEmpty)
-                                            Text('Obs: ${ag.observacao}', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: isCancelado ? Colors.grey : Colors.black54)),
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                                              child: Container(
+                                                padding: const EdgeInsets.all(8),
+                                                decoration: BoxDecoration(
+                                                  color: isCancelado ? Colors.grey.shade200 : const Color(0xFFE6EBE4), // Fundo suave Condeza
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  border: Border.all(color: isCancelado ? Colors.grey.shade300 : const Color(0xFF627970).withOpacity(0.3)),
+                                                ),
+                                                child: Row(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.receipt_long, 
+                                                      size: 14, 
+                                                      color: isCancelado ? Colors.grey : const Color(0xFF627970)
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(
+                                                      child: Text(
+                                                        ag.observacao,
+                                                        style: TextStyle(
+                                                          fontSize: 11,
+                                                          color: isCancelado ? Colors.grey : const Color(0xFF2C3532), // Texto Escuro Condeza
+                                                          fontStyle: FontStyle.italic,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
                                         ],
                                       ),
                                       trailing: Row(
