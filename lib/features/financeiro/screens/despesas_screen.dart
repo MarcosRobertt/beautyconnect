@@ -14,6 +14,9 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
   DateTime _mesSelecionado = DateTime.now();
   String _filtroStatus = 'TODAS'; 
   String _filtroCategoria = 'TODAS';
+  
+  // 🎯 NOVO: Controlador para a barra de pesquisa
+  final TextEditingController _buscaController = TextEditingController();
 
   // 🛡️ A NOVA CATEGORIA ESTÁ AQUI
   final List<String> _categorias = [
@@ -26,13 +29,19 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
     'Sistemas & Operacional',
     'Retirada & Pró-Labore',
     'Despesas Gerais',
-    'Ajuste de Caixa / Estorno', // caso aconteça algum lançamento errado no saldo.
+    'Ajuste de Caixa / Estorno', 
   ];
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() => ref.read(despesaControllerProvider.notifier).carregarDespesasMes(_mesSelecionado));
+  }
+  
+  @override
+  void dispose() {
+    _buscaController.dispose();
+    super.dispose();
   }
 
   void _abrirModalNovaDespesa() {
@@ -110,11 +119,11 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
           return StatefulBuilder(
             builder: (context, setStateDialog) {
               return AlertDialog(
-                title: Row(
+                title: const Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Colors.green),
-                    const SizedBox(width: 8),
-                    const Text('Confirmar Baixa', style: TextStyle(fontSize: 18)),
+                    Icon(Icons.check_circle, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('Confirmar Baixa', style: TextStyle(fontSize: 18)),
                   ],
                 ),
                 content: Column(
@@ -173,11 +182,11 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF8A2463);
+    const primaryColor = Color(0xFF627970); // 🟢 Atualizado para Verde Condeza
     final despesasAsync = ref.watch(despesaControllerProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF0F4),
+      backgroundColor: const Color(0xFFF7F8F4), // 🟢 Atualizado para Fundo Creme Condeza
       appBar: AppBar(
         title: const Text('Gestão de Despesas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
@@ -189,15 +198,23 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
         ],
       ),
       body: despesasAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator(color: primaryColor)),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (despesasRaw) {
+          
+          final textoBusca = _buscaController.text.trim().toLowerCase();
+          
           final despesasFiltradas = despesasRaw.where((d) {
+            // Filtro por Nome
+            final bateNome = textoBusca.isEmpty || d.descricao.toLowerCase().contains(textoBusca);
+            
+            // Filtros Originais
             final bateStatus = _filtroStatus == 'TODAS' ||
                 (_filtroStatus == 'PAGAS' && d.status == 'PAGO') ||
                 (_filtroStatus == 'NAO_PAGAS' && d.status == 'PENDENTE');
             final bateCategoria = _filtroCategoria == 'TODAS' || d.categoria == _filtroCategoria;
-            return bateStatus && bateCategoria;
+            
+            return bateNome && bateStatus && bateCategoria;
           }).toList();
 
           final totalFiltrado = despesasFiltradas.fold(0.0, (sum, item) => sum + item.valor);
@@ -212,6 +229,25 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                 color: Colors.white,
                 child: Column(
                   children: [
+                    // 🎯 NOVA BARRA DE PESQUISA
+                    TextField(
+                      controller: _buscaController,
+                      decoration: InputDecoration(
+                        hintText: 'Buscar despesa pelo nome...',
+                        prefixIcon: const Icon(Icons.search, color: primaryColor),
+                        suffixIcon: textoBusca.isNotEmpty 
+                          ? IconButton(icon: const Icon(Icons.clear, color: Colors.grey), onPressed: () { _buscaController.clear(); setState(() {}); }) 
+                          : null,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: primaryColor)),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        filled: true,
+                        fillColor: const Color(0xFFF7F8F4),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -263,7 +299,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 8.0),
                         child: Text(
-                          'Exibindo: ${_filtroStatus.replaceAll('_', ' ')} • $_filtroCategoria',
+                          'Exibindo: ${_filtroStatus.replaceAll('_', ' ')} •$_filtroCategoria',
                           style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: primaryColor),
                         ),
                       ),
@@ -280,7 +316,7 @@ class _DespesasScreenState extends ConsumerState<DespesasScreen> {
               ),
               Expanded(
                 child: despesasFiltradas.isEmpty
-                    ? Center(child: Text('Nenhuma despesa encontrada.', style: TextStyle(color: Colors.grey.shade600)))
+                    ? Center(child: Text(textoBusca.isNotEmpty ? 'Nenhuma despesa com esse nome.' : 'Nenhuma despesa encontrada.', style: TextStyle(color: Colors.grey.shade600)))
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
                         itemCount: despesasFiltradas.length,
@@ -350,277 +386,4 @@ class _CardResumo extends StatelessWidget {
   final String titulo; final double valor; final Color cor;
   const _CardResumo({required this.titulo, required this.valor, required this.cor});
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(titulo, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-          const SizedBox(height: 8),
-          Text('R\$ ${valor.toStringAsFixed(2)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: cor)),
-        ],
-      ),
-    );
-  }
-}
-
-class _FormularioDespesa extends ConsumerStatefulWidget {
-  final List<String> categorias;
-  final DateTime mesReferencia;
-  final Despesa? despesaEdit;
-  final VoidCallback? onExcluir;
-  final VoidCallback? onCopiar;
-
-  const _FormularioDespesa({
-    required this.categorias, 
-    required this.mesReferencia, 
-    this.despesaEdit, 
-    this.onExcluir, 
-    this.onCopiar
-  });
-  
-  @override
-  ConsumerState<_FormularioDespesa> createState() => _FormularioDespesaState();
-}
-
-class _FormularioDespesaState extends ConsumerState<_FormularioDespesa> {
-  String _tipo = 'REGULAR'; 
-  String? _categoriaSelecionada;
-  final _descController = TextEditingController();
-  final _valorController = TextEditingController();
-  final _parcelasController = TextEditingController(text: '1');
-  bool _pago = false;
-  bool _salvando = false;
-  late DateTime _dataSelecionada;
-
-  String _formaPagamento = 'Pix';
-  final List<String> _formasDePagamentoDisponiveis = [
-    'Pix', 'Dinheiro', 'Cartão de Débito', 'Cartão de Crédito', 'Boleto', 'Outros'
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    
-    if (widget.despesaEdit != null) {
-      final d = widget.despesaEdit!;
-      _descController.text = d.descricao;
-      _valorController.text = d.valor.toStringAsFixed(2).replaceAll('.', ',');
-      _categoriaSelecionada = d.categoria;
-      _tipo = d.tipo == 'PARCELADA' ? 'PARCELADA' : d.tipo;
-      _pago = d.status == 'PAGO';
-      _dataSelecionada = d.dataVencimento;
-      if (d.totalParcelas != null) {
-        _parcelasController.text = d.totalParcelas.toString();
-      }
-      
-      if (d.formaPagamento != null) {
-        if (!_formasDePagamentoDisponiveis.contains(d.formaPagamento)) {
-          _formasDePagamentoDisponiveis.add(d.formaPagamento!);
-        }
-        _formaPagamento = d.formaPagamento!;
-      }
-    } else {
-      final hoje = DateTime.now();
-      if (widget.mesReferencia.year == hoje.year && widget.mesReferencia.month == hoje.month) {
-        _dataSelecionada = hoje;
-      } else {
-        _dataSelecionada = DateTime(widget.mesReferencia.year, widget.mesReferencia.month, 1);
-      }
-    }
-  }
-
-  void _salvar() async {
-    if (_descController.text.isEmpty || _valorController.text.isEmpty || _categoriaSelecionada == null) return;
-    
-    setState(() => _salvando = true);
-    final valorStr = _valorController.text.replaceAll(',', '.');
-
-    final despesa = Despesa(
-      id: widget.despesaEdit?.id ?? '', 
-      descricao: _descController.text.trim(),
-      valor: double.tryParse(valorStr) ?? 0.0,
-      categoria: _categoriaSelecionada!,
-      tipo: _tipo,
-      dataVencimento: _dataSelecionada, 
-      dataPagamento: _pago ? _dataSelecionada : null,
-      status: _pago ? 'PAGO' : 'PENDENTE',
-      totalParcelas: widget.despesaEdit?.totalParcelas ?? (_tipo == 'PARCELADA' ? int.tryParse(_parcelasController.text) : null),
-      parcelaAtual: widget.despesaEdit?.parcelaAtual,
-      idAgrupador: widget.despesaEdit?.idAgrupador,
-      formaPagamento: _pago ? _formaPagamento : null,
-    );
-
-    await ref.read(despesaControllerProvider.notifier).salvarDespesa(despesa);
-    await ref.read(despesaControllerProvider.notifier).carregarDespesasMes(widget.mesReferencia, forcarServidor: true);
-    
-    if (mounted) Navigator.pop(context);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final ehEdicao = widget.despesaEdit != null;
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                ehEdicao ? '✏️ Editar Despesa' : '➕ Nova Despesa', 
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF8A2463))
-              ),
-              if (ehEdicao)
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.copy_rounded, color: Colors.blueGrey),
-                      tooltip: 'Copiar para o próximo mês',
-                      onPressed: widget.onCopiar,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                      tooltip: 'Excluir Lançamento',
-                      onPressed: widget.onExcluir,
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          
-          InkWell(
-            onTap: () async {
-              final dt = await showDatePicker(
-                context: context,
-                initialDate: _dataSelecionada,
-                firstDate: DateTime(2020),
-                lastDate: DateTime(2100),
-                builder: (context, child) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: const ColorScheme.light(primary: Color(0xFF8A2463)),
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (dt != null) setState(() => _dataSelecionada = dt);
-            },
-            child: InputDecorator(
-              decoration: const InputDecoration(
-                labelText: 'Data de Vencimento (Saída do Dinheiro)', 
-                border: OutlineInputBorder(),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(DateFormat('dd/MM/yyyy').format(_dataSelecionada), style: const TextStyle(fontSize: 16)),
-                  const Icon(Icons.calendar_today, size: 20, color: Colors.grey),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          TextField(
-            controller: _descController, 
-            decoration: const InputDecoration(labelText: 'Descrição', border: OutlineInputBorder()), 
-            textCapitalization: TextCapitalization.sentences
-          ),
-          const SizedBox(height: 16),
-          
-          IgnorePointer(
-            ignoring: ehEdicao,
-            child: Opacity(
-              opacity: ehEdicao ? 0.6 : 1.0,
-              child: SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'REGULAR', label: Text('Regular')),
-                  ButtonSegment(value: 'FIXA', label: Text('Fixa')),
-                  ButtonSegment(value: 'PARCELADA', label: Text('Parcelada')),
-                ],
-                selected: {_tipo},
-                onSelectionChanged: (val) => setState(() => _tipo = val.first),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          Row(
-            children: [
-              Expanded(child: TextField(
-                controller: _valorController, 
-                decoration: const InputDecoration(labelText: 'Valor Total (R\$)', border: OutlineInputBorder()), 
-                keyboardType: const TextInputType.numberWithOptions(decimal: true)
-              )),
-              if (_tipo == 'PARCELADA') ...[
-                const SizedBox(width: 12),
-                Expanded(child: TextField(
-                  controller: _parcelasController, 
-                  decoration: const InputDecoration(labelText: 'Nº Parcelas', border: OutlineInputBorder()), 
-                  keyboardType: TextInputType.number,
-                  enabled: !ehEdicao, 
-                )),
-              ]
-            ],
-          ),
-          const SizedBox(height: 16),
-          
-          DropdownButtonFormField<String>(
-            decoration: const InputDecoration(labelText: 'Categoria', border: OutlineInputBorder()),
-            value: _categoriaSelecionada,
-            items: widget.categorias.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-            onChanged: (val) => setState(() => _categoriaSelecionada = val),
-          ),
-          const SizedBox(height: 16),
-
-          SwitchListTile(
-            title: const Text('Já está pago?'),
-            value: _pago,
-            onChanged: (val) => setState(() => _pago = val),
-            activeColor: const Color(0xFF8A2463),
-            contentPadding: EdgeInsets.zero,
-          ),
-          
-          if (_pago) ...[
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: 'Forma de Pagamento', 
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.payments_outlined),
-              ),
-              value: _formaPagamento,
-              items: _formasDePagamentoDisponiveis.map((f) => DropdownMenuItem(value: f, child: Text(f))).toList(),
-              onChanged: (val) => setState(() => _formaPagamento = val!),
-            ),
-          ],
-
-          const SizedBox(height: 24),
-          
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCELAR')),
-              const SizedBox(width: 12),
-              FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: const Color(0xFF8A2463)), 
-                onPressed: _salvando ? null : _salvar, 
-                child: _salvando 
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                    : Text(ehEdicao ? 'ATUALIZAR' : 'SALVAR')
-              ),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-}
+  Widget build(
