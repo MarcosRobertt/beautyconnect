@@ -6,7 +6,7 @@ class FinanceiroState {
   final double receitas; 
   final double receitasServicos; 
   final double receitasProdutos;
-  final double receitasAvulsas; // 🟢 NOVO: Entradas da Conciliação 
+  final double receitasAvulsas; 
   final double despesas;
   final double cmv; 
   final double taxasPagas;
@@ -25,10 +25,9 @@ class FinanceiroState {
   final int anoReferencia;
   final List<double> faturamentoAnual;
 
-  // 🎯 CAMPOS PARA A CONCILIAÇÃO BANCÁRIA
   final Map<String, double> conciliacaoReais;
   final Map<String, double> conciliacaoTaxas;
-  final Map<String, List<Map<String, dynamic>>> ajustesConciliacao; // 🎯 A Tabela de Ajustes
+  final Map<String, List<Map<String, dynamic>>> ajustesConciliacao;
 
   FinanceiroState({
     required this.mesReferencia,
@@ -102,6 +101,14 @@ class FinanceiroState {
   }
 }
 
+class ItemParcelaPagamento {
+  final String forma;
+  final double valor;
+  final DateTime data;
+
+  ItemParcelaPagamento({required this.forma, required this.valor, required this.data});
+}
+
 final financeiroControllerProvider = StateNotifierProvider<FinanceiroController, AsyncValue<FinanceiroState>>((ref) {
   return FinanceiroController();
 });
@@ -133,10 +140,85 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     return formaOriginal[0].toUpperCase() + formaOriginal.substring(1).toLowerCase();
   }
 
+  /// Desmembra a comanda em pagamentos fracionados reais por dia
+  List<ItemParcelaPagamento> _extrairParcelas(Map<String, dynamic> data) {
+    // 1. Prioridade: Campo estruturado se existir
+    if (data['pagamentosDetalhados'] != null && data['pagamentosDetalhados'] is List) {
+      final lista = data['pagamentosDetalhados'] as List;
+      if (lista.isNotEmpty) {
+        final itens = <ItemParcelaPagamento>[];
+        for (var p in lista) {
+          if (p is Map) {
+            final v = (p['valor'] ?? 0).toDouble();
+            final f = p['forma']?.toString() ?? 'Outros';
+            DateTime? dt;
+            try {
+              dt = DateTime.parse(p['data'].toString());
+            } catch (_) {}
+            if (dt != null && v > 0) {
+              itens.add(ItemParcelaPagamento(forma: f, valor: v, data: dt));
+            }
+          }
+        }
+        if (itens.isNotEmpty) return itens;
+      }
+    }
+
+    // 2. Extração inteligente pela Observação gravada da Comanda
+    final obs = data['observacao']?.toString() ?? '';
+    final match = RegExp(r'\[Baixa Financeira:\s*(.*?)\]').firstMatch(obs);
+    if (match != null) {
+      final conteudo = match.group(1)!;
+      final blocos = conteudo.split('||');
+      final itens = <ItemParcelaPagamento>[];
+      for (var bloco in blocos) {
+        final partes = bloco.split('->');
+        if (partes.length == 2) {
+          final dataStr = partes[0].trim();
+          final detalheStr = partes[1].trim();
+          
+          DateTime? dtBloco;
+          try {
+            final dParts = dataStr.split('/');
+            if (dParts.length == 3) {
+              dtBloco = DateTime(int.parse(dParts[2]), int.parse(dParts[1]), int.parse(dParts[0]));
+            }
+          } catch (_) {}
+
+          if (dtBloco != null) {
+            final subPagamentos = detalheStr.split('|');
+            for (var sub in subPagamentos) {
+              final subPartes = sub.split(':');
+              if (subPartes.length >= 2) {
+                final forma = subPartes[0].trim();
+                final valStr = subPartes[1].replaceAll('R\$', '').replaceAll('.', '').replaceAll(',', '.').trim();
+                final val = double.tryParse(valStr) ?? 0.0;
+                if (val > 0) {
+                  itens.add(ItemParcelaPagamento(forma: forma, valor: val, data: dtBloco));
+                }
+              }
+            }
+          }
+        }
+      }
+      if (itens.isNotEmpty) return itens;
+    }
+
+    // 3. Fallback para comandas antigas normais
+    DateTime dataReal;
+    if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
+      dataReal = DateTime.parse(data['dataPagamento']);
+    } else {
+      dataReal = DateTime.parse(data['data']);
+    }
+    final bruto = (data['valor'] ?? 0).toDouble();
+    final forma = data['formaPagamento']?.toString() ?? 'Outros';
+    return [ItemParcelaPagamento(forma: forma, valor: bruto, data: dataReal)];
+  }
+
   Future<Map<String, double>> _buscarTotaisPeriodo(DateTime inicio, DateTime fim, GetOptions options) async {
     double recServicos = 0; double des = 0; double recProdutos = 0; double cmvPeriodo = 0;
     
-    // 🎯 MOTOR DUPLO (Busca pela data antiga de agenda E pela data nova de pagamento)
     final fAgendamentosData = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     final fAgendamentosPag = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     
@@ -148,7 +230,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     final vendas = await fVendas;
     final despesas = await fDespesas;
         
-    // Fundir as duas listas para evitar perdas
     final Map<String, Map<String, dynamic>> mapAgendamentos = {};
     for (var doc in agendamentosDataSnap.docs) mapAgendamentos[doc.id] = doc.data();
     for (var doc in agendamentosPagSnap.docs) mapAgendamentos[doc.id] = doc.data();
@@ -156,21 +237,12 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     for (var data in mapAgendamentos.values) {
       if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
       
-      // 🎯 FILTRO NA MEMÓRIA: Assegurar que só consideramos a data do pagamento se ela existir
-      DateTime dataReal;
-      if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
-        dataReal = DateTime.parse(data['dataPagamento']);
-      } else {
-        dataReal = DateTime.parse(data['data']);
+      final parcelas = _extrairParcelas(data);
+      for (var p in parcelas) {
+        if (p.data.isBefore(inicio) || p.data.isAfter(fim)) continue;
+        final taxa = calcularTaxa(p.forma, p.valor);
+        recServicos += (p.valor - taxa);
       }
-      
-      // Bloqueio de Segurança: Ignora se a data real não pertencer a este período
-      if (dataReal.isBefore(inicio) || dataReal.isAfter(fim)) continue;
-
-      final bruto = (data['valor'] ?? 0).toDouble();
-      final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
-      final taxa = calcularTaxa(formaRaw, bruto);
-      recServicos += (bruto - taxa); 
     }
 
     for (var doc in vendas.docs) {
@@ -193,8 +265,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     };
   }
 
-  // 🎯 MOTOR DE GRAVAÇÃO DO RASCUNHO (NOVA FUNÇÃO)
-  // Guarda no Firestore sem forçar o recarregamento do Painel de Visão Geral (Modo Invisível/Seguro)
   Future<void> salvarRascunhoConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas, Map<String, List<Map<String, dynamic>>> ajustesConciliacao) async {
     try {
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
@@ -203,11 +273,10 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         'reais': valoresReais,
         'taxas': taxasInformadas,
         'ajustes': ajustesConciliacao,
-        'status': 'rascunho', // Marcador de que não é oficial
+        'status': 'rascunho', 
         'ultimaAtualizacao': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // Atualiza apenas o estado local (ram) sem consultar novamente o servidor, poupando processamento
       if (state.hasValue) {
         state = AsyncValue.data(state.value!.copyWith(
           conciliacaoReais: valoresReais,
@@ -221,7 +290,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     }
   }
 
-  // 🎯 MOTOR DE FINALIZAÇÃO (Gravação Oficial)
   Future<void> salvarConciliacao(Map<String, double> valoresReais, Map<String, double> taxasInformadas, Map<String, List<Map<String, dynamic>>> ajustesConciliacao) async {
     try {
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
@@ -230,11 +298,10 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         'reais': valoresReais,
         'taxas': taxasInformadas,
         'ajustes': ajustesConciliacao,
-        'status': 'finalizado', // Marcador oficial
+        'status': 'finalizado', 
         'ultimaAtualizacao': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
-      // ⚡ AQUI SIM: Recarrega os dados completos para que o Painel Geral atualize com os totais!
       await carregarDados(forcarServidor: true);
     } catch (e) {
       throw Exception('Falha ao salvar a conciliação: $e');
@@ -262,7 +329,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
 
-      // 🎯 BUSCAS DUPLAS PARALELAS MENSAL (Para não perder dados passados nem futuros)
       final fAgendamentosMesData = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fAgendamentosMesPag = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       
@@ -272,12 +338,10 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       final fTotaisMesAnt = _buscarTotaisPeriodo(inicioMesAnt, fimMesAnt, options);
       final fTotaisAnoAnt = _buscarTotaisPeriodo(inicioAnoAnt, fimAnoAnt, options);
 
-      // 🎯 BUSCAS DUPLAS PARALELAS ANUAL
       final fAnualDataSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       final fAnualPagSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       
       final fAnualVendasSnap = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
-      
       final fConciliacao = _db.collection('conciliacoes_mensais').doc(mesAnoStr).get(options);
 
       final agendamentosMesDataSnap = await fAgendamentosMesData;
@@ -307,7 +371,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       Map<int, Map<String, double>> fluxoDiario = {};
       for (int i = 1; i <= fimMes.day; i++) fluxoDiario[i] = {'receita': 0.0, 'despesa': 0.0};
 
-      // 🎯 FUNDIR AS BUSCAS DO MÊS
       final Map<String, Map<String, dynamic>> mapMesAgendamentos = {};
       for (var doc in agendamentosMesDataSnap.docs) mapMesAgendamentos[doc.id] = doc.data();
       for (var doc in agendamentosMesPagSnap.docs) mapMesAgendamentos[doc.id] = doc.data();
@@ -315,37 +378,32 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       for (var data in mapMesAgendamentos.values) {
         if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
 
-        // 🎯 O SEGREDO DO CAIXA DIÁRIO ESTÁ AQUI
-        DateTime dataReal;
-        if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
-          dataReal = DateTime.parse(data['dataPagamento']);
-        } else {
-          dataReal = DateTime.parse(data['data']);
-        }
-
-        // Se a data real de recebimento não cair no mês atual do gráfico, pula
-        if (dataReal.isBefore(inicioMes) || dataReal.isAfter(fimMes)) continue;
-
-        final valorBruto = (data['valor'] ?? 0).toDouble();
+        final parcelas = _extrairParcelas(data);
         final servico = data['servico'] ?? 'Outros';
-        final formaRaw = data['formaPagamento']?.toString() ?? 'Outros';
-        final formaNormalizada = _normalizarFormaPagamento(formaRaw);
 
-        final taxaCalculada = calcularTaxa(formaRaw, valorBruto);
-        final valorLiquido = valorBruto - taxaCalculada;
+        for (var p in parcelas) {
+          // Filtra cada parcela individualmente para o mês selecionado
+          if (p.data.isBefore(inicioMes) || p.data.isAfter(fimMes)) continue;
 
-        totalReceitasServicos += valorLiquido;
-        totalTaxasRetidas += taxaCalculada;
-        topServicosMap[servico] = (topServicosMap[servico] ?? 0) + valorLiquido;
-        
-        if (formasPgtoMap.containsKey(formaNormalizada)) {
-          formasPgtoMap[formaNormalizada] = formasPgtoMap[formaNormalizada]! + valorLiquido;
-        } else {
-          formasPgtoMap[formaNormalizada] = valorLiquido;
+          final formaNormalizada = _normalizarFormaPagamento(p.forma);
+          final taxaCalculada = calcularTaxa(p.forma, p.valor);
+          final valorLiquido = p.valor - taxaCalculada;
+
+          totalReceitasServicos += valorLiquido;
+          totalTaxasRetidas += taxaCalculada;
+          topServicosMap[servico] = (topServicosMap[servico] ?? 0) + valorLiquido;
+          
+          if (formasPgtoMap.containsKey(formaNormalizada)) {
+            formasPgtoMap[formaNormalizada] = formasPgtoMap[formaNormalizada]! + valorLiquido;
+          } else {
+            formasPgtoMap[formaNormalizada] = valorLiquido;
+          }
+          
+          // 🎯 LANÇA NO DIA EXATO DE CADA PAGAMENTO NO CAIXA DIÁRIO
+          if (fluxoDiario.containsKey(p.data.day)) {
+            fluxoDiario[p.data.day]!['receita'] = fluxoDiario[p.data.day]!['receita']! + valorLiquido;
+          }
         }
-        
-        // 🎯 ATRIBUI O DINHEIRO AO DIA EXATO DO PAGAMENTO NO CAIXA DIÁRIO
-        fluxoDiario[dataReal.day]!['receita'] = fluxoDiario[dataReal.day]!['receita']! + valorLiquido;
       }
 
       for (var doc in vendasSnap.docs) {
@@ -378,7 +436,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         }
       }
 
-      // 🎯 Processar e Injetar a Tabela de Ajustes da Conciliação
       Map<String, double> conciliacaoReaisLoad = {};
       Map<String, double> conciliacaoTaxasLoad = {};
       Map<String, List<Map<String, dynamic>>> ajustesLoad = {};
@@ -398,7 +455,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
           (mapData['ajustes'] as Map<String, dynamic>).forEach((forma, lista) {
             ajustesLoad[forma] = List<Map<String, dynamic>>.from(lista);
             
-            // Só somamos à matemática Global do Aplicativo SE O STATUS FOR FINALIZADO!
             if (mapData['status'] == 'finalizado') {
               for (var ajuste in ajustesLoad[forma]!) {
                 if (ajuste['tipo'] == 'entrada') totalAjustesEntrada += (ajuste['valor'] as num).toDouble();
@@ -409,10 +465,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         }
       }
 
-      // Aplica os Ajustes Avulsos OFICIAIS aos totais da empresa
       totalDespesas += totalAjustesSaida;
       
-      // 🎯 FUNDIR AS BUSCAS DO ANO
       final Map<String, Map<String, dynamic>> mapAnualAgendamentos = {};
       for (var doc in anualDataSnap.docs) mapAnualAgendamentos[doc.id] = doc.data();
       for (var doc in anualPagSnap.docs) mapAnualAgendamentos[doc.id] = doc.data();
@@ -421,18 +475,13 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       for (var data in mapAnualAgendamentos.values) {
         if (data['status']?.toString().toLowerCase() == 'cancelado') continue;
         
-        DateTime dataReal;
-        if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
-          dataReal = DateTime.parse(data['dataPagamento']);
-        } else {
-          dataReal = DateTime.parse(data['data']);
+        final parcelas = _extrairParcelas(data);
+        for (var p in parcelas) {
+          if (p.data.isBefore(inicioAno) || p.data.isAfter(fimAno)) continue;
+
+          final taxa = calcularTaxa(p.forma, p.valor);
+          faturamentoMeses[p.data.month - 1] += (p.valor - taxa);
         }
-
-        if (dataReal.isBefore(inicioAno) || dataReal.isAfter(fimAno)) continue;
-
-        final bruto = (data['valor'] ?? 0).toDouble();
-        final taxa = calcularTaxa(data['formaPagamento']?.toString() ?? 'Outros', bruto);
-        faturamentoMeses[dataReal.month - 1] += (bruto - taxa); 
       }
 
       for (var doc in anualVendasSnap.docs) {
@@ -441,7 +490,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         final preco = (data['precoVendido'] ?? 0).toDouble();
         faturamentoMeses[DateTime.parse(data['dataVenda']).month - 1] += (preco * qtd); 
       }
-      faturamentoMeses[_mesAtual.month - 1] += totalAjustesEntrada; // Soma no gráfico
+      faturamentoMeses[_mesAtual.month - 1] += totalAjustesEntrada;
 
       var topServicosSorted = Map.fromEntries(
         topServicosMap.entries.toList()..sort((e1, e2) => e2.value.compareTo(e1.value))
