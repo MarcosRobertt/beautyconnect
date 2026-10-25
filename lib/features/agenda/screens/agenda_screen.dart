@@ -271,22 +271,29 @@ class AgendaScreen extends ConsumerWidget {
 
           FormaPagamento formaPrincipal = FormaPagamento.pix;
           String detalhePagamentoStr = '';
+          
+          // 🎯 AQUI RESGATAMOS A DATA QUE VOCÊ PREENCHEU NA TELA (Fallback para a data do agendamento)
+          DateTime dataDoPagamentoReal = DateTime.now();
+          try {
+            final dynamic d = (agendamento as dynamic).data;
+            if (d is DateTime) dataDoPagamentoReal = d;
+            else if (d is String) dataDoPagamentoReal = DateTime.parse(d);
+          } catch (_) {}
 
-          // 🎯 NOVO BLOCO BLINDADO CONTRA ERROS
           if (pagamentos.isNotEmpty) {
             try {
               final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
               formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+              dataDoPagamentoReal = maiorPagamento['data'] as DateTime; // Puxa a data do recebimento!
+
               final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
 
               Map<String, List<String>> pagamentosPorData = {};
-              
               for (var p in pagamentos) {
                 final d = p['data'] as DateTime;
                 final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
                 final f = (p['forma'] as FormaPagamento).rotulo;
                 final v = formataMoeda(p['valor'] as double);
-
                 pagamentosPorData.putIfAbsent(dStr, () => []).add('$f: $v');
               }
 
@@ -296,8 +303,7 @@ class AgendaScreen extends ConsumerWidget {
               });
 
               detalhePagamentoStr = '[Baixa Financeira: ${blocosDeData.join(' || ')}]';
-           } catch (e) {
-              // Fallback se ocorrer qualquer erro de tipo ou lista
+            } catch (e) {
               detalhePagamentoStr = '[Baixa Financeira Registrada: ${agendamento.data.day.toString().padLeft(2, '0')}/${agendamento.data.month.toString().padLeft(2, '0')}]';
             }
           } else if (valorFinal <= 0.01) {
@@ -317,6 +323,13 @@ class AgendaScreen extends ConsumerWidget {
 
           final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
           
+          // 🎯 A GRANDE SACADA: INJETAR A DATA DE PAGAMENTO NO FIREBASE PARA O FINANCEIRO LER
+          try {
+            await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).update({
+              'dataPagamento': dataDoPagamentoReal.toIso8601String(),
+            });
+          } catch (_) {}
+
           if (context.mounted) {
             if (relatorioDeErro != null) {
               _mostrarRelatorioDeErro(context, relatorioDeErro);
@@ -470,7 +483,6 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     super.initState();
     _valorTotal = widget.agendamento.valor;
     
-    // 🎯 FIX: Captura a data real do agendamento para retroativos e evita que caia no "Hoje"
     try {
       final dynamic d = (widget.agendamento as dynamic).data;
       if (d is DateTime) {
@@ -511,7 +523,6 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
       setState(() { 
         _pagamentos.add({'forma': _formaAtual, 'valor': valorDigitado, 'data': _dataPagamentoAtual}); 
         _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); 
-        // 🎯 FIX: Retirado o reset para DateTime.now(), mantendo a data do retroativo!
       });
     }
   }
