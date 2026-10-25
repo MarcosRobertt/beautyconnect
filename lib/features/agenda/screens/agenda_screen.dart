@@ -272,30 +272,36 @@ class AgendaScreen extends ConsumerWidget {
           FormaPagamento formaPrincipal = FormaPagamento.pix;
           String detalhePagamentoStr = '';
 
+          // 🎯 NOVO BLOCO BLINDADO CONTRA ERROS
           if (pagamentos.isNotEmpty) {
-            // Descobre a forma principal de pagamento
-            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
-            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
-            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+            try {
+              final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
+              formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+              final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
 
-            // 🎯 LÓGICA DE AGRUPAMENTO DE PAGAMENTOS RESTAURADA (Padrão Original)
-            Map<String, List<String>> pagamentosPorData = {};
-            
-            for (var p in pagamentos) {
-              final d = p['data'] as DateTime;
-              final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-              final f = (p['forma'] as FormaPagamento).rotulo;
-              final v = formataMoeda(p['valor'] as double);
+              Map<String, List<String>> pagamentosPorData = {};
+              
+              for (var p in pagamentos) {
+                final d = p['data'] as DateTime;
+                final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+                final f = (p['forma'] as FormaPagamento).rotulo;
+                final v = formataMoeda(p['valor'] as double);
 
-              pagamentosPorData.putIfAbsent(dStr, () => []).add('$f: $v');
+                pagamentosPorData.putIfAbsent(dStr, () => []).add('$f: $v');
+              }
+
+              List<String> blocosDeData = [];
+              pagamentosPorData.forEach((dataStr, detalhes) {
+                blocosDeData.add('$dataStr -> ${detalhes.join(' | ')}');
+              });
+
+              detalhePagamentoStr = '[Baixa Financeira: ${blocosDeData.join(' || ')}]';
+            } catch (e) {
+              // Fallback se ocorrer qualquer erro de tipo ou lista
+              detalhePagamentoStr = '[Baixa Financeira Registrada: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}]';
             }
-
-            List<String> blocosDeData = [];
-            pagamentosPorData.forEach((dataStr, detalhes) {
-              blocosDeData.add('$dataStr -> ${detalhes.join(' | ')}');
-            });
-
-            detalhePagamentoStr = '[Baixa Financeira: ${blocosDeData.join(' || ')}]';
+          } else if (valorFinal <= 0.01) {
+             detalhePagamentoStr = '[Baixa Financeira: Sem Custo / Retorno]';
           }
 
           if (detalhePagamentoStr.isNotEmpty) {
@@ -451,7 +457,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
   late double _valorTotal;
   bool _houveAtraso = false;
   
-  DateTime _dataPagamentoAtual = DateTime.now(); 
+  late DateTime _dataPagamentoAtual; 
   final List<Map<String, dynamic>> _pagamentos = [];
   FormaPagamento _formaAtual = FormaPagamento.pix;
   final TextEditingController _valorParcialController = TextEditingController();
@@ -463,6 +469,21 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
   void initState() {
     super.initState();
     _valorTotal = widget.agendamento.valor;
+    
+    // 🎯 FIX: Captura a data real do agendamento para retroativos e evita que caia no "Hoje"
+    try {
+      final dynamic d = (widget.agendamento as dynamic).data;
+      if (d is DateTime) {
+        _dataPagamentoAtual = d;
+      } else if (d is String) {
+        _dataPagamentoAtual = DateTime.parse(d);
+      } else {
+        _dataPagamentoAtual = DateTime.now();
+      }
+    } catch (_) {
+      _dataPagamentoAtual = DateTime.now();
+    }
+
     _valorParcialController.text = _valorTotal.toStringAsFixed(2).replaceAll('.', ',');
     _valorParcialController.addListener(() => setState(() {}));
   }
@@ -490,7 +511,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
       setState(() { 
         _pagamentos.add({'forma': _formaAtual, 'valor': valorDigitado, 'data': _dataPagamentoAtual}); 
         _valorParcialController.text = _valorRestante.toStringAsFixed(2).replaceAll('.', ','); 
-        _dataPagamentoAtual = DateTime.now(); 
+        // 🎯 FIX: Retirado o reset para DateTime.now(), mantendo a data do retroativo!
       });
     }
   }
