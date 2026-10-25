@@ -296,9 +296,9 @@ class AgendaScreen extends ConsumerWidget {
               });
 
               detalhePagamentoStr = '[Baixa Financeira: ${blocosDeData.join(' || ')}]';
-            } catch (e) {
+           } catch (e) {
               // Fallback se ocorrer qualquer erro de tipo ou lista
-              detalhePagamentoStr = '[Baixa Financeira Registrada: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}]';
+              detalhePagamentoStr = '[Baixa Financeira Registrada: ${agendamento.data.day.toString().padLeft(2, '0')}/${agendamento.data.month.toString().padLeft(2, '0')}]';
             }
           } else if (valorFinal <= 0.01) {
              detalhePagamentoStr = '[Baixa Financeira: Sem Custo / Retorno]';
