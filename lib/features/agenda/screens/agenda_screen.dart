@@ -15,6 +15,7 @@ import '../widgets/calendar_month_view.dart';
 import '../../dashboard/controllers/dashboard_controller.dart'; 
 import '../../estoque/controllers/estoque_controller.dart';
 import '../../estoque/models/insumo.dart';
+import '../../financeiro/controllers/financeiro_controller.dart';
 
 class AgendaScreen extends ConsumerWidget {
   const AgendaScreen({super.key});
@@ -120,11 +121,13 @@ class AgendaScreen extends ConsumerWidget {
                 final atualizado = agendamento.copyWith(status: AgendamentoStatus.cancelado, observacao: novaObs);
                 relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
                 try {
-                  await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).update({
+                  await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).set({
                     'observacao': novaObs,
                     'status': 'cancelado',
-                  });
-                } catch (_) {}
+                  }, SetOptions(merge: true));
+                } catch (e) {
+                  relatorioDeErro = 'Erro no Firestore: $e';
+                }
               } else {
                 relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).cancelar(agendamento.id);
               }
@@ -135,6 +138,7 @@ class AgendaScreen extends ConsumerWidget {
                 } else {
                   ref.invalidate(todosAgendamentosProvider);
                   ref.invalidate(dashboardMetricsProvider);
+                  ref.invalidate(financeiroControllerProvider);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Ação realizada com sucesso!'), backgroundColor: Colors.green));
                 }
               }
@@ -174,16 +178,18 @@ class AgendaScreen extends ConsumerWidget {
                 observacao: novaObs,
               );
               
-              final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+              String? relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
               
               try {
-                await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).update({
+                await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).set({
                   'observacao': novaObs,
                   'status': 'agendado',
                   'dataPagamento': FieldValue.delete(),
                   'pagamentosDetalhados': FieldValue.delete(),
-                });
-              } catch (_) {}
+                }, SetOptions(merge: true));
+              } catch (e) {
+                relatorioDeErro = (relatorioDeErro != null ? '$relatorioDeErro\n' : '') + 'Falha no banco ao reabrir: $e';
+              }
               
               if (context.mounted) {
                 if (relatorioDeErro != null) {
@@ -191,6 +197,7 @@ class AgendaScreen extends ConsumerWidget {
                 } else {
                   ref.invalidate(todosAgendamentosProvider);
                   ref.invalidate(dashboardMetricsProvider);
+                  ref.invalidate(financeiroControllerProvider);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comanda reaberta e pronta para novo fechamento.'), backgroundColor: Colors.blue));
                 }
               }
@@ -303,16 +310,18 @@ class AgendaScreen extends ConsumerWidget {
             observacao: novaObs,
           );
 
-          final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          String? relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
           
           try {
-            await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).update({
+            await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).set({
               'dataPagamento': dataDoPagamentoReal.toIso8601String(),
               'observacao': novaObs,
               'status': 'concluido',
               'pagamentosDetalhados': listaPagamentosDetalhados,
-            });
-          } catch (_) {}
+            }, SetOptions(merge: true));
+          } catch (e) {
+            relatorioDeErro = (relatorioDeErro != null ? '$relatorioDeErro\n' : '') + 'Falha no banco ao salvar comanda: $e';
+          }
 
           if (context.mounted) {
             if (relatorioDeErro != null) {
@@ -320,6 +329,7 @@ class AgendaScreen extends ConsumerWidget {
             } else {
               ref.invalidate(todosAgendamentosProvider);
               ref.invalidate(dashboardMetricsProvider);
+              ref.invalidate(financeiroControllerProvider);
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Comanda fechada com sucesso!'), backgroundColor: Colors.green));
             }
           }
@@ -730,7 +740,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
           mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment: dynamicNome,
               children: [
                 Expanded(child: Text('Fechar Comanda — ${widget.nomeCliente}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                 IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
@@ -874,3 +884,4 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     );
   }
 }
+const dynamic dynamicNome = MainAxisAlignment.spaceBetween;
