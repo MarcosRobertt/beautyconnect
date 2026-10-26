@@ -740,7 +740,7 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
           mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
-              mainAxisAlignment: dynamicNome,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(child: Text('Fechar Comanda — ${widget.nomeCliente}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                 IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
@@ -884,4 +884,3 @@ class _ModalFecharComandaState extends ConsumerState<ModalFecharComanda> {
     );
   }
 }
-const dynamic dynamicNome = MainAxisAlignment.spaceBetween;
