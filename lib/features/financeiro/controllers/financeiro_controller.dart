@@ -140,9 +140,18 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     return formaOriginal[0].toUpperCase() + formaOriginal.substring(1).toLowerCase();
   }
 
-  /// Desmembra a comanda em pagamentos fracionados reais por dia
+  DateTime _converterData(dynamic valor) {
+    if (valor == null) return DateTime.now();
+    if (valor is Timestamp) return valor.toDate();
+    if (valor is DateTime) return valor;
+    try {
+      return DateTime.parse(valor.toString());
+    } catch (_) {
+      return DateTime.now();
+    }
+  }
+
   List<ItemParcelaPagamento> _extrairParcelas(Map<String, dynamic> data) {
-    // 1. Prioridade: Campo estruturado se existir
     if (data['pagamentosDetalhados'] != null && data['pagamentosDetalhados'] is List) {
       final lista = data['pagamentosDetalhados'] as List;
       if (lista.isNotEmpty) {
@@ -151,11 +160,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
           if (p is Map) {
             final v = (p['valor'] ?? 0).toDouble();
             final f = p['forma']?.toString() ?? 'Outros';
-            DateTime? dt;
-            try {
-              dt = DateTime.parse(p['data'].toString());
-            } catch (_) {}
-            if (dt != null && v > 0) {
+            DateTime dt = _converterData(p['data']);
+            if (v > 0) {
               itens.add(ItemParcelaPagamento(forma: f, valor: v, data: dt));
             }
           }
@@ -164,11 +170,10 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       }
     }
 
-    // 2. Extração inteligente pela Observação gravada da Comanda
     final obs = data['observacao']?.toString() ?? '';
-    final match = RegExp(r'\[Baixa Financeira:\s*(.*?)\]').firstMatch(obs);
-    if (match != null) {
-      final conteudo = match.group(1)!;
+    final matches = RegExp(r'\[Baixa Financeira:\s*(.*?)\]').allMatches(obs);
+    if (matches.isNotEmpty) {
+      final conteudo = matches.last.group(1)!;
       final blocos = conteudo.split('||');
       final itens = <ItemParcelaPagamento>[];
       for (var bloco in blocos) {
@@ -204,12 +209,11 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       if (itens.isNotEmpty) return itens;
     }
 
-    // 3. Fallback para comandas antigas normais
     DateTime dataReal;
     if (data.containsKey('dataPagamento') && data['dataPagamento'] != null) {
-      dataReal = DateTime.parse(data['dataPagamento']);
+      dataReal = _converterData(data['dataPagamento']);
     } else {
-      dataReal = DateTime.parse(data['data']);
+      dataReal = _converterData(data['data']);
     }
     final bruto = (data['valor'] ?? 0).toDouble();
     final forma = data['formaPagamento']?.toString() ?? 'Outros';
@@ -382,7 +386,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         final servico = data['servico'] ?? 'Outros';
 
         for (var p in parcelas) {
-          // Filtra cada parcela individualmente para o mês selecionado
           if (p.data.isBefore(inicioMes) || p.data.isAfter(fimMes)) continue;
 
           final formaNormalizada = _normalizarFormaPagamento(p.forma);
@@ -399,7 +402,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
             formasPgtoMap[formaNormalizada] = valorLiquido;
           }
           
-          // 🎯 LANÇA NO DIA EXATO DE CADA PAGAMENTO NO CAIXA DIÁRIO
           if (fluxoDiario.containsKey(p.data.day)) {
             fluxoDiario[p.data.day]!['receita'] = fluxoDiario[p.data.day]!['receita']! + valorLiquido;
           }
@@ -411,7 +413,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         final qtd = (data['quantidade'] ?? 1) as int;
         final preco = (data['precoVendido'] ?? 0).toDouble();
         final custo = (data['custoHistorico'] ?? 0).toDouble();
-        final dataVenda = DateTime.parse(data['dataVenda']);
+        final dataVenda = _converterData(data['dataVenda']);
 
         final totalVenda = preco * qtd;
         final custoVenda = custo * qtd;
@@ -428,7 +430,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       for (var doc in despesasSnap.docs) {
         final data = doc.data();
         final valor = (data['valor'] ?? 0).toDouble();
-        final dataVencimento = DateTime.parse(data['dataVencimento']);
+        final dataVencimento = _converterData(data['dataVencimento']);
 
         totalDespesas += valor;
         if (fluxoDiario.containsKey(dataVencimento.day)) {
@@ -488,7 +490,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
         final data = doc.data();
         final qtd = (data['quantidade'] ?? 1) as int;
         final preco = (data['precoVendido'] ?? 0).toDouble();
-        faturamentoMeses[DateTime.parse(data['dataVenda']).month - 1] += (preco * qtd); 
+        final dtVenda = _converterData(data['dataVenda']);
+        faturamentoMeses[dtVenda.month - 1] += (preco * qtd); 
       }
       faturamentoMeses[_mesAtual.month - 1] += totalAjustesEntrada;
 
