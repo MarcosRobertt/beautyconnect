@@ -14,7 +14,6 @@ class FinanceiroState {
   final Map<String, double> formasPagamento;
   final Map<int, Map<String, double>> fluxoDiario;
   
-  // Comparativos
   final double receitasMesAnterior;
   final double despesasMesAnterior;
   final double cmvMesAnterior; 
@@ -120,6 +119,9 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   DateTime _mesAtual = DateTime.now();
   int _anoAtual = DateTime.now().year;
 
+  // Curinga Universal para clientes velhas e novas
+  final List<String> _statusConcluidos = ['concluido', 'Concluído', 'Concluido'];
+
   static double calcularTaxa(String forma, double valorBruto) {
     final f = forma.trim().toLowerCase();
     if (f == 'dinheiro' || f == 'pix') return 0.0;
@@ -171,7 +173,7 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     }
 
     final obs = data['observacao']?.toString() ?? '';
-    final matches = RegExp(r'\[Baixa Financeira:\s*(.*?)\]').allMatches(obs);
+    final matches = RegExp(r'\[Baixa Financeira.*?:\s*(.*?)\]').allMatches(obs);
     if (matches.isNotEmpty) {
       final conteudo = matches.last.group(1)!;
       final blocos = conteudo.split('||');
@@ -223,8 +225,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   Future<Map<String, double>> _buscarTotaisPeriodo(DateTime inicio, DateTime fim, GetOptions options) async {
     double recServicos = 0; double des = 0; double recProdutos = 0; double cmvPeriodo = 0;
     
-    final fAgendamentosData = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
-    final fAgendamentosPag = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    final fAgendamentosData = _db.collection('agendamentos').where('status', whereIn: _statusConcluidos).where('data', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('data', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
+    final fAgendamentosPag = _db.collection('agendamentos').where('status', whereIn: _statusConcluidos).where('dataPagamento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     
     final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
     final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicio.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fim.toIso8601String()).get(options);
@@ -333,8 +335,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       
       final mesAnoStr = '${_mesAtual.year}-${_mesAtual.month.toString().padLeft(2, '0')}';
 
-      final fAgendamentosMesData = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
-      final fAgendamentosMesPag = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      final fAgendamentosMesData = _db.collection('agendamentos').where('status', whereIn: _statusConcluidos).where('data', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('data', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
+      final fAgendamentosMesPag = _db.collection('agendamentos').where('status', whereIn: _statusConcluidos).where('dataPagamento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       
       final fVendas = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
       final fDespesas = _db.collection('despesas').where('dataVencimento', isGreaterThanOrEqualTo: inicioMes.toIso8601String()).where('dataVencimento', isLessThanOrEqualTo: fimMes.toIso8601String()).get(options);
@@ -342,8 +344,8 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
       final fTotaisMesAnt = _buscarTotaisPeriodo(inicioMesAnt, fimMesAnt, options);
       final fTotaisAnoAnt = _buscarTotaisPeriodo(inicioAnoAnt, fimAnoAnt, options);
 
-      final fAnualDataSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
-      final fAnualPagSnap = _db.collection('agendamentos').where('status', isEqualTo: 'concluido').where('dataPagamento', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      final fAnualDataSnap = _db.collection('agendamentos').where('status', whereIn: _statusConcluidos).where('data', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('data', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
+      final fAnualPagSnap = _db.collection('agendamentos').where('status', whereIn: _statusConcluidos).where('dataPagamento', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataPagamento', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       
       final fAnualVendasSnap = _db.collection('loja_vendas').where('dataVenda', isGreaterThanOrEqualTo: inicioAno.toIso8601String()).where('dataVenda', isLessThanOrEqualTo: fimAno.toIso8601String()).get(options);
       final fConciliacao = _db.collection('conciliacoes_mensais').doc(mesAnoStr).get(options);
