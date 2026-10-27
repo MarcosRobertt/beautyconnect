@@ -119,7 +119,6 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
   DateTime _mesAtual = DateTime.now();
   int _anoAtual = DateTime.now().year;
 
-  // Curinga Universal para clientes velhas e novas
   final List<String> _statusConcluidos = ['concluido', 'Concluído', 'Concluido'];
 
   static double calcularTaxa(String forma, double valorBruto) {
@@ -142,15 +141,23 @@ class FinanceiroController extends StateNotifier<AsyncValue<FinanceiroState>> {
     return formaOriginal[0].toUpperCase() + formaOriginal.substring(1).toLowerCase();
   }
 
+  // CORTA O FUSO HORÁRIO PARA GARANTIR O DIA EXATO NO CAIXA DIÁRIO
   DateTime _converterData(dynamic valor) {
-    if (valor == null) return DateTime.now();
-    if (valor is Timestamp) return valor.toDate();
-    if (valor is DateTime) return valor;
-    try {
-      return DateTime.parse(valor.toString());
-    } catch (_) {
-      return DateTime.now();
+    DateTime base;
+    if (valor == null) {
+      base = DateTime.now();
+    } else if (valor is Timestamp) {
+      base = valor.toDate();
+    } else if (valor is DateTime) {
+      base = valor;
+    } else {
+      try {
+        base = DateTime.parse(valor.toString());
+      } catch (_) {
+        base = DateTime.now();
+      }
     }
+    return DateTime(base.year, base.month, base.day);
   }
 
   List<ItemParcelaPagamento> _extrairParcelas(Map<String, dynamic> data) {
