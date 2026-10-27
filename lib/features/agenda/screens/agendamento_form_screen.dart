@@ -15,6 +15,7 @@ import '../controllers/agendamento_controller.dart';
 import '../models/agendamento.dart';
 import '../../estoque/controllers/estoque_controller.dart';
 import '../../estoque/models/insumo.dart';
+import '../../financeiro/controllers/financeiro_controller.dart';
 
 class AgendamentoFormScreen extends ConsumerStatefulWidget {
   const AgendamentoFormScreen({super.key, this.agendamentoId, this.dataInicialIso, this.horaInicialStr});
@@ -278,8 +279,18 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               final erro = await ref
                   .read(agendamentoControllerProvider.notifier)
                   .salvar(cancelado, novo: false);
+                  
+              try {
+                await FirebaseFirestore.instance.collection('agendamentos').doc(cancelado.id).set({
+                  'observacao': novaObs,
+                  'status': 'cancelado',
+                }, SetOptions(merge: true));
+              } catch (_) {}
 
               if (erro == null && mounted) {
+                ref.invalidate(todosAgendamentosProvider);
+                ref.invalidate(dashboardMetricsProvider);
+                ref.invalidate(financeiroControllerProvider);
                 context.pop();
               } else if (mounted && erro != null) {
                 setState(() => _erro = erro);
@@ -292,6 +303,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     );
   }
 
+  // NOVA LÓGICA ATÔMICA CENTRALIZADA
   void _abrirModalComandaCompleto(BuildContext context, WidgetRef ref, Agendamento agendamento, String nomeCliente) {
     showModalBottomSheet<void>(
       context: context, 
@@ -359,8 +371,8 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             utilizadosStr = '[Produtos Utilizados: $nomes]';
           }
 
-          final obsAtual = agendamento.observacao;
-          String novaObs = obsAtual;
+          final regexLimpeza = RegExp(r'\n?\[Baixa Financeira.*?\]');
+          String novaObs = agendamento.observacao.replaceAll(regexLimpeza, '').trim();
           
           if (houveAtraso && !novaObs.contains('[Cliente Atrasou]')) {
             novaObs = novaObs.isEmpty ? '[Cliente Atrasou]' : '$novaObs | [Cliente Atrasou]';
@@ -376,22 +388,50 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
 
           FormaPagamento formaPrincipal = FormaPagamento.pix;
           String detalhePagamentoStr = '';
+          DateTime dataDoPagamentoReal = DateTime.now();
+
+          try {
+            final dynamic d = (agendamento as dynamic).data;
+            if (d is DateTime) dataDoPagamentoReal = d;
+            else if (d is String) dataDoPagamentoReal = DateTime.parse(d);
+          } catch (_) {}
+
+          final List<Map<String, dynamic>> listaPagamentosDetalhados = [];
 
           if (pagamentos.isNotEmpty) {
-            final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
-            formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
-            
-            final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
-            
-            final listaDetalhes = pagamentos.map((p) {
-              final d = p['data'] as DateTime;
-              final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-              final f = (p['forma'] as FormaPagamento).rotulo;
-              final v = formataMoeda(p['valor'] as double);
-              return '[$dStr] $f: $v';
-            }).join(' | ');
-            
-            detalhePagamentoStr = '[Baixa Financeira: $listaDetalhes]';
+            try {
+              final maiorPagamento = pagamentos.reduce((a, b) => (a['valor'] as double) > (b['valor'] as double) ? a : b);
+              formaPrincipal = maiorPagamento['forma'] as FormaPagamento;
+              dataDoPagamentoReal = maiorPagamento['data'] as DateTime;
+
+              final formataMoeda = (double v) => 'R\$ ${v.toStringAsFixed(2).replaceAll('.', ',')}';
+
+              Map<String, List<String>> pagamentosPorData = {};
+              for (var p in pagamentos) {
+                final d = p['data'] as DateTime;
+                final dStr = '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+                final f = (p['forma'] as FormaPagamento).rotulo;
+                final v = formataMoeda(p['valor'] as double);
+                pagamentosPorData.putIfAbsent(dStr, () => []).add('$f: $v');
+
+                listaPagamentosDetalhados.add({
+                  'forma': f,
+                  'valor': (p['valor'] as num).toDouble(),
+                  'data': d.toIso8601String(),
+                });
+              }
+
+              List<String> blocosDeData = [];
+              pagamentosPorData.forEach((dataStr, detalhes) {
+                blocosDeData.add('$dataStr -> ${detalhes.join(' | ')}');
+              });
+
+              detalhePagamentoStr = '[Baixa Financeira: ${blocosDeData.join(' || ')}]';
+            } catch (e) {
+              detalhePagamentoStr = '[Baixa Financeira Registrada: ${agendamento.data.day.toString().padLeft(2, '0')}/${agendamento.data.month.toString().padLeft(2, '0')}]';
+            }
+          } else if (valorFinal <= 0.01) {
+            detalhePagamentoStr = '[Baixa Financeira: Sem Custo / Retorno]';
           }
 
           if (detalhePagamentoStr.isNotEmpty) {
@@ -405,13 +445,26 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
             observacao: novaObs,
           );
 
-          final relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
+          String? relatorioDeErro = await ref.read(agendamentoControllerProvider.notifier).salvar(atualizado, novo: false);
           
+          try {
+            await FirebaseFirestore.instance.collection('agendamentos').doc(agendamento.id).set({
+              'dataPagamento': dataDoPagamentoReal.toIso8601String(),
+              'observacao': novaObs,
+              'status': 'concluido',
+              'pagamentosDetalhados': listaPagamentosDetalhados,
+            }, SetOptions(merge: true));
+          } catch (e) {
+             relatorioDeErro = (relatorioDeErro != null ? '$relatorioDeErro\n' : '') + 'Falha no banco ao salvar comanda: $e';
+          }
+
           if (context.mounted) {
             if (relatorioDeErro != null) {
               setState(() => _erro = relatorioDeErro);
             } else {
               ref.invalidate(todosAgendamentosProvider);
+              ref.invalidate(dashboardMetricsProvider);
+              ref.invalidate(financeiroControllerProvider);
               setState(() {
                 _original = atualizado; 
               });
@@ -849,8 +902,28 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 label: const Text('Reabrir Comanda', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                                 backgroundColor: Colors.orange.shade50, side: BorderSide(color: Colors.orange.shade200),
                                 onPressed: () async {
-                                  final att = _original!.copyWith(status: AgendamentoStatus.agendado);
+                                  
+                                  final regexLimpeza = RegExp(r'\n?\[Baixa Financeira.*?\]');
+                                  final novaObs = _original!.observacao.replaceAll(regexLimpeza, '').trim();
+                                  
+                                  final att = _original!.copyWith(
+                                    status: AgendamentoStatus.agendado,
+                                    formaPagamento: FormaPagamento.pendente,
+                                    observacao: novaObs,
+                                  );
+                                  
                                   await ref.read(agendamentoControllerProvider.notifier).salvar(att, novo: false);
+                                  
+                                  try {
+                                    await FirebaseFirestore.instance.collection('agendamentos').doc(att.id).set({
+                                      'observacao': novaObs,
+                                      'status': 'agendado',
+                                      'dataPagamento': FieldValue.delete(),
+                                      'pagamentosDetalhados': FieldValue.delete(),
+                                    }, SetOptions(merge: true));
+                                  } catch (_) {}
+
+                                  ref.invalidate(financeiroControllerProvider);
                                   setState(() => _original = att);
                                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comanda reaberta.'), backgroundColor: Colors.orange));
                                 }
@@ -976,7 +1049,7 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                 style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 12), side: BorderSide(color: Colors.purple.shade300)),
                               ),
                             ], 
-                          ], // 🎯 FECHAMENTO CORRETO DOS COLCHETES
+                          ], 
                         );
                       },
                     ),
@@ -1394,7 +1467,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
               const Text('Registrar Entrada / Recebimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               InkWell(
-                onTap: () async { final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setState(() => _dataPagamentoAtual = picked); },
+                onTap: () async { final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime(2035)); if (picked != null) setState(() => _dataPagamentoAtual = picked); },
                 child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: Colors.purple), const SizedBox(width: 8), Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14))])),
               ),
               const SizedBox(height: 12),
