@@ -16,6 +16,7 @@ import '../models/agendamento.dart';
 import '../../estoque/controllers/estoque_controller.dart';
 import '../../estoque/models/insumo.dart';
 import '../../financeiro/controllers/financeiro_controller.dart';
+import '../../dashboard/controllers/dashboard_controller.dart'; // <-- IMPORTAÇÃO ADICIONADA AQUI
 
 class AgendamentoFormScreen extends ConsumerStatefulWidget {
   const AgendamentoFormScreen({super.key, this.agendamentoId, this.dataInicialIso, this.horaInicialStr});
@@ -303,7 +304,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
     );
   }
 
-  // NOVA LÓGICA ATÔMICA CENTRALIZADA
   void _abrirModalComandaCompleto(BuildContext context, WidgetRef ref, Agendamento agendamento, String nomeCliente) {
     showModalBottomSheet<void>(
       context: context, 
@@ -1467,7 +1467,7 @@ class _ModalFecharComandaFormState extends ConsumerState<ModalFecharComandaForm>
               const Text('Registrar Entrada / Recebimento:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
               const SizedBox(height: 8),
               InkWell(
-                onTap: () async { final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime(2035)); if (picked != null) setState(() => _dataPagamentoAtual = picked); },
+                onTap: () async { final picked = await showDatePicker(context: context, initialDate: _dataPagamentoAtual, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setState(() => _dataPagamentoAtual = picked); },
                 child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)), child: Row(children: [const Icon(Icons.calendar_today, size: 16, color: Colors.purple), const SizedBox(width: 8), Text('Data: ${_dataPagamentoAtual.day.toString().padLeft(2, '0')}/${_dataPagamentoAtual.month.toString().padLeft(2, '0')}/${_dataPagamentoAtual.year}', style: const TextStyle(fontSize: 14))])),
               ),
               const SizedBox(height: 12),
