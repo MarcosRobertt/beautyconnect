@@ -16,7 +16,7 @@ import '../models/agendamento.dart';
 import '../../estoque/controllers/estoque_controller.dart';
 import '../../estoque/models/insumo.dart';
 import '../../financeiro/controllers/financeiro_controller.dart';
-import '../../dashboard/controllers/dashboard_controller.dart'; // <-- IMPORTAÇÃO ADICIONADA AQUI
+import '../../dashboard/controllers/dashboard_controller.dart'; 
 
 class AgendamentoFormScreen extends ConsumerStatefulWidget {
   const AgendamentoFormScreen({super.key, this.agendamentoId, this.dataInicialIso, this.horaInicialStr});
@@ -465,9 +465,13 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
               ref.invalidate(todosAgendamentosProvider);
               ref.invalidate(dashboardMetricsProvider);
               ref.invalidate(financeiroControllerProvider);
+              
+              // 🎯 ATUALIZA A CAIXA DE TEXTO DA TELA INSTANTANEAMENTE
               setState(() {
                 _original = atualizado; 
+                _observacaoController.text = atualizado.observacao; 
               });
+              
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Comanda fechada com sucesso!'), backgroundColor: Colors.green));
             }
           }
@@ -476,247 +480,6 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
           _abrirModalCancelamento(context);
         },
       ),
-    );
-  }
-
-  Future<void> _salvar() async {
-    setState(() => _erro = null);
-    if (!_formKey.currentState!.validate()) return;
-    
-    if (!_horaFimDepoisDoInicio) {
-      setState(() => _erro = 'A hora de fim deve ser depois da hora de início.');
-      return;
-    }
-
-    String nomeServico = '';
-    double valor = 0.0;
-    String? servicoIdFinal;
-
-    if (_isBloqueio) {
-      if (_motivoBloqueioController.text.trim().isEmpty) {
-        setState(() => _erro = 'Informe o motivo do bloqueio (ex: Almoço).');
-        return;
-      }
-      nomeServico = _motivoBloqueioController.text.trim();
-    } else {
-      if (_clienteId == null) {
-        setState(() => _erro = 'Selecione um cliente.');
-        return;
-      }
-      if (_servicosIdsSelecionados.isEmpty) {
-        setState(() => _erro = 'Selecione um serviço.');
-        return;
-      }
-      
-      final servicos = ref.read(servicoControllerProvider).value ?? [];
-      List<String> nomesCombinados = [];
-
-      for (var id in _servicosIdsSelecionados) {
-        try {
-          final s = servicos.firstWhere((x) => x.id == id);
-          nomesCombinados.add(s.nome);
-        } catch (_) {}
-      }
-
-      nomeServico = nomesCombinados.isNotEmpty ? nomesCombinados.join(' + ') : _servicoNomeOriginal;
-      valor = double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0;
-      servicoIdFinal = _servicosIdsSelecionados.first; 
-    }
-
-    List<DateTime> datasParaSalvar = [];
-    if (_editando || _tipoRepeticao == 'nenhum') {
-      datasParaSalvar.add(_data);
-    } else {
-      DateTime dataAtual = _data;
-      for (int i = 0; i < _ocorrencias; i++) {
-        datasParaSalvar.add(dataAtual);
-        if (_tipoRepeticao == 'semanal') {
-          dataAtual = dataAtual.add(const Duration(days: 7));
-        } else if (_tipoRepeticao == 'quinzenal') {
-          dataAtual = dataAtual.add(const Duration(days: 15));
-        } else if (_tipoRepeticao == 'mensal') {
-          dataAtual = DateTime(dataAtual.year, dataAtual.month + 1, dataAtual.day);
-        }
-      }
-    }
-
-    for (final d in datasParaSalvar) {
-      final conflito = await _verificarConflitoDeHorarioParaData(d);
-      if (conflito) {
-        final diaConflito = _formatarDataGoogle(d);
-        setState(() => _erro = '⚠️ Conflito de horário detectado no dia: $diaConflito. Modifique a data/hora ou cancele a repetição.');
-        return;
-      }
-    }
-
-    final duracaoCalculada = _calcularDuracaoEmMinutos(_horaInicio, _horaFim);
-
-    for (final d in datasParaSalvar) {
-      final agendamento = _editando
-          ? _original!.copyWith(
-              clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId,
-              data: d,
-              horaInicio: _formatarHora(_horaInicio),
-              horaFim: _formatarHora(_horaFim),
-              duracaoMinutos: duracaoCalculada,
-              servico: nomeServico,
-              servicoId: servicoIdFinal,
-              valor: valor,
-              observacao: _observacaoController.text.trim(),
-              status: _isBloqueio ? AgendamentoStatus.concluido : _original!.status, 
-            )
-          : Agendamento(
-              id: const Uuid().v4(), 
-              clienteId: _isBloqueio ? 'BLOQUEIO' : _clienteId!,
-              data: d,
-              horaInicio: _formatarHora(_horaInicio),
-              horaFim: _formatarHora(_horaFim),
-              duracaoMinutos: duracaoCalculada,
-              servico: nomeServico,
-              servicoId: servicoIdFinal,
-              valor: valor,
-              status: _isBloqueio ? AgendamentoStatus.concluido : AgendamentoStatus.agendado,
-              observacao: _observacaoController.text.trim(),
-              createdAt: DateTime.now(),
-              updatedAt: DateTime.now(),
-            );
-
-      final erro = await ref
-          .read(agendamentoControllerProvider.notifier)
-          .salvar(agendamento, novo: !_editando);
-
-      if (erro != null) {
-        setState(() => _erro = erro);
-        return;
-      }
-    }
-
-    if (mounted) context.pop();
-  }
-
-  void _abrirModalServicos(List<Servico> todosServicos) {
-    FocusScope.of(context).unfocus();
-    final buscaModalController = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (modalCtx, setModalState) {
-            final textoBusca = buscaModalController.text.trim().toLowerCase();
-            final servicosDisponiveis = todosServicos;
-            final ultimos5Servicos = servicosDisponiveis.where((s) => _ultimosServicosIds.contains(s.id)).toList();
-            if (ultimos5Servicos.isEmpty && _ultimosServicosIds.isEmpty) {
-              ultimos5Servicos.addAll(servicosDisponiveis.take(5));
-            }
-
-            final buscaAtiva = textoBusca.isNotEmpty;
-            final listaExibicao = buscaAtiva 
-              ? servicosDisponiveis.where((s) => s.nome.toLowerCase().contains(textoBusca)).toList()
-              : servicosDisponiveis;
-
-            void _toggleServico(Servico s) {
-              setModalState(() {
-                if (_servicosIdsSelecionados.contains(s.id)) {
-                  _servicosIdsSelecionados.remove(s.id);
-                } else {
-                  _servicosIdsSelecionados.add(s.id);
-                }
-              });
-              setState(() {
-                _recalcularTotais();
-              });
-            }
-
-            return Padding(
-              padding: EdgeInsets.only(bottom: MediaQuery.of(modalCtx).viewInsets.bottom),
-              child: Container(
-                height: MediaQuery.of(modalCtx).size.height * 0.85,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Selecionar Serviços', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(modalCtx)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: buscaModalController,
-                      textInputAction: TextInputAction.search,
-                      decoration: InputDecoration(
-                        hintText: 'Buscar serviço por nome...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: const OutlineInputBorder(),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      ),
-                      onChanged: (_) => setModalState(() {}),
-                    ),
-                    const SizedBox(height: 12),
-                    
-                    if (!buscaAtiva && ultimos5Servicos.isNotEmpty) ...[
-                      const Text('⭐ Últimos Utilizados', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8, runSpacing: 8,
-                        children: ultimos5Servicos.map((s) {
-                          final isSelected = _servicosIdsSelecionados.contains(s.id);
-                          return ActionChip(
-                            label: Text(s.nome, style: TextStyle(color: isSelected ? Colors.white : Colors.purple.shade900, fontSize: 12)),
-                            backgroundColor: isSelected ? Colors.purple : Colors.purple.shade50,
-                            side: BorderSide(color: isSelected ? Colors.purple : Colors.purple.shade200),
-                            avatar: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
-                            onPressed: () => _toggleServico(s),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 12),
-                      const Divider(height: 1),
-                      const SizedBox(height: 8),
-                    ],
-
-                    const Text('Todos os Serviços (Pode selecionar vários)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey)),
-                    const SizedBox(height: 8),
-
-                    Expanded(
-                      child: listaExibicao.isEmpty
-                          ? const Center(child: Text('Nenhum serviço encontrado.', style: TextStyle(color: Colors.grey)))
-                          : ListView.separated(
-                              itemCount: listaExibicao.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (_, i) {
-                                final s = listaExibicao[i];
-                                final isSelected = _servicosIdsSelecionados.contains(s.id);
-                                return ListTile(
-                                  dense: true,
-                                  contentPadding: EdgeInsets.zero,
-                                  title: Text(s.nome, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: isSelected ? Colors.purple.shade900 : Colors.black87)),
-                                  subtitle: Text('R\$ ${s.valor.toStringAsFixed(2)} · ${s.duracaoMin}m'),
-                                  trailing: Icon(isSelected ? Icons.check_circle : Icons.circle_outlined, color: isSelected ? Colors.green : Colors.grey.shade400, size: 28),
-                                  onTap: () => _toggleServico(s),
-                                );
-                              },
-                            ),
-                    ),
-                    const SizedBox(height: 12),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16)),
-                      icon: const Icon(Icons.check),
-                      label: const Text('Confirmar Seleção', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      onPressed: () => Navigator.pop(modalCtx),
-                    )
-                  ],
-                ),
-              ),
-            );
-          }
-        );
-      }
     );
   }
 
@@ -924,7 +687,12 @@ class _AgendamentoFormScreenState extends ConsumerState<AgendamentoFormScreen> {
                                   } catch (_) {}
 
                                   ref.invalidate(financeiroControllerProvider);
-                                  setState(() => _original = att);
+                                  
+                                  // 🎯 ATUALIZA A CAIXA DE TEXTO AO REABRIR A COMANDA
+                                  setState(() { 
+                                    _original = att;
+                                    _observacaoController.text = att.observacao; 
+                                  });
                                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Comanda reaberta.'), backgroundColor: Colors.orange));
                                 }
                               ),
