@@ -22,6 +22,11 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
   DateTime _mesSelecionado = DateTime(DateTime.now().year, DateTime.now().month, 1);
   final NumberFormat _fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
 
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+
   // ============================================================================
   // 🧠 O CÉREBRO DA IA: ALGORITMO PREDITIVO DE FATURAMENTO
   // ============================================================================
@@ -113,7 +118,7 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.psychology, color: Colors.purple),
+                  Icon(Icons.psychology, color: _primaryColor),
                   const SizedBox(width: 8),
                   Text('Treinar IA - ${cliente.nome}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ],
@@ -143,6 +148,7 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
               ),
               const SizedBox(height: 20),
               FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: _primaryColor),
                 onPressed: () {
                   final atualizado = cliente.copyWith(
                     profissao: profController.text.trim(),
@@ -151,7 +157,7 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                   ref.read(clienteControllerProvider.notifier).salvar(atualizado);
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('IA alimentada com sucesso!'), backgroundColor: Colors.green),
+                    SnackBar(content: const Text('IA alimentada com sucesso!'), backgroundColor: _primaryColor),
                   );
                 },
                 icon: const Icon(Icons.check),
@@ -182,16 +188,17 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
     final hoje = DateTime.now();
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF9FAF9),
       appBar: AppBar(
         title: const Text('Relatório Gerencial (IA)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        backgroundColor: _lightAccent.withOpacity(0.5),
       ),
       body: clientesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => Center(child: CircularProgressIndicator(color: _primaryColor)),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (clientes) {
           return todosAgendamentosAsync.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => Center(child: CircularProgressIndicator(color: _primaryColor)),
             error: (e, _) => Center(child: Text('Erro: $e')),
             data: (todos) {
               final inicioMes = _mesSelecionado;
@@ -222,8 +229,13 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
               final Set<String> clientesAtendidosMesAnterior = {};
               final Map<String, DateTime> primeiraVisitaCliente = {};
 
+              // 🚀 LÓGICA DE MESES: Descobrir o mês mais antigo para popular o Dropdown
+              DateTime dataMaisAntiga = DateTime(hoje.year, 1, 1); // Fallback: Início do ano atual
               for (final a in todos) {
                 if (a.clienteId == 'BLOQUEIO' || a.status == AgendamentoStatus.cancelado) continue;
+                if (a.data.isBefore(dataMaisAntiga)) {
+                  dataMaisAntiga = DateTime(a.data.year, a.data.month, 1);
+                }
                 if (!primeiraVisitaCliente.containsKey(a.clienteId) || a.data.isBefore(primeiraVisitaCliente[a.clienteId]!)) {
                   primeiraVisitaCliente[a.clienteId] = a.data;
                 }
@@ -310,7 +322,19 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                 return semProfissao || semObs;
               }).take(5).toList(); 
 
-              List<DateTime> ultimosMeses = List.generate(6, (index) => DateTime(hoje.year, hoje.month - index, 1));
+              // 🚀 GERADOR DINÂMICO DE MESES (DO MÊS MAIS ANTIGO ATÉ O MÊS ATUAL/DEZEMBRO)
+              List<DateTime> listaCompletaMeses = [];
+              DateTime mesCursor = DateTime(hoje.year, hoje.month, 1);
+              
+              // Garante que mostramos pelo menos até o fim do ano atual
+              if (mesCursor.month < 12) {
+                 mesCursor = DateTime(hoje.year, 12, 1);
+              }
+
+              while (mesCursor.isAfter(dataMaisAntiga.subtract(const Duration(days: 1)))) {
+                listaCompletaMeses.add(mesCursor);
+                mesCursor = DateTime(mesCursor.year, mesCursor.month - 1, 1);
+              }
 
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -325,8 +349,8 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                           DropdownButton<DateTime>(
                             value: _mesSelecionado,
                             underline: const SizedBox(),
-                            icon: const Icon(Icons.calendar_month, size: 18),
-                            items: ultimosMeses.map((data) {
+                            icon: Icon(Icons.calendar_month, size: 18, color: _primaryColor),
+                            items: listaCompletaMeses.map((data) {
                               final label = DateFormat('MMMM yyyy', 'pt_BR').format(data);
                               return DropdownMenuItem(value: data, child: Text(label[0].toUpperCase() + label.substring(1), style: const TextStyle(fontSize: 14)));
                             }).toList(),
@@ -346,9 +370,9 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                       elevation: 0,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: BorderSide(color: Colors.purple.shade200, width: 2),
+                        side: BorderSide(color: _borderAccent, width: 2),
                       ),
-                      color: Colors.purple.shade50,
+                      color: Colors.white,
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
@@ -357,20 +381,20 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                Icon(Icons.auto_awesome, color: Colors.purple.shade700, size: 20),
+                                Icon(Icons.auto_awesome, color: _primaryColor, size: 20),
                                 const SizedBox(width: 8),
-                                Text('PREVISÃO DE FECHAMENTO (IA)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple.shade800, fontSize: 12)),
+                                Text('PREVISÃO DE FECHAMENTO (IA)', style: TextStyle(fontWeight: FontWeight.bold, color: _primaryColor, fontSize: 12)),
                               ],
                             ),
                             const SizedBox(height: 8),
                             Text(
                               _fmtMoeda.format(previsaoFinal),
-                              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: Colors.purple.shade900),
+                              style: TextStyle(fontSize: 36, fontWeight: FontWeight.w900, color: _primaryColor),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Tendência detectada: $tendenciaStr',
-                              style: TextStyle(fontSize: 11, color: Colors.purple.shade700, fontStyle: FontStyle.italic),
+                              style: const TextStyle(fontSize: 11, color: Colors.blueGrey, fontStyle: FontStyle.italic),
                               textAlign: TextAlign.center,
                             ),
                           ],
@@ -383,12 +407,12 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.green.shade200)),
+                            decoration: BoxDecoration(color: _lightAccent, borderRadius: BorderRadius.circular(8), border: Border.all(color: _borderAccent)),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Já Realizado', style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.bold)),
-                                Text(_fmtMoeda.format(previsaoRealizada), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                                Text('Já Realizado', style: TextStyle(fontSize: 11, color: _primaryColor, fontWeight: FontWeight.bold)),
+                                Text(_fmtMoeda.format(previsaoRealizada), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _primaryColor)),
                               ],
                             ),
                           ),
@@ -397,12 +421,12 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blue.shade200)),
+                            decoration: BoxDecoration(color: Colors.blueGrey.shade50, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.blueGrey.shade200)),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Futuro Garantido', style: TextStyle(fontSize: 11, color: Colors.blue, fontWeight: FontWeight.bold)),
-                                Text(_fmtMoeda.format(previsaoAgendado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                const Text('Futuro Garantido', style: TextStyle(fontSize: 11, color: Colors.blueGrey, fontWeight: FontWeight.bold)),
+                                Text(_fmtMoeda.format(previsaoAgendado), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
                               ],
                             ),
                           ),
@@ -413,7 +437,7 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                     Card(
                       color: Colors.amber.shade50,
                       elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.amber.shade300)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: Colors.amber.shade200)),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
@@ -479,15 +503,15 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.purple.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.purple.shade200)),
+                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderAccent)),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.psychology, color: Colors.purple, size: 28),
+                            Icon(Icons.psychology, color: _primaryColor, size: 28),
                             const SizedBox(width: 8),
-                            const Text('Sócio Estratégico', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.purple)),
+                            Text('Sócio Estratégico', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)),
                           ],
                         ),
                         const SizedBox(height: 16),
@@ -527,12 +551,15 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                     const Text('Complete os dados abaixo para a IA gerar dicas de vendas automáticas.', style: TextStyle(fontSize: 12, color: Colors.grey)),
                     const SizedBox(height: 8),
                     ...clientesParaTreinar.map((c) => Card(
-                      elevation: 1,
+                      elevation: 0,
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: _borderAccent)),
                       margin: const EdgeInsets.only(bottom: 8),
                       child: ListTile(
                         title: Text(c.nome, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: const Text('Falta: Profissão ou Observações', style: TextStyle(fontSize: 11, color: Colors.redAccent)),
+                        subtitle: const Text('Falta: Profissão ou Observações', style: TextStyle(fontSize: 11, color: Colors.orange)),
                         trailing: OutlinedButton(
+                          style: OutlinedButton.styleFrom(foregroundColor: _primaryColor, side: BorderSide(color: _primaryColor)),
                           onPressed: () => _abrirModalTreinarIA(context, ref, c),
                           child: const Text('Preencher', style: TextStyle(fontSize: 12)),
                         ),
@@ -545,16 +572,18 @@ class _AnaliseIaScreenState extends ConsumerState<AnaliseIaScreen> {
                   const Text('Aplique a técnica de Ancoragem de Valor para recuperar estas clientes:', style: TextStyle(fontSize: 12, color: Colors.grey)),
                   const SizedBox(height: 8),
                   if (atrasados.isEmpty)
-                    const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Sua taxa de retenção está perfeita!')))
+                    Card(elevation: 0, shape: RoundedRectangleBorder(side: BorderSide(color: _borderAccent), borderRadius: BorderRadius.circular(8)), child: const Padding(padding: EdgeInsets.all(16), child: Text('Sua taxa de retenção está perfeita!', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))))
                   else
                     ...atrasados.map((c) => Card(
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(side: BorderSide(color: Colors.orange.shade200), borderRadius: BorderRadius.circular(8)),
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            leading: CircleAvatar(backgroundColor: Colors.orange.shade100, child: Icon(Icons.auto_graph, color: Colors.orange.shade800, size: 20)),
+                            leading: CircleAvatar(backgroundColor: Colors.orange.shade50, child: Icon(Icons.auto_graph, color: Colors.orange.shade800, size: 20)),
                             title: Text(c.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
-                            subtitle: Text('Ciclo atrasado desde ${fmtData.format(c.sugerida)}'),
+                            subtitle: Text('Ciclo atrasado desde ${fmtData.format(c.sugerida)}', style: const TextStyle(fontSize: 11)),
                             trailing: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(foregroundColor: Colors.green.shade700, side: BorderSide(color: Colors.green.shade300), padding: const EdgeInsets.symmetric(horizontal: 12)),
+                              style: OutlinedButton.styleFrom(foregroundColor: _primaryColor, side: BorderSide(color: _primaryColor), padding: const EdgeInsets.symmetric(horizontal: 12)),
                               icon: const Icon(Icons.chat, size: 16),
                               label: const Text('Abordar', style: TextStyle(fontSize: 12)),
                               onPressed: () {
@@ -606,22 +635,22 @@ class _CalendarioMensalCalor extends StatelessWidget {
 
     for (int dia = 1; dia <= diasNoMes; dia++) {
       final faturamento = faturamentoPorDia[dia] ?? 0.0;
-      Color corFundo = Colors.grey.shade100;
+      Color corFundo = Colors.white;
       Color corTexto = Colors.grey.shade700;
 
       if (faturamento > 0) {
-        if (faturamento > mediaDiaria * 1.2) { corFundo = Colors.green.shade400; corTexto = Colors.white; }
+        if (faturamento > mediaDiaria * 1.2) { corFundo = const Color(0xFF3A4E40); corTexto = Colors.white; } // Verde Sálvia Forte
         else if (faturamento < mediaDiaria * 0.7) { corFundo = Colors.orange.shade300; corTexto = Colors.white; }
-        else { corFundo = Colors.green.shade200; corTexto = Colors.white; }
+        else { corFundo = const Color(0xFFB5C4B9); corTexto = Colors.white; } // Verde Sálvia Claro
       }
-      diasGrid.add(Container(margin: const EdgeInsets.all(2), decoration: BoxDecoration(color: corFundo, borderRadius: BorderRadius.circular(4)), child: Center(child: Text('$dia', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: corTexto)))));
+      diasGrid.add(Container(margin: const EdgeInsets.all(2), decoration: BoxDecoration(color: corFundo, borderRadius: BorderRadius.circular(4), border: faturamento == 0 ? Border.all(color: Colors.grey.shade200) : null), child: Center(child: Text('$dia', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: corTexto)))));
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Mapa de Calor Mensal', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-        const Text('Dias verdes representam picos de receita acima da média.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+        const Text('Dias escuros representam picos de receita acima da média.', style: TextStyle(fontSize: 12, color: Colors.grey)),
         const SizedBox(height: 12),
         GridView.count(crossAxisCount: 7, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), children: diasGrid),
       ],
@@ -635,7 +664,7 @@ class _BlocoTextoIA extends StatelessWidget {
   final String texto;
   @override
   Widget build(BuildContext context) {
-    return RichText(text: TextSpan(style: TextStyle(color: Colors.purple.shade900, fontSize: 13, height: 1.4), children: [TextSpan(text: '$titulo ', style: const TextStyle(fontWeight: FontWeight.bold)), TextSpan(text: texto)]));
+    return RichText(text: TextSpan(style: const TextStyle(color: Colors.black87, fontSize: 13, height: 1.4), children: [TextSpan(text: '$titulo ', style: const TextStyle(fontWeight: FontWeight.bold)), TextSpan(text: texto)]));
   }
 }
 
@@ -673,7 +702,7 @@ class _CardMetricaIA extends StatelessWidget {
 
     return Container(
       width: 140, padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFB5C4B9))), // Border Sálvia
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
