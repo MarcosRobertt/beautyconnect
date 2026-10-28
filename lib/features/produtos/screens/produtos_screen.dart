@@ -20,10 +20,10 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
   final _moeda = NumberFormat.simpleCurrency(locale: 'pt_BR');
   DateTime _mesFiltro = DateTime.now(); 
   
-  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
-  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
-  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
-  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+  // 🎨 IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); 
+  final Color _lightAccent = const Color(0xFFE8EFEA);  
+  final Color _borderAccent = const Color(0xFFB5C4B9); 
 
   // Filtros da Vitrine
   String _searchQuery = '';
@@ -89,7 +89,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     ));
   }
 
-  // 🛡️ Badge visual de Validade do Produto
   Widget _buildValidadeBadge(Produto p) {
     if (!p.temValidade || p.dataValidade == null) return const SizedBox.shrink();
     
@@ -98,11 +97,11 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
     final diasRestantes = venc.difference(hoje).inDays;
 
     if (diasRestantes < 0) {
-      return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4), border: BorderSide(color: Colors.red.shade200)), child: Text('❌ VENCIDO (${diasRestantes.abs()} dias)', style: TextStyle(fontSize: 10, color: Colors.red.shade900, fontWeight: FontWeight.bold)));
+      return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.red.shade200)), child: Text('❌ VENCIDO (${diasRestantes.abs()} dias)', style: TextStyle(fontSize: 10, color: Colors.red.shade900, fontWeight: FontWeight.bold)));
     } else if (diasRestantes <= 30) {
-      return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(4), border: BorderSide(color: Colors.orange.shade200)), child: Text('⚠️ Vence em $diasRestantes dias', style: TextStyle(fontSize: 10, color: Colors.orange.shade900, fontWeight: FontWeight.bold)));
+      return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.orange.shade200)), child: Text('⚠️ Vence em $diasRestantes dias', style: TextStyle(fontSize: 10, color: Colors.orange.shade900, fontWeight: FontWeight.bold)));
     }
-    return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _lightAccent, borderRadius: BorderRadius.circular(4), border: BorderSide(color: _borderAccent)), child: Text('✅ Validade: ${DateFormat('dd/MM/yy').format(p.dataValidade!)}', style: TextStyle(fontSize: 10, color: _primaryColor)));
+    return Container(margin: const EdgeInsets.only(top: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _lightAccent, borderRadius: BorderRadius.circular(4), border: Border.all(color: _borderAccent)), child: Text('✅ Validade: ${DateFormat('dd/MM/yy').format(p.dataValidade!)}', style: TextStyle(fontSize: 10, color: _primaryColor)));
   }
 
   @override
@@ -195,7 +194,7 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                         Text(p.nome, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                                         Container(margin: const EdgeInsets.only(top: 2, bottom: 4), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.blueGrey.shade50, borderRadius: BorderRadius.circular(4)), child: Text(p.categoria, style: TextStyle(fontSize: 10, color: Colors.blueGrey.shade700))),
                                         Text(semEstoque ? '⚠️ SEM ESTOQUE' : '📦 Estoque: ${p.estoque} un', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: semEstoque ? Colors.red : Colors.blueGrey)),
-                                        _buildValidadeBadge(p), // 📅 AQUI ESTÁ O BADGE DE VALIDADE
+                                        _buildValidadeBadge(p), 
                                       ],
                                     ),
                                   ),
@@ -227,19 +226,31 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
             vendasAsync.when(
               loading: () => Center(child: CircularProgressIndicator(color: _primaryColor)), error: (e, _) => Center(child: Text('Erro: $e')),
               data: (vendas) {
-                // 1. Coleta das categorias que realmente tiveram vendas no mês para o filtro
+                // Ponte para buscar a categoria do produto 
+                final listaProdutos = produtosAsync.value ?? [];
+                String categoriaDaVenda(VendaProduto v) {
+                  try {
+                    return listaProdutos.firstWhere((p) => p.nome == v.produtoNome).categoria;
+                  } catch (_) {
+                    return 'Outros';
+                  }
+                }
+
+                // Coleta categorias
                 final categoriasVendidas = {'Todas'};
-                for (var v in vendas) { if (v.produtoCategoria.isNotEmpty) categoriasVendidas.add(v.produtoCategoria); }
+                for (var v in vendas) { 
+                  categoriasVendidas.add(categoriaDaVenda(v)); 
+                }
                 final listCatVendas = categoriasVendidas.toList()..sort();
                 if (!listCatVendas.contains(_categoriaSelecionadaVendas)) _categoriaSelecionadaVendas = 'Todas';
 
-                // 2. Aplicação dos Filtros
+                // Aplicação dos Filtros
                 final vendasFiltradas = vendas.where((v) {
                   bool matchData = true;
                   if (_diaFiltroVendas != null) {
                     matchData = v.dataVenda.year == _diaFiltroVendas!.year && v.dataVenda.month == _diaFiltroVendas!.month && v.dataVenda.day == _diaFiltroVendas!.day;
                   }
-                  bool matchCat = _categoriaSelecionadaVendas == 'Todas' || v.produtoCategoria == _categoriaSelecionadaVendas;
+                  bool matchCat = _categoriaSelecionadaVendas == 'Todas' || categoriaDaVenda(v) == _categoriaSelecionadaVendas;
                   return matchData && matchCat;
                 }).toList();
 
@@ -264,7 +275,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                           Row(
                             children: [
                               const SizedBox(width: 16),
-                              // Botão de Filtro por Dia
                               InkWell(
                                 onTap: () async {
                                   final hoje = DateTime.now();
@@ -305,9 +315,8 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Container(height: 24, width: 1, color: Colors.grey),
+                              Container(height: 24, width: 1, color: Colors.grey),
                               const SizedBox(width: 8),
-                              // Chips de Categoria
                               Expanded(
                                 child: SizedBox(
                                   height: 32,
@@ -344,7 +353,6 @@ class _ProdutosScreenState extends ConsumerState<ProdutosScreen> {
                         itemBuilder: (context, index) {
                           final v = vendasFiltradas[index];
                           
-                          // 💰 Lógica Visual de Inadimplência
                           bool estaAtrasado = false;
                           if (!v.isPago && v.dataPagamentoEsperada != null) {
                             final hoje = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
@@ -471,13 +479,38 @@ class _ModalVendaProdutoState extends ConsumerState<_ModalVendaProduto> {
           ),
           const SizedBox(height: 16),
 
+          // 📅 NOVO CAMPO: DATA DA VENDA E FORMA DE PAGAMENTO NA MESMA LINHA
           Row(
             children: [
               Expanded(
+                flex: 1,
+                child: InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: context, 
+                      initialDate: _dataSelecionada, 
+                      firstDate: DateTime(2020), 
+                      lastDate: DateTime.now(), 
+                      builder: (context, child) { return Theme(data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: _primaryColor)), child: child!); }
+                    );
+                    if (picked != null) {
+                      final agora = DateTime.now();
+                      setState(() => _dataSelecionada = DateTime(picked.year, picked.month, picked.day, agora.hour, agora.minute));
+                    }
+                  },
+                  child: InputDecorator(
+                    decoration: const InputDecoration(labelText: 'Data da Venda', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 15)),
+                    child: Text(DateFormat('dd/MM/yy').format(_dataSelecionada)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 1,
                 child: DropdownButtonFormField<String>(
                   value: _formaPagamento,
-                  decoration: const InputDecoration(labelText: 'Forma de Pagamento', border: OutlineInputBorder()),
-                  items: ['Dinheiro', 'Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Fiado / A Prazo'].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  decoration: const InputDecoration(labelText: 'Recebimento', border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 15)),
+                  items: ['Dinheiro', 'Pix', 'Cartão de Crédito', 'Cartão de Débito', 'Fiado / A Prazo'].map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis))).toList(),
                   onChanged: (val) {
                     setState(() {
                       _formaPagamento = val!;
