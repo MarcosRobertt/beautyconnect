@@ -16,7 +16,10 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="BeautyConnect - MVP para manicures, 100% local, sem servidor.">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- 🚀 CORREÇÃO 1: Viewport atualizado para proibir zoom e usar a tela toda (evita buracos) -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -27,5 +30,32 @@
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
+
+  <!-- 🚀 CORREÇÃO 2: INÍCIO DA CORREÇÃO DO BUG DO IOS PWA (TELA SUBINDO) -->
+  <script>
+    function corrigirViewportIOS() {
+      setTimeout(function() {
+        // Força a rolagem de volta para o topo absoluto
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+        document.documentElement.scrollTop = 0;
+        
+        // Dá um "susto" no Flutter simulando que a tela mudou de tamanho. 
+        // Isso obriga o Flutter a recalcular o espaço e puxar a barra de volta para o rodapé.
+        window.dispatchEvent(new Event('resize'));
+      }, 150); // Atraso de 150ms para dar tempo da animação do iPhone terminar
+    }
+
+    // Dispara quando volta ao aplicativo (foco da janela)
+    window.addEventListener('focus', corrigirViewportIOS);
+    
+    // Dispara quando o aplicativo volta a ficar visível na tela (alternância de apps)
+    window.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible') {
+        corrigirViewportIOS();
+      }
+    });
+  </script>
+  <!-- FIM DA CORREÇÃO -->
 </body>
 </html>
