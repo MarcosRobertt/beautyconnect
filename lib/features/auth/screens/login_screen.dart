@@ -17,6 +17,11 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _ocultarSenha = true;
   String? _erroMensagem;
 
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+
   Future<void> _fazerLogin() async {
     final email = _emailController.text.trim();
     final senha = _senhaController.text.trim();
@@ -57,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _mostrarDialogoRecuperacao(BuildContext context, Color primaryColor) {
+  void _mostrarDialogoRecuperacao(BuildContext context) {
     final recuperarEmailController = TextEditingController(text: _emailController.text.trim());
     
     showDialog(
@@ -71,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Row(
                 children: [
-                  Icon(Icons.lock_reset, color: primaryColor),
+                  Icon(Icons.lock_reset, color: _primaryColor),
                   const SizedBox(width: 8),
                   const Text('Redefinir Senha', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
@@ -89,11 +94,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: 'E-mail',
-                      prefixIcon: Icon(Icons.email_outlined, color: primaryColor),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      prefixIcon: Icon(Icons.email_outlined, color: _primaryColor),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _borderAccent)),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: primaryColor, width: 2),
+                        borderSide: BorderSide(color: _primaryColor, width: 2),
                       ),
                     ),
                   ),
@@ -106,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor: primaryColor,
+                    backgroundColor: _primaryColor,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   onPressed: enviando
@@ -173,13 +178,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Ajuste da Paleta Visual para a Identidade BeautyConnect (Dashboard)
-    const primaryColor = Color(0xFF8A2463); 
-    const lightPurple = Color(0xFFF5E1EC); 
-    const borderColor = Color(0xFFEED5E3);
-
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF0F4), // Fundo blush idêntico ao Dashboard
+      backgroundColor: const Color(0xFFF9FAF9), // Fundo Sálvia Muito Claro
       body: Center(
         child: SingleChildScrollView(
           child: Padding(
@@ -188,10 +188,10 @@ class _LoginScreenState extends State<LoginScreen> {
               constraints: const BoxConstraints(maxWidth: 400),
               child: Card(
                 elevation: 3,
-                shadowColor: primaryColor.withOpacity(0.12),
+                shadowColor: _primaryColor.withOpacity(0.12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: borderColor, width: 1),
+                  side: BorderSide(color: _borderAccent, width: 1),
                 ),
                 color: Colors.white,
                 child: Padding(
@@ -204,21 +204,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       Center(
                         child: Container(
                           padding: const EdgeInsets.all(16),
-                          decoration: const BoxDecoration(
-                            color: lightPurple,
+                          decoration: BoxDecoration(
+                            color: _lightAccent,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.water_drop, size: 40, color: primaryColor),
+                          child: Icon(Icons.water_drop, size: 40, color: _primaryColor),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text(
+                      Text(
                         'BeautyConnect',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 26,
                           fontWeight: FontWeight.bold,
-                          color: primaryColor,
+                          color: _primaryColor,
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -264,14 +264,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           labelText: 'E-mail',
                           labelStyle: TextStyle(color: Colors.grey.shade700),
-                          prefixIcon: const Icon(Icons.email_outlined, color: primaryColor),
+                          prefixIcon: Icon(Icons.email_outlined, color: _primaryColor),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: primaryColor, width: 2),
+                            borderSide: BorderSide(color: _primaryColor, width: 2),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
+                            borderSide: BorderSide(color: _borderAccent),
                           ),
                         ),
                         onSubmitted: (_) => _fazerLogin(),
@@ -285,7 +285,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         decoration: InputDecoration(
                           labelText: 'Senha',
                           labelStyle: TextStyle(color: Colors.grey.shade700),
-                          prefixIcon: const Icon(Icons.lock_outline, color: primaryColor),
+                          prefixIcon: Icon(Icons.lock_outline, color: _primaryColor),
                           suffixIcon: IconButton(
                             icon: Icon(
                               _ocultarSenha ? Icons.visibility : Icons.visibility_off,
@@ -295,11 +295,11 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: primaryColor, width: 2),
+                            borderSide: BorderSide(color: _primaryColor, width: 2),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
+                            borderSide: BorderSide(color: _borderAccent),
                           ),
                         ),
                         onSubmitted: (_) => _fazerLogin(),
@@ -309,9 +309,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () => _mostrarDialogoRecuperacao(context, primaryColor),
+                          onPressed: () => _mostrarDialogoRecuperacao(context),
                           style: TextButton.styleFrom(
-                            foregroundColor: primaryColor,
+                            foregroundColor: _primaryColor,
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
                             minimumSize: Size.zero,
                           ),
@@ -328,7 +328,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         height: 52,
                         child: FilledButton(
                           style: FilledButton.styleFrom(
-                            backgroundColor: primaryColor,
+                            backgroundColor: _primaryColor,
                             foregroundColor: Colors.white,
                             elevation: 2,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
