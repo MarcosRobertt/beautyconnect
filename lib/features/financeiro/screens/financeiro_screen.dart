@@ -12,7 +12,11 @@ class FinanceiroScreen extends ConsumerStatefulWidget {
 
 class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final _formatMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-  final Color _primaryColor = const Color(0xFF3A4E40);
+  
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
 
   // 🎯 ESTADOS DA CONCILIAÇÃO
   final Map<String, TextEditingController> _realControllers = {};
@@ -69,10 +73,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     return DefaultTabController(
       length: 4, 
       child: Scaffold(
-        backgroundColor: const Color(0xFFFAF0F4),
+        backgroundColor: const Color(0xFFF9FAF9), // Fundo Geral Suave
         appBar: AppBar(
           title: const Text('Resultados Financeiros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+          backgroundColor: _lightAccent.withOpacity(0.5),
           bottom: TabBar(
             labelColor: _primaryColor, indicatorColor: _primaryColor, isScrollable: true, 
             tabs: const [
@@ -191,7 +195,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     if (_mesAberto != mesStr) {
       _mesAberto = mesStr;
       
-      // Carrega Rascunho Limpo da Nuvem para o Ecrã
       _ajustesRascunho = {};
       state.ajustesConciliacao.forEach((k, v) {
         _ajustesRascunho[k] = List<Map<String, dynamic>>.from(v);
@@ -209,7 +212,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     double totalReal = 0.0;
     double totalTaxasInformadas = 0.0;
     
-    // Soma Entradas e Saídas do Rascunho para o Painel Geral da Conciliação
     double rascunhoEntradasGlobais = 0.0;
     double rascunhoSaidasGlobais = 0.0;
     _ajustesRascunho.forEach((forma, lista) {
@@ -226,7 +228,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       totalTaxasInformadas += double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.0;
     }
 
-    // Matemática Perfeita do Saldo: Real - (Sistema + Entradas Avulsas - Saidas Avulsas)
     final double divergenciaGlobal = (totalReal + totalTaxasInformadas) - (totalSistema + rascunhoEntradasGlobais - rascunhoSaidasGlobais);
     
     Color corDivergencia = Colors.green.shade700;
@@ -249,7 +250,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
-        // 📊 CARTÃO DE RESUMO (TERMÔMETRO)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.grey.shade300, width: 1.5), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]),
@@ -278,7 +278,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         if (state.formasPagamento.isEmpty)
           const Padding(padding: EdgeInsets.all(20), child: Center(child: Text('Nenhum recebimento registrado neste mês.', style: TextStyle(color: Colors.grey)))),
           
-        // 💠 GAVETAS EXPANSÍVEIS
         ...state.formasPagamento.entries.map((e) {
           final forma = e.key;
           final valorEsperado = e.value;
@@ -352,7 +351,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       const Text('Área de Investigação & Tabela de Ajustes', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
                       const SizedBox(height: 8),
                       
-                      // 🎯 A TABELA VISUAL
                       if (listaAjustesLocal.isEmpty)
                         const Text('Nenhum ajuste registado.', style: TextStyle(fontSize: 11, color: Colors.grey))
                       else
@@ -416,7 +414,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 24),
         
-        // 🎯 OS BOTÕES DE SALVAR RASCUNHO E FINALIZAR
         Row(
           children: [
             Expanded(
@@ -436,7 +433,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                     taxasSalvar[forma] = t;
                   }
 
-                  // ⚡ CHAMA O MÉTODO NOVO DO CONTROLLER
                   await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
                   
                   if (context.mounted) {
@@ -503,10 +499,9 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   }
 
   // ===========================================================================
-  // 🎯 A NOVA VISÃO GERAL (Serviços vs Loja, Saúde do Negócio e Fechamento)
+  // 🎯 A NOVA VISÃO GERAL COM AS CORES VERDE SÁLVIA
   // ===========================================================================
   Widget _buildVisaoGeral(FinanceiroState state) {
-    // 1. Cálculos de Inteligência Financeira
     final lucroServicos = state.receitasServicos - state.despesas;
     final lucroLoja = state.receitasProdutos - state.cmv;
     
@@ -515,8 +510,9 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       margemLoja = (lucroLoja / state.receitasProdutos) * 100;
     }
 
+    final lucroOperacional = lucroServicos + lucroLoja;
     final totalCustosGlobais = state.despesas + state.cmv + state.taxasPagas;
-    final faturamentoBruto = state.receitasServicos + state.receitasProdutos; // Faturamento Operacional
+    final faturamentoBruto = state.receitasServicos + state.receitasProdutos; 
     
     double percentualCustos = 0.0;
     double percentualLucro = 0.0;
@@ -528,9 +524,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       percentualCustos = 1.0;
     }
 
-    // O Resultado Final (Lucro da Operação + Sobras Avulsas - Faltas Avulsas)
-    // O state.receitasAvulsas traz as sobras registradas na conciliação
-    final saldoLivreFinal = state.lucro + state.receitasAvulsas;
+    final saldoLivreFinal = state.lucro;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -538,23 +532,21 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
-        // 2. Os Dois Cards Inteligentes Lado a Lado
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // CARD DE SERVIÇOS
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Color(0xFFB5C4B9), width: 1.5)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderAccent, width: 1.5)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.spa, size: 14, color: Color(0xFF3A4E40),
+                        Icon(Icons.spa, size: 14, color: _primaryColor),
                         const SizedBox(width: 4),
-                        Text('SERVIÇOS', style: TextStyle(fontSize: 11, color: Color(0xFF3A4E40), fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                        Text('SERVIÇOS', style: TextStyle(fontSize: 11, color: _primaryColor, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -568,11 +560,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             ),
             const SizedBox(width: 12),
             
-            // CARD DA LOJA
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.teal.shade200, width: 1.5)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderAccent, width: 1.5)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -581,12 +572,11 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.shopping_bag, size: 14, color: Colors.teal.shade700),
+                            Icon(Icons.shopping_bag, size: 14, color: _primaryColor),
                             const SizedBox(width: 4),
-                            Text('LOJA', style: TextStyle(fontSize: 11, color: Colors.teal.shade900, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                            Text('LOJA', style: TextStyle(fontSize: 11, color: _primaryColor, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                           ],
                         ),
-                        // Badge da Margem da Loja
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                           decoration: BoxDecoration(color: margemLoja > 0 ? Colors.green.shade100 : (margemLoja < 0 ? Colors.red.shade100 : Colors.grey.shade200), borderRadius: BorderRadius.circular(4)),
@@ -608,21 +598,17 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
-        // 3. O Grande Lucro Operacional (Serviços + Loja)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [_primaryColor, _primaryColor.withOpacity(0.8)],
-              begin: Alignment.topLeft, end: Alignment.bottomRight
-            ), 
+            color: _primaryColor,
             borderRadius: BorderRadius.circular(16)
           ),
           child: Column(
             children: [
-              const Text('LUCRO LÍQUIDO DE SERVIÇOS', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              const Text('LUCRO LÍQUIDO (Serviços + Loja)', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
               const SizedBox(height: 8),
-              Text(_formatMoeda.format(state.lucro), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+              Text(_formatMoeda.format(lucroOperacional), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
               if (state.variacaoLucroMes != 0) ...[
                 const SizedBox(height: 8),
                 Row(
@@ -643,7 +629,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         
         const SizedBox(height: 16),
 
-        // 4. Barra de Saúde Financeira (Custos vs Receita)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
@@ -690,13 +675,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         
         const SizedBox(height: 16),
 
-        // 5. NOVO CARD: CAIXA LÍQUIDO FINAL (Soma tudo: Operação + Entradas Extras da Conciliação)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.blueGrey.shade900, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blueGrey.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
           child: Column(
             children: [
-              const Text('LUCRO LIQUIDO SERVIÇOS + LOJA', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+              const Text('FECHAMENTO DE CAIXA (SALDO LIVRE)', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
               const SizedBox(height: 8),
               Text(_formatMoeda.format(saldoLivreFinal), style: TextStyle(color: saldoLivreFinal >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 28, fontWeight: FontWeight.bold)),
               
@@ -764,10 +748,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
-  // ===========================================================================
-  // MÉTODOS ANTERIORES INTACTOS (Caixa Diário e Visão Anual)
-  // ===========================================================================
-
   Widget _buildCaixaDiario(FinanceiroState state) {
     final diasMovimentados = state.fluxoDiario.entries.where((e) => e.value['receita']! > 0 || e.value['despesa']! > 0).toList()..sort((a,b) => b.key.compareTo(a.key));
 
@@ -793,7 +773,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                   return Card(
                     elevation: 0,
                     margin: const EdgeInsets.only(bottom: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _borderAccent)),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
