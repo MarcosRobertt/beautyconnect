@@ -9,11 +9,9 @@ class WhatsAppService {
     4: 'quinta-feira', 5: 'sexta-feira', 6: 'sábado', 7: 'domingo',
   };
 
-  /// MENSAGENS PADRÃO (Caso o banco de dados esteja vazio)
   static const String _msgConfirmacaoDefault = "Olá, [NOME]! Tudo bem? 💅\n\nPassando para confirmar o seu agendamento:\n🗓️ Data: [DATA] ([DIA_SEMANA])\n⏰ Horário: [HORA]\n✨ Serviço: [SERVICO]\n\nPodemos confirmar a sua presença?";
   static const String _msgCancelamentoDefault = "Olá, [NOME]. Seu agendamento para [DATA] foi cancelado com sucesso. Caso queira remarcar, estamos à disposição! 🌸";
   
-  // AS 3 ABORDAGENS DE RETENÇÃO
   static const String _msgRetencao1 = "Olá, [NOME]! Tudo bem? Sentimos a sua falta no Studio Condeza! 🥰\n\nNotamos que faz [DIAS] dias desde a sua última visita. Vamos agendar um horário para cuidar de você esta semana?";
   static const String _msgRetencao2 = "Oi, [NOME]! Sumida! 👀 Passando para avisar que temos algumas novidades maravilhosas. Que tal tirar um tempinho para você e vir dar uma olhadinha na nossa agenda?";
   static const String _msgRetencao3 = "Olá, [NOME]! Tudo bem? Como faz um tempinho que não nos vemos, queríamos saber se aconteceu algo ou se podemos ajudar. Sua presença é muito importante para nós! 💖";
@@ -23,11 +21,10 @@ class WhatsAppService {
     return numLimpo.startsWith('55') ? numLimpo : '55$numLimpo';
   }
 
-  // 🧠 CACHE INTELIGENTE: Resolve o bloqueio de Pop-ups da Web
+  // Cache para leitura instantânea e evitar atrasos que o navegador possa bloquear
   static Map<String, String>? _cacheTemplates;
 
   static Future<String> _buscarTemplate(String tipo, String mensagemPadrao) async {
-    // Se o texto já está no cache, retorna imediatamente (Evita que o navegador bloqueie a abertura)
     if (_cacheTemplates != null && _cacheTemplates!.containsKey(tipo)) {
       final texto = _cacheTemplates![tipo]!;
       if (texto.isNotEmpty) return texto;
@@ -51,34 +48,28 @@ class WhatsAppService {
     return mensagemPadrao;
   }
 
-  // 🚀 MOTOR DE DISPARO REFORMULADO (Com 3 camadas de segurança)
+  // 🚀 O DISPARO SEGURO PARA PWA/iOS
   static Future<void> _dispararWhatsApp(String telefone, String mensagem) async {
     final numero = _formatarNumero(telefone);
-    
-    // Usamos a API universal do WhatsApp que funciona melhor em Web/Desktop/Mobile do que o wa.me
-    final uri = Uri.parse('https://api.whatsapp.com/send?phone=$numero&text=${Uri.encodeComponent(mensagem)}');
+    final url = 'https://wa.me/$numero?text=${Uri.encodeComponent(mensagem)}';
+    final uri = Uri.parse(url);
 
     try {
-      // TENTATIVA 1: O padrão oficial. Na Web, abre nova aba. No celular, tenta abrir o app.
-      bool sucesso = await launchUrl(
-        uri, 
-        mode: LaunchMode.platformDefault, 
-        webOnlyWindowName: '_blank'
+      // O truque de mestre: webOnlyWindowName: '_self'
+      // Isto impede que o iOS bloqueie o pop-up e força a abertura da App nativa!
+      await launchUrl(
+        uri,
+        mode: LaunchMode.platformDefault,
+        webOnlyWindowName: '_self', 
       );
-      
-      if (!sucesso) {
-        // TENTATIVA 2: Força tentar abrir via app nativo (Útil no iOS/Android)
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      }
     } catch (e) {
-      // TENTATIVA 3: Fallback extremo caso o sistema recuse os modos acima
+      // Se por algum motivo falhar, tenta o fallback externo
       try {
-        await launchUrl(uri);
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       } catch (_) {}
     }
   }
 
-  /// 🎯 ENVIAR CONFIRMAÇÃO DE AGENDAMENTO
   static Future<void> enviarConfirmacao({required String telefone, required String nomeCliente, required Agendamento agendamento}) async {
     final template = await _buscarTemplate('msg_confirmacao', _msgConfirmacaoDefault);
     final diaMes = DateFormat('dd/MM').format(agendamento.data);
@@ -89,7 +80,6 @@ class WhatsAppService {
     await _dispararWhatsApp(telefone, mensagem);
   }
 
-  /// 🎯 ENVIAR CANCELAMENTO
   static Future<void> enviarCancelamento({required String telefone, required String nomeCliente, required Agendamento agendamento}) async {
     final template = await _buscarTemplate('msg_cancelamento', _msgCancelamentoDefault);
     final diaMes = DateFormat('dd/MM').format(agendamento.data);
@@ -99,7 +89,6 @@ class WhatsAppService {
     await _dispararWhatsApp(telefone, mensagem);
   }
 
-  /// 🎯 ENVIAR RETENÇÃO COM OPÇÃO DE ESCOLHA
   static Future<void> enviarRetencao({required String telefone, required String nomeCliente, int diasAusente = 0, required int variante}) async {
     String chaveDb = 'msg_retencao_1';
     String defaultMsg = _msgRetencao1;
