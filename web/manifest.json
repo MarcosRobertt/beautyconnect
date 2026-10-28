@@ -3,7 +3,7 @@
     "short_name": "BeautyConnect",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F6EEF1",
+    "background_color": "#3A4E40",
     "theme_color": "#8C2F5C",
     "description": "MVP para manicures — Dashboard, Clientes e Agenda, 100% local.",
     "orientation": "any",
