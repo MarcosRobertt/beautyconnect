@@ -20,6 +20,11 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
   bool _carregando = true;
   bool _salvando = false;
 
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+
   @override
   void initState() {
     super.initState();
@@ -65,7 +70,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
       }, SetOptions(merge: true));
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Mensagens atualizadas com sucesso!'), backgroundColor: Colors.green));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('✅ Mensagens atualizadas com sucesso!'), backgroundColor: _primaryColor));
         Navigator.pop(context);
       }
     } catch (e) {
@@ -79,25 +84,28 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade300)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _borderAccent)),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [Icon(icone, color: const Color(0xFF627970), size: 20), const SizedBox(width: 8), Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+            Row(children: [Icon(icone, color: _primaryColor, size: 20), const SizedBox(width: 8), Text(titulo, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
             const SizedBox(height: 8),
             Text(descricao, style: const TextStyle(fontSize: 12, color: Colors.black54)),
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-              child: Text('Curingas permitidos: $tags', style: TextStyle(fontSize: 11, color: Colors.green.shade800, fontWeight: FontWeight.bold)),
+              padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _lightAccent, borderRadius: BorderRadius.circular(8)),
+              child: Text('Curingas permitidos: $tags', style: TextStyle(fontSize: 11, color: _primaryColor, fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: controller, maxLines: 5,
               decoration: InputDecoration(
-                hintText: 'Digite a mensagem...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), filled: true, fillColor: Colors.white,
+                hintText: 'Digite a mensagem...', 
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: _borderAccent)), 
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: _primaryColor, width: 2)),
+                filled: true, fillColor: Colors.white,
               ),
             ),
           ],
@@ -109,10 +117,13 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF0F4),
-      appBar: AppBar(title: const Text('Mensagens Automáticas')),
+      backgroundColor: const Color(0xFFF9FAF9), // Fundo Sálvia Muito Claro
+      appBar: AppBar(
+        title: const Text('Mensagens Automáticas'),
+        backgroundColor: _lightAccent.withOpacity(0.5),
+      ),
       body: _carregando
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(child: CircularProgressIndicator(color: _primaryColor))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -122,8 +133,8 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
                 _buildEditor('Confirmação de Agendamento', _ctrlConfirmacao, 'Enviada no dia ou na véspera.', '[NOME], [DATA], [DIA_SEMANA], [HORA], [SERVICO]', icone: Icons.check_circle_outline),
                 _buildEditor('Mensagem de Cancelamento', _ctrlCancelamento, 'Enviada quando desmarcam.', '[NOME], [DATA], [SERVICO]', icone: Icons.cancel_outlined),
                 
-                const Divider(height: 40, thickness: 2),
-                const Text('🎯 MENSAGENS DE RESGATE (RETENÇÃO)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.purple)),
+                Divider(height: 40, thickness: 2, color: _borderAccent.withOpacity(0.3)),
+                Text('🎯 MENSAGENS DE RESGATE (RETENÇÃO)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: _primaryColor)),
                 const SizedBox(height: 16),
 
                 _buildEditor('Opção 1: Saudade (Padrão)', _ctrlRetencao1, 'Foco em mostrar que sentiu falta da cliente.', '[NOME], [DIAS]', icone: Icons.favorite_border),
@@ -132,7 +143,7 @@ class _WhatsAppConfigScreenState extends State<WhatsAppConfigScreen> {
                 
                 const SizedBox(height: 24),
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: const Color(0xFF627970), padding: const EdgeInsets.symmetric(vertical: 16)),
+                  style: FilledButton.styleFrom(backgroundColor: _primaryColor, padding: const EdgeInsets.symmetric(vertical: 16)),
                   icon: _salvando ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.save),
                   label: Text(_salvando ? 'Salvando...' : 'Salvar Alterações Gerais'),
                   onPressed: _salvando ? null : _salvarConfiguracoes,
