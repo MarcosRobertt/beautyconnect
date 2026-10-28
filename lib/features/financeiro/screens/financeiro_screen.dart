@@ -436,7 +436,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                     taxasSalvar[forma] = t;
                   }
 
-                  // ⚡ CHAMA O MÉTODO NOVO DO CONTROLLER (Requer implementação no financeiro_controller.dart)
+                  // ⚡ CHAMA O MÉTODO NOVO DO CONTROLLER
                   await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
                   
                   if (context.mounted) {
@@ -503,102 +503,99 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   }
 
   // ===========================================================================
-  // MÉTODOS ANTERIORES INTACTOS (Visão Geral, Diário, Anual)
+  // MÉTODOS ANTERIORES INTACTOS (Caixa Diário, Visão Anual, e Nova Visão Geral)
   // ===========================================================================
 
   Widget _buildVisaoGeral(FinanceiroState state) {
+    // 1. Cálculos de Inteligência Financeira
+    final lucroServicos = state.receitasServicos - state.despesas;
+    final lucroLoja = state.receitasProdutos - state.cmv;
+    
+    double margemLoja = 0.0;
+    if (state.receitasProdutos > 0) {
+      margemLoja = (lucroLoja / state.receitasProdutos) * 100;
+    }
+
+    final totalCustosGlobais = state.despesas + state.cmv + state.taxasPagas;
+    final faturamentoBruto = state.receitas; // Tudo o que entrou (Serviços + Loja)
+    
+    double percentualCustos = 0.0;
+    double percentualLucro = 0.0;
+    
+    if (faturamentoBruto > 0) {
+      percentualCustos = (totalCustosGlobais / faturamentoBruto).clamp(0.0, 1.0);
+      percentualLucro = 1.0 - percentualCustos;
+    } else {
+      percentualCustos = 1.0;
+    }
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         _buildSeletorMes(state),
         const SizedBox(height: 16),
 
+        // 2. Os Dois Cards Inteligentes Lado a Lado
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // CARD DE SERVIÇOS
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green.shade200)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.purple.shade200, width: 1.5)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.spa, size: 14, color: Colors.green.shade700),
+                        Icon(Icons.spa, size: 14, color: Colors.purple.shade700),
                         const SizedBox(width: 4),
-                        const Text('Serviços', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                        Text('SERVIÇOS', style: TextStyle(fontSize: 11, color: Colors.purple.shade900, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Text(_formatMoeda.format(lucroServicos), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: lucroServicos >= 0 ? Colors.green.shade700 : Colors.red.shade700)),
                     const SizedBox(height: 4),
-                    Text(_formatMoeda.format(state.receitasServicos), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+                    Text('Faturamento: ${_formatMoeda.format(state.receitasServicos)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    Text('Despesas: -${_formatMoeda.format(state.despesas)}', style: const TextStyle(fontSize: 10, color: Colors.red)),
                   ],
                 ),
               ),
             ),
             const SizedBox(width: 12),
+            
+            // CARD DA LOJA
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.green.shade200)),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.teal.shade200, width: 1.5)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Icon(Icons.shopping_bag, size: 14, color: Colors.green.shade700),
-                        const SizedBox(width: 4),
-                        const Text('Loja/Produtos', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
+                        Row(
+                          children: [
+                            Icon(Icons.shopping_bag, size: 14, color: Colors.teal.shade700),
+                            const SizedBox(width: 4),
+                            Text('LOJA', style: TextStyle(fontSize: 11, color: Colors.teal.shade900, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                          ],
+                        ),
+                        // Badge da Margem da Loja
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(color: margemLoja > 0 ? Colors.green.shade100 : (margemLoja < 0 ? Colors.red.shade100 : Colors.grey.shade200), borderRadius: BorderRadius.circular(4)),
+                          child: Text('${margemLoja.toStringAsFixed(0)}% MG', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: margemLoja > 0 ? Colors.green.shade800 : (margemLoja < 0 ? Colors.red.shade800 : Colors.grey.shade700))),
+                        )
                       ],
                     ),
+                    const SizedBox(height: 8),
+                    Text(_formatMoeda.format(lucroLoja), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: lucroLoja >= 0 ? Colors.green.shade700 : Colors.red.shade700)),
                     const SizedBox(height: 4),
-                    Text(_formatMoeda.format(state.receitasProdutos), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.red.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.money_off, size: 14, color: Colors.red.shade700),
-                        const SizedBox(width: 4),
-                        const Text('Despesas Globais', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(_formatMoeda.format(state.despesas), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.redAccent)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.shade200)),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.inventory, size: 14, color: Colors.orange.shade700),
-                        const SizedBox(width: 4),
-                        const Text('Custo Loja (CMV)', style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(_formatMoeda.format(state.cmv), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
+                    Text('Vendas: ${_formatMoeda.format(state.receitasProdutos)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                    Text('Custo: -${_formatMoeda.format(state.cmv)}', style: const TextStyle(fontSize: 10, color: Colors.red)),
                   ],
                 ),
               ),
@@ -608,12 +605,19 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
+        // 3. O Grande Lucro Líquido
         Container(
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(color: _primaryColor, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [_primaryColor, _primaryColor.withOpacity(0.8)],
+              begin: Alignment.topLeft, end: Alignment.bottomRight
+            ), 
+            borderRadius: BorderRadius.circular(16)
+          ),
           child: Column(
             children: [
-              const Text('LUCRO LÍQUIDO DO MÊS', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text('LUCRO LÍQUIDO TOTAL', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
               const SizedBox(height: 8),
               Text(_formatMoeda.format(state.lucro), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
               if (state.variacaoLucroMes != 0) ...[
@@ -632,6 +636,53 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
               ]
             ],
           ),
+        ),
+        
+        const SizedBox(height: 16),
+
+        // 4. Barra de Saúde Financeira (Custos vs Receita)
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('SAÚDE DO NEGÓCIO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.black54, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    if (percentualLucro > 0)
+                      Expanded(flex: (percentualLucro * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
+                    if (percentualCustos > 0)
+                      Expanded(flex: (percentualCustos * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${(percentualLucro * 100).toStringAsFixed(0)}% Lucro', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                      Text('Faturamento: ${_formatMoeda.format(faturamentoBruto)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${(percentualCustos * 100).toStringAsFixed(0)}% Custos', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                      Text('Soma das saídas: ${_formatMoeda.format(totalCustosGlobais)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    ],
+                  ),
+                ],
+              )
+            ],
+          )
         ),
         
         if (state.receitasAvulsas > 0) ...[
