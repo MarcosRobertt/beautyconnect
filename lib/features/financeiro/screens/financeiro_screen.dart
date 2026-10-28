@@ -12,7 +12,7 @@ class FinanceiroScreen extends ConsumerStatefulWidget {
 
 class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final _formatMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
-  final Color _primaryColor = const Color(0xFF8A2463);
+  final Color _primaryColor = const Color(0xFF3A4E40);
 
   // 🎯 ESTADOS DA CONCILIAÇÃO
   final Map<String, TextEditingController> _realControllers = {};
