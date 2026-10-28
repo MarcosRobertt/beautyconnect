@@ -1,6 +1,6 @@
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:url_launcher/url_launcher.dart'; // 🚀 NOVO: Substitui o dart:html
+import 'package:url_launcher/url_launcher.dart'; 
 import '../../../features/agenda/models/agendamento.dart';
 
 class WhatsAppService {
@@ -34,6 +34,22 @@ class WhatsAppService {
     return mensagemPadrao;
   }
 
+  // 🚀 O MOTOR DE DISPARO (Sem bloqueios silenciosos)
+  static Future<void> _dispararWhatsApp(String url) async {
+    final uri = Uri.parse(url);
+    try {
+      // PLANO A: Tenta forçar a abertura no App do WhatsApp (Seja no PC ou no Telemóvel)
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      try {
+        // PLANO B: Se o Plano A falhar, abre como um separador normal no navegador (WhatsApp Web)
+        await launchUrl(uri, mode: LaunchMode.platformDefault);
+      } catch (e2) {
+        // Falha absoluta (extremamente raro)
+      }
+    }
+  }
+
   /// 🎯 ENVIAR CONFIRMAÇÃO DE AGENDAMENTO
   static Future<void> enviarConfirmacao({required String telefone, required String nomeCliente, required Agendamento agendamento}) async {
     final template = await _buscarTemplate('msg_confirmacao', _msgConfirmacaoDefault);
@@ -43,11 +59,7 @@ class WhatsAppService {
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DATA]', diaMes).replaceAll('[DIA_SEMANA]', diaSemana).replaceAll('[HORA]', agendamento.horaInicio).replaceAll('[SERVICO]', agendamento.servico);
     final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    // 🚀 Solução segura para Web (WASM) e Mobile
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    await _dispararWhatsApp(url);
   }
 
   /// 🎯 ENVIAR CANCELAMENTO
@@ -58,10 +70,7 @@ class WhatsAppService {
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DATA]', diaMes).replaceAll('[SERVICO]', agendamento.servico);
     final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    await _dispararWhatsApp(url);
   }
 
   /// 🎯 ENVIAR RETENÇÃO COM OPÇÃO DE ESCOLHA
@@ -77,9 +86,6 @@ class WhatsAppService {
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DIAS]', diasAusente.toString());
     final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
+    await _dispararWhatsApp(url);
   }
 }
