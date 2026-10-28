@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:html' as html; 
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../clientes/controllers/cliente_controller.dart'; 
@@ -20,6 +19,11 @@ import 'whatsapp_config_screen.dart';
 class ConfiguracoesScreen extends ConsumerWidget {
   const ConfiguracoesScreen({super.key});
 
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+
   void _fazerLogout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     if (context.mounted) {
@@ -29,17 +33,16 @@ class ConfiguracoesScreen extends ConsumerWidget {
 
   void _mostrarStatusBackup(BuildContext context, WidgetRef ref) {
     final backupController = ref.read(backupControllerProvider);
-    const primaryColor = Color(0xFF627970);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.cloud_done, color: Colors.green, size: 28),
-            SizedBox(width: 12),
-            Expanded(child: Text('Central de Backup', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            Icon(Icons.cloud_done, color: _primaryColor, size: 28),
+            const SizedBox(width: 12),
+            const Expanded(child: Text('Central de Backup', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
           ],
         ),
         content: Column(
@@ -56,7 +59,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
               width: double.infinity,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: primaryColor,
+                  backgroundColor: _primaryColor,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -86,8 +89,8 @@ class ConfiguracoesScreen extends ConsumerWidget {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: primaryColor,
-                  side: const BorderSide(color: primaryColor),
+                  foregroundColor: _primaryColor,
+                  side: BorderSide(color: _primaryColor),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
                 icon: const Icon(Icons.upload_file_rounded, size: 18),
@@ -125,24 +128,24 @@ class ConfiguracoesScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const primaryColor = Color(0xFF627970);
     final usuario = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8F4),
+      backgroundColor: const Color(0xFFF9FAF9), // Fundo Sálvia Muito Claro
       appBar: AppBar(
         title: const Text('Menu', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        backgroundColor: _lightAccent.withOpacity(0.5),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh, color: primaryColor),
+            icon: Icon(Icons.refresh, color: _primaryColor),
             tooltip: 'Sincronizar Dados',
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Sincronizando sistema... 🔄'), duration: Duration(milliseconds: 1500)),
               );
               Future.delayed(const Duration(milliseconds: 500), () {
-                html.window.location.reload();
+                // 🚀 NOVO MODO DE REFRESH SEM DART:HTML (WebAssembly Safe)
+                GoRouter.of(context).refresh();
               });
             },
           ),
@@ -153,12 +156,12 @@ class ConfiguracoesScreen extends ConsumerWidget {
         children: [
           Card(
             elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: _borderAccent)),
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
                 children: [
-                  const CircleAvatar(radius: 28, backgroundColor: Color(0xFFE6EBE4), child: Icon(Icons.storefront, size: 30, color: primaryColor)),
+                  CircleAvatar(radius: 28, backgroundColor: _lightAccent, child: Icon(Icons.storefront, size: 30, color: _primaryColor)),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -209,7 +212,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1, indent: 56),
                 ListTile(
-                  leading: const Icon(Icons.inventory_2_outlined, color: Colors.deepOrange),
+                  leading: const Icon(Icons.inventory_2_outlined, color: Colors.orange),
                   title: const Text('Estoque de Insumos', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Controle de Produtos, Compras e Alertas', style: TextStyle(fontSize: 12)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
@@ -254,7 +257,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ),
                 const Divider(height: 1, indent: 56),
                 ListTile(
-                  leading: const Icon(Icons.cloud_done_outlined, color: Colors.green),
+                  leading: Icon(Icons.cloud_done_outlined, color: _primaryColor),
                   title: const Text('Status de Backup', style: TextStyle(fontWeight: FontWeight.w600)),
                   subtitle: const Text('Sincronizado na Nuvem / Cópia JSON', style: TextStyle(fontSize: 11)),
                   trailing: const Icon(Icons.chevron_right, size: 20),
