@@ -1,6 +1,6 @@
-import 'dart:html' as html;
 import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🚀 NOVO: Substitui o dart:html
 import '../../../features/agenda/models/agendamento.dart';
 
 class WhatsAppService {
@@ -36,9 +36,6 @@ class WhatsAppService {
 
   /// 🎯 ENVIAR CONFIRMAÇÃO DE AGENDAMENTO
   static Future<void> enviarConfirmacao({required String telefone, required String nomeCliente, required Agendamento agendamento}) async {
-    // 🚀 TRUQUE PARA O BLOQUEADOR DE POP-UPS (Abre a janela sincronamente)
-    final janelaAberta = html.window.open('', '_blank'); 
-
     final template = await _buscarTemplate('msg_confirmacao', _msgConfirmacaoDefault);
     final diaMes = DateFormat('dd/MM').format(agendamento.data);
     final diaSemana = _diasSemana[agendamento.data.weekday] ?? '';
@@ -46,27 +43,29 @@ class WhatsAppService {
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DATA]', diaMes).replaceAll('[DIA_SEMANA]', diaSemana).replaceAll('[HORA]', agendamento.horaInicio).replaceAll('[SERVICO]', agendamento.servico);
     final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    // 🚀 Redireciona a janela que abrimos no início
-    janelaAberta?.location.href = url;
+    // 🚀 Solução segura para Web (WASM) e Mobile
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   /// 🎯 ENVIAR CANCELAMENTO
   static Future<void> enviarCancelamento({required String telefone, required String nomeCliente, required Agendamento agendamento}) async {
-    final janelaAberta = html.window.open('', '_blank'); 
-
     final template = await _buscarTemplate('msg_cancelamento', _msgCancelamentoDefault);
     final diaMes = DateFormat('dd/MM').format(agendamento.data);
     
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DATA]', diaMes).replaceAll('[SERVICO]', agendamento.servico);
     final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    janelaAberta?.location.href = url;
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   /// 🎯 ENVIAR RETENÇÃO COM OPÇÃO DE ESCOLHA
   static Future<void> enviarRetencao({required String telefone, required String nomeCliente, int diasAusente = 0, required int variante}) async {
-    final janelaAberta = html.window.open('', '_blank'); 
-
     String chaveDb = 'msg_retencao_1';
     String defaultMsg = _msgRetencao1;
 
@@ -78,6 +77,9 @@ class WhatsAppService {
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DIAS]', diasAusente.toString());
     final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    janelaAberta?.location.href = url;
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }
