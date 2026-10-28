@@ -65,6 +65,11 @@ class _MetasPlanejamentoScreenState extends ConsumerState<MetasPlanejamentoScree
   final _atendMensalCtrl = TextEditingController();
   final _atendDiarioCtrl = TextEditingController();
 
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+
   String get _chaveMes => '${_mesSelecionado.year}-${_mesSelecionado.month.toString().padLeft(2, '0')}';
 
   void _carregarDadosDoBanco(Map<String, MetaMensal> todasAsMetas) {
@@ -116,22 +121,21 @@ class _MetasPlanejamentoScreenState extends ConsumerState<MetasPlanejamentoScree
       _chaveMes: novaMeta.toMap()
     }, SetOptions(merge: true));
 
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Metas salvas com sucesso!'), backgroundColor: Colors.green));
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('✅ Metas salvas com sucesso!'), backgroundColor: _primaryColor));
   }
 
   @override
   Widget build(BuildContext context) {
-    const primary = Color(0xFF8A2463);
     final metasAsync = ref.watch(metasControllerProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF0F4),
+      backgroundColor: const Color(0xFFF9FAF9), // Fundo Sálvia Muito Claro
       appBar: AppBar(
         title: const Text('Planejamento de Metas', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        backgroundColor: _lightAccent.withOpacity(0.5),
       ),
       body: metasAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => Center(child: CircularProgressIndicator(color: _primaryColor)),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (todasAsMetas) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -144,13 +148,13 @@ class _MetasPlanejamentoScreenState extends ConsumerState<MetasPlanejamentoScree
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+                  padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _borderAccent)),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      IconButton(icon: const Icon(Icons.chevron_left, color: primary), onPressed: () { setState(() { _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1); _carregado = false; }); }),
-                      Text(DateFormat('MMMM yyyy', 'pt_BR').format(_mesSelecionado).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primary)),
-                      IconButton(icon: const Icon(Icons.chevron_right, color: primary), onPressed: () { setState(() { _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month + 1); _carregado = false; }); }),
+                      IconButton(icon: Icon(Icons.chevron_left, color: _primaryColor), onPressed: () { setState(() { _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month - 1); _carregado = false; }); }),
+                      Text(DateFormat('MMMM yyyy', 'pt_BR').format(_mesSelecionado).toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)),
+                      IconButton(icon: Icon(Icons.chevron_right, color: _primaryColor), onPressed: () { setState(() { _mesSelecionado = DateTime(_mesSelecionado.year, _mesSelecionado.month + 1); _carregado = false; }); }),
                     ],
                   ),
                 ),
@@ -160,32 +164,32 @@ class _MetasPlanejamentoScreenState extends ConsumerState<MetasPlanejamentoScree
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: _fatMensalCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => _calcularIA(), decoration: const InputDecoration(labelText: 'Faturamento Mensal', prefixText: 'R\$ ', border: OutlineInputBorder(), filled: true, fillColor: Colors.white))),
+                    Expanded(child: TextField(controller: _fatMensalCtrl, keyboardType: const TextInputType.numberWithOptions(decimal: true), onChanged: (_) => _calcularIA(), decoration: InputDecoration(labelText: 'Faturamento Mensal', prefixText: 'R\$ ', border: OutlineInputBorder(borderSide: BorderSide(color: _borderAccent)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _primaryColor, width: 2)), filled: true, fillColor: Colors.white))),
                     const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: _atendMensalCtrl, keyboardType: TextInputType.number, onChanged: (_) => _calcularIA(), decoration: const InputDecoration(labelText: 'Clientes no Mês', prefixIcon: Icon(Icons.people_outline), border: OutlineInputBorder(), filled: true, fillColor: Colors.white))),
+                    Expanded(child: TextField(controller: _atendMensalCtrl, keyboardType: TextInputType.number, onChanged: (_) => _calcularIA(), decoration: InputDecoration(labelText: 'Clientes no Mês', prefixIcon: Icon(Icons.people_outline, color: _primaryColor), border: OutlineInputBorder(borderSide: BorderSide(color: _borderAccent)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: _primaryColor, width: 2)), filled: true, fillColor: Colors.white))),
                   ],
                 ),
                 const SizedBox(height: 24),
 
                 Container(
-                  padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: _usarCalculadoraIA ? Colors.blue.shade50 : Colors.grey.shade100, borderRadius: BorderRadius.circular(12), border: Border.all(color: _usarCalculadoraIA ? Colors.blue.shade200 : Colors.grey.shade300)),
+                  padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: _usarCalculadoraIA ? _lightAccent : Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: _usarCalculadoraIA ? _borderAccent : Colors.grey.shade300)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero, title: const Text('Calculadora Reversa (IA)', style: TextStyle(fontWeight: FontWeight.bold)),
                         subtitle: const Text('A Inteligência divide a sua meta mensal automaticamente nos dias trabalhados.', style: TextStyle(fontSize: 12)),
-                        value: _usarCalculadoraIA, activeColor: Colors.blue.shade700,
+                        value: _usarCalculadoraIA, activeColor: _primaryColor,
                         onChanged: (val) { setState(() { _usarCalculadoraIA = val; if (val) _calcularIA(); }); },
                       ),
                       if (_usarCalculadoraIA) ...[
                         const Divider(),
                         const Text('Quantos dias na semana o salão abre?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                         Slider(
-                          value: _diasPorSemana.toDouble(), min: 4, max: 7, divisions: 3, label: '$_diasPorSemana dias', activeColor: Colors.blue.shade700,
+                          value: _diasPorSemana.toDouble(), min: 4, max: 7, divisions: 3, label: '$_diasPorSemana dias', activeColor: _primaryColor,
                           onChanged: (val) { setState(() { _diasPorSemana = val.toInt(); _calcularIA(); }); },
                         ),
-                        Text('Considerando $_diasPorSemana dias por semana (removendo feriados/domingos), o sistema fracionou sua meta nos campos abaixo.', style: TextStyle(fontSize: 11, color: Colors.blue.shade800)),
+                        Text('Considerando $_diasPorSemana dias por semana (removendo feriados/domingos), o sistema fracionou sua meta nos campos abaixo.', style: TextStyle(fontSize: 11, color: _primaryColor)),
                       ]
                     ],
                   ),
@@ -196,15 +200,15 @@ class _MetasPlanejamentoScreenState extends ConsumerState<MetasPlanejamentoScree
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: _fatDiarioCtrl, enabled: !_usarCalculadoraIA, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'Faturamento Diário', prefixText: 'R\$ ', border: const OutlineInputBorder(), filled: true, fillColor: _usarCalculadoraIA ? Colors.grey.shade200 : Colors.white))),
+                    Expanded(child: TextField(controller: _fatDiarioCtrl, enabled: !_usarCalculadoraIA, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'Faturamento Diário', prefixText: 'R\$ ', border: OutlineInputBorder(borderSide: BorderSide(color: _borderAccent)), filled: true, fillColor: _usarCalculadoraIA ? Colors.grey.shade100 : Colors.white))),
                     const SizedBox(width: 12),
-                    Expanded(child: TextField(controller: _atendDiarioCtrl, enabled: !_usarCalculadoraIA, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Clientes por Dia', prefixIcon: const Icon(Icons.person), border: const OutlineInputBorder(), filled: true, fillColor: _usarCalculadoraIA ? Colors.grey.shade200 : Colors.white))),
+                    Expanded(child: TextField(controller: _atendDiarioCtrl, enabled: !_usarCalculadoraIA, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Clientes por Dia', prefixIcon: Icon(Icons.person, color: _usarCalculadoraIA ? Colors.grey : _primaryColor), border: OutlineInputBorder(borderSide: BorderSide(color: _borderAccent)), filled: true, fillColor: _usarCalculadoraIA ? Colors.grey.shade100 : Colors.white))),
                   ],
                 ),
                 const SizedBox(height: 32),
 
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: primary, padding: const EdgeInsets.symmetric(vertical: 16)),
+                  style: FilledButton.styleFrom(backgroundColor: _primaryColor, padding: const EdgeInsets.symmetric(vertical: 16)),
                   onPressed: _salvarNoBanco, icon: const Icon(Icons.save), label: const Text('SALVAR PLANEJAMENTO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ],
