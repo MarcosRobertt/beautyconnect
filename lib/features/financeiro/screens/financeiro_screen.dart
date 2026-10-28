@@ -554,7 +554,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       children: [
                         Icon(Icons.spa, size: 14, color: Colors.purple.shade700),
                         const SizedBox(width: 4),
-                        Text('SERVIÇOS', style: TextStyle(fontSize: 11, color: Colors.purple.shade900, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+                        Text('SERVIÇOS', style: TextStyle(fontSize: 11, color: Color(0xFF3A4E40), fontWeight: FontWeight.w900, letterSpacing: 0.5)),
                       ],
                     ),
                     const SizedBox(height: 8),
