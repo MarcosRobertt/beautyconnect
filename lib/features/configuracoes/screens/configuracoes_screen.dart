@@ -267,7 +267,7 @@ class ConfiguracoesScreen extends ConsumerWidget {
                 ListTile(
                   leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
                   title: const Text('Sobre o App', style: TextStyle(fontWeight: FontWeight.w600)),
-                  trailing: const Text('v1.1.1', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)), 
+                  trailing: const Text('v1.1.2', style: TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)), 
                   onTap: () {},
                 ),
               ],
