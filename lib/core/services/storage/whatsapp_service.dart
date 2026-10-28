@@ -23,30 +23,58 @@ class WhatsAppService {
     return numLimpo.startsWith('55') ? numLimpo : '55$numLimpo';
   }
 
+  // 🧠 CACHE INTELIGENTE: Resolve o bloqueio de Pop-ups da Web
+  static Map<String, String>? _cacheTemplates;
+
   static Future<String> _buscarTemplate(String tipo, String mensagemPadrao) async {
+    // Se o texto já está no cache, retorna imediatamente (Evita que o navegador bloqueie a abertura)
+    if (_cacheTemplates != null && _cacheTemplates!.containsKey(tipo)) {
+      final texto = _cacheTemplates![tipo]!;
+      if (texto.isNotEmpty) return texto;
+    }
+
     try {
       final doc = await FirebaseFirestore.instance.collection('configuracoes').doc('whatsapp').get();
-      if (doc.exists && doc.data()!.containsKey(tipo)) {
-        final texto = doc[tipo].toString();
-        if (texto.isNotEmpty) return texto;
+      if (doc.exists && doc.data() != null) {
+        _cacheTemplates = {};
+        doc.data()!.forEach((key, value) {
+          _cacheTemplates![key] = value.toString();
+        });
+
+        if (_cacheTemplates!.containsKey(tipo)) {
+          final texto = _cacheTemplates![tipo]!;
+          if (texto.isNotEmpty) return texto;
+        }
       }
     } catch (_) {}
+    
     return mensagemPadrao;
   }
 
-  // 🚀 O MOTOR DE DISPARO (Sem bloqueios silenciosos)
-  static Future<void> _dispararWhatsApp(String url) async {
-    final uri = Uri.parse(url);
+  // 🚀 MOTOR DE DISPARO REFORMULADO (Com 3 camadas de segurança)
+  static Future<void> _dispararWhatsApp(String telefone, String mensagem) async {
+    final numero = _formatarNumero(telefone);
+    
+    // Usamos a API universal do WhatsApp que funciona melhor em Web/Desktop/Mobile do que o wa.me
+    final uri = Uri.parse('https://api.whatsapp.com/send?phone=$numero&text=${Uri.encodeComponent(mensagem)}');
+
     try {
-      // PLANO A: Tenta forçar a abertura no App do WhatsApp (Seja no PC ou no Telemóvel)
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      try {
-        // PLANO B: Se o Plano A falhar, abre como um separador normal no navegador (WhatsApp Web)
-        await launchUrl(uri, mode: LaunchMode.platformDefault);
-      } catch (e2) {
-        // Falha absoluta (extremamente raro)
+      // TENTATIVA 1: O padrão oficial. Na Web, abre nova aba. No celular, tenta abrir o app.
+      bool sucesso = await launchUrl(
+        uri, 
+        mode: LaunchMode.platformDefault, 
+        webOnlyWindowName: '_blank'
+      );
+      
+      if (!sucesso) {
+        // TENTATIVA 2: Força tentar abrir via app nativo (Útil no iOS/Android)
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
       }
+    } catch (e) {
+      // TENTATIVA 3: Fallback extremo caso o sistema recuse os modos acima
+      try {
+        await launchUrl(uri);
+      } catch (_) {}
     }
   }
 
@@ -57,9 +85,8 @@ class WhatsAppService {
     final diaSemana = _diasSemana[agendamento.data.weekday] ?? '';
 
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DATA]', diaMes).replaceAll('[DIA_SEMANA]', diaSemana).replaceAll('[HORA]', agendamento.horaInicio).replaceAll('[SERVICO]', agendamento.servico);
-    final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    await _dispararWhatsApp(url);
+    await _dispararWhatsApp(telefone, mensagem);
   }
 
   /// 🎯 ENVIAR CANCELAMENTO
@@ -68,9 +95,8 @@ class WhatsAppService {
     final diaMes = DateFormat('dd/MM').format(agendamento.data);
     
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DATA]', diaMes).replaceAll('[SERVICO]', agendamento.servico);
-    final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    await _dispararWhatsApp(url);
+    await _dispararWhatsApp(telefone, mensagem);
   }
 
   /// 🎯 ENVIAR RETENÇÃO COM OPÇÃO DE ESCOLHA
@@ -84,8 +110,7 @@ class WhatsAppService {
     final template = await _buscarTemplate(chaveDb, defaultMsg);
     
     String mensagem = template.replaceAll('[NOME]', nomeCliente).replaceAll('[DIAS]', diasAusente.toString());
-    final url = 'https://wa.me/${_formatarNumero(telefone)}?text=${Uri.encodeComponent(mensagem)}';
     
-    await _dispararWhatsApp(url);
+    await _dispararWhatsApp(telefone, mensagem);
   }
 }
