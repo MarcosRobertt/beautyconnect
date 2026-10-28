@@ -18,6 +18,11 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
   bool _mostrarApenasAlertas = false;
   DateTime _mesFiltro = DateTime.now(); 
 
+  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
+  final Color _primaryColor = const Color(0xFF3A4E40); // Verde Escuro Principal
+  final Color _lightAccent = const Color(0xFFE8EFEA);  // Verde Claro (Fundos)
+  final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
+
   void _abrirModalInsumo(BuildContext context, [Insumo? insumoExistente]) {
     final nomeController = TextEditingController(text: insumoExistente?.nome ?? '');
     final categoriaController = TextEditingController(text: insumoExistente?.categoria ?? 'Géis e Acrílicos');
@@ -43,7 +48,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(insumoExistente == null ? 'Novo Insumo / Produto' : 'Editar Insumo', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(insumoExistente == null ? 'Novo Insumo / Produto' : 'Editar Insumo', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _primaryColor)),
                     const SizedBox(height: 16),
                     TextField(controller: nomeController, decoration: const InputDecoration(labelText: 'Nome do Produto', border: OutlineInputBorder()), textCapitalization: TextCapitalization.words),
                     const SizedBox(height: 12),
@@ -63,6 +68,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                     const SizedBox(height: 8),
                     CheckboxListTile(
                       value: semEstoqueMinimo, contentPadding: EdgeInsets.zero, title: const Text('Não exige estoque mínimo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      activeColor: _primaryColor,
                       controlAffinity: ListTileControlAffinity.leading, onChanged: (val) { setModalState(() { semEstoqueMinimo = val ?? false; estoqueMinimoController.text = semEstoqueMinimo ? '0' : '1'; }); },
                     ),
                     const SizedBox(height: 12),
@@ -70,7 +76,18 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                       children: [
                         Expanded(child: TextField(controller: precoController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Preço Pago (R\$)', border: OutlineInputBorder()))),
                         const SizedBox(width: 12),
-                        Expanded(child: InkWell(onTap: () async { final picked = await showDatePicker(context: context, initialDate: dataCompra, firstDate: DateTime(2020), lastDate: DateTime.now()); if (picked != null) setModalState(() => dataCompra = picked); }, child: InputDecorator(decoration: const InputDecoration(labelText: 'Data Compra', border: OutlineInputBorder()), child: Text(DateFormat('dd/MM/yyyy').format(dataCompra), style: const TextStyle(fontSize: 13))))),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async { 
+                              final picked = await showDatePicker(
+                                context: context, initialDate: dataCompra, firstDate: DateTime(2020), lastDate: DateTime.now(),
+                                builder: (context, child) { return Theme(data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: _primaryColor)), child: child!); }
+                              ); 
+                              if (picked != null) setModalState(() => dataCompra = picked); 
+                            }, 
+                            child: InputDecorator(decoration: const InputDecoration(labelText: 'Data Compra', border: OutlineInputBorder()), child: Text(DateFormat('dd/MM/yyyy').format(dataCompra), style: const TextStyle(fontSize: 13)))
+                          )
+                        ),
                       ],
                     ),
                     
@@ -96,6 +113,7 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
 
                     const SizedBox(height: 20),
                     FilledButton.icon(
+                      style: FilledButton.styleFrom(backgroundColor: _primaryColor),
                       icon: const Icon(Icons.check), label: Text(insumoExistente == null ? 'Cadastrar Produto' : 'Salvar Alterações'),
                       onPressed: () {
                         if (nomeController.text.trim().isEmpty) return;
@@ -164,7 +182,6 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const primaryColor = Color(0xFF8A2463);
     final estoqueAsync = ref.watch(estoqueControllerProvider);
     final fmtMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
     final fmtData = DateFormat('dd/MM/yyyy');
@@ -174,28 +191,28 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          IconButton(icon: const Icon(Icons.chevron_left, color: primaryColor), onPressed: () { setState(() => _mesFiltro = DateTime(_mesFiltro.year, _mesFiltro.month - 1)); }),
-          Text(DateFormat('MMMM yyyy', 'pt_BR').format(_mesFiltro).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: primaryColor)),
-          IconButton(icon: const Icon(Icons.chevron_right, color: primaryColor), onPressed: () { setState(() => _mesFiltro = DateTime(_mesFiltro.year, _mesFiltro.month + 1)); }),
+          IconButton(icon: Icon(Icons.chevron_left, color: _primaryColor), onPressed: () { setState(() => _mesFiltro = DateTime(_mesFiltro.year, _mesFiltro.month - 1)); }),
+          Text(DateFormat('MMMM yyyy', 'pt_BR').format(_mesFiltro).toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)),
+          IconButton(icon: Icon(Icons.chevron_right, color: _primaryColor), onPressed: () { setState(() => _mesFiltro = DateTime(_mesFiltro.year, _mesFiltro.month + 1)); }),
         ],
       ),
     );
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF0F4),
+      backgroundColor: const Color(0xFFF9FAF9), // Fundo Geral Suave Sálvia
       appBar: AppBar(
         title: const Text('Estoque e Insumos', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        backgroundColor: _lightAccent.withOpacity(0.5),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle, color: primaryColor, size: 28),
+            icon: Icon(Icons.add_circle, color: _primaryColor, size: 28),
             tooltip: 'Cadastrar Novo Insumo',
             onPressed: () => _abrirModalInsumo(context),
           )
         ],
       ),
       body: estoqueAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => Center(child: CircularProgressIndicator(color: _primaryColor)),
         error: (e, _) => Center(child: Text('Erro: $e')),
         data: (insumos) {
           final inicioMes = DateTime(_mesFiltro.year, _mesFiltro.month, 1);
@@ -233,14 +250,59 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Row(
                   children: [
-                    Expanded(child: Card(elevation: 0, color: Colors.deepOrange.shade50, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Compras no Mês', style: TextStyle(fontSize: 11, color: Colors.deepOrange.shade900, fontWeight: FontWeight.bold)), const SizedBox(height: 4), Text(fmtMoeda.format(gastoMes), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.deepOrange.shade900))])))),
+                    // Cartão de Compras (Agora elegante neutro)
+                    Expanded(
+                      child: Card(
+                        elevation: 0, 
+                        color: Colors.blueGrey.shade50, 
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0), 
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start, 
+                            children: [
+                              Text('Compras no Mês', style: TextStyle(fontSize: 11, color: Colors.blueGrey.shade700, fontWeight: FontWeight.bold)), 
+                              const SizedBox(height: 4), 
+                              Text(fmtMoeda.format(gastoMes), style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.blueGrey.shade900))
+                            ]
+                          )
+                        )
+                      )
+                    ),
                     const SizedBox(width: 8),
-                    Expanded(child: Card(elevation: _mostrarApenasAlertas ? 2 : 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _mostrarApenasAlertas ? Colors.red.shade400 : Colors.transparent, width: _mostrarApenasAlertas ? 2 : 0)), color: itensEmAlerta > 0 ? Colors.red.shade50 : Colors.green.shade50, child: InkWell(borderRadius: BorderRadius.circular(12), onTap: () { setState(() { _mostrarApenasAlertas = !_mostrarApenasAlertas; }); }, child: Padding(padding: const EdgeInsets.all(12.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Alertas', style: TextStyle(fontSize: 11, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900, fontWeight: FontWeight.bold)), if (_mostrarApenasAlertas) Icon(Icons.filter_alt, size: 14, color: Colors.red.shade900)]), const SizedBox(height: 4), Text('$itensEmAlerta produtos', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: itensEmAlerta > 0 ? Colors.red.shade900 : Colors.green.shade900))]))))),
+                    // Cartão de Alertas (Mantém semáforo verde/vermelho, mas mais leve)
+                    Expanded(
+                      child: Card(
+                        elevation: _mostrarApenasAlertas ? 2 : 0, 
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _mostrarApenasAlertas ? Colors.red.shade300 : Colors.transparent, width: _mostrarApenasAlertas ? 2 : 0)), 
+                        color: itensEmAlerta > 0 ? Colors.red.shade50 : _lightAccent, 
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12), 
+                          onTap: () { setState(() { _mostrarApenasAlertas = !_mostrarApenasAlertas; }); }, 
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0), 
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start, 
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween, 
+                                  children: [
+                                    Text('Alertas', style: TextStyle(fontSize: 11, color: itensEmAlerta > 0 ? Colors.red.shade900 : _primaryColor, fontWeight: FontWeight.bold)), 
+                                    if (_mostrarApenasAlertas) Icon(Icons.filter_alt, size: 14, color: Colors.red.shade900)
+                                  ]
+                                ), 
+                                const SizedBox(height: 4), 
+                                Text('$itensEmAlerta produtos', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: itensEmAlerta > 0 ? Colors.red.shade900 : _primaryColor))
+                              ]
+                            )
+                          )
+                        )
+                      )
+                    ),
                   ],
                 ),
               ),
               Expanded(
-                child: _buildAbaLista(insumosGeral, listaCategorias, fmtData, primaryColor),
+                child: _buildAbaLista(insumosGeral, listaCategorias, fmtData),
               ),
             ],
           );
@@ -249,10 +311,16 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
     );
   }
 
-  Widget _buildAbaLista(List<Insumo> insumosFiltrados, List<String> listaCategorias, DateFormat fmtData, Color primaryColor) {
+  Widget _buildAbaLista(List<Insumo> insumosFiltrados, List<String> listaCategorias, DateFormat fmtData) {
     return Column(
       children: [
-        Padding(padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), child: TextField(decoration: const InputDecoration(hintText: 'Buscar insumo por nome...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), filled: true, fillColor: Colors.white), onChanged: (v) => setState(() => _filtroBusca = v))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0), 
+          child: TextField(
+            decoration: const InputDecoration(hintText: 'Buscar insumo por nome...', prefixIcon: Icon(Icons.search), border: OutlineInputBorder(), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8), filled: true, fillColor: Colors.white), 
+            onChanged: (v) => setState(() => _filtroBusca = v)
+          )
+        ),
         
         SizedBox(
           height: 44,
@@ -264,7 +332,8 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
                   label: Text(cat, style: TextStyle(color: isSelected ? Colors.white : Colors.black87, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
-                  selected: isSelected, selectedColor: primaryColor, backgroundColor: Colors.white,
+                  selected: isSelected, selectedColor: _primaryColor, backgroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: _borderAccent)),
                   onSelected: (selected) { if(selected) setState(() => _categoriaSelecionada = cat); }
                 )
               );
@@ -286,9 +355,9 @@ class _EstoqueScreenState extends ConsumerState<EstoqueScreen> {
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: Colors.grey.shade200)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _borderAccent)),
                 child: ListTile(
-                  leading: CircleAvatar(backgroundColor: isAlerta ? Colors.red.shade100 : Colors.blueGrey.shade50, child: Icon(isAlerta ? Icons.warning_amber : Icons.inventory_2, color: isAlerta ? Colors.red.shade800 : Colors.blueGrey, size: 20)),
+                  leading: CircleAvatar(backgroundColor: isAlerta ? Colors.red.shade100 : _lightAccent, child: Icon(isAlerta ? Icons.warning_amber : Icons.inventory_2, color: isAlerta ? Colors.red.shade800 : _primaryColor, size: 20)),
                   title: Text(item.nome, style: const TextStyle(fontWeight: FontWeight.bold)),
                   subtitle: Text('${item.categoria} • Armário: ${item.quantidade} un', style: TextStyle(color: isAlerta ? Colors.red.shade700 : Colors.grey)),
                   trailing: Row(
