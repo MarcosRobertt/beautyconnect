@@ -620,7 +620,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           ),
           child: Column(
             children: [
-              const Text('LUCRO LÍQUIDO OPERACIONAL', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              const Text('LUCRO LÍQUIDO DE SERVIÇOS', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
               const SizedBox(height: 8),
               Text(_formatMoeda.format(state.lucro), style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
               if (state.variacaoLucroMes != 0) ...[
@@ -696,7 +696,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           decoration: BoxDecoration(color: Colors.blueGrey.shade900, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blueGrey.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
           child: Column(
             children: [
-              const Text('FECHAMENTO DE CAIXA (SALDO LIVRE)', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+              const Text('LUCRO LIQUIDO SERVIÇOS + LOJA', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
               const SizedBox(height: 8),
               Text(_formatMoeda.format(saldoLivreFinal), style: TextStyle(color: saldoLivreFinal >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 28, fontWeight: FontWeight.bold)),
               
