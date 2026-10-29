@@ -21,7 +21,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   // 🎯 ESTADOS DA CONCILIAÇÃO
   final Map<String, TextEditingController> _realControllers = {};
   final Map<String, TextEditingController> _taxaControllers = {};
-  Map<String, List<Map<String, dynamic>>> _ajustesRascunho = {}; // 🎯 A TABELA DE INVESTIGAÇÃO LOCAL
+  Map<String, List>> _ajustesRascunho = {}; 
   String? _mesAberto; 
 
   @override
@@ -53,27 +53,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     return _taxaControllers[forma]!;
   }
 
-  Widget _buildIndicador(double percentual, {bool inverteCores = false}) {
-    if (percentual == 0) return const SizedBox.shrink();
-    final bool subiu = percentual > 0;
-    final bool positivo = inverteCores ? !subiu : subiu;
-    final cor = positivo ? Colors.green.shade700 : Colors.red.shade700;
-    final icone = subiu ? Icons.arrow_upward : Icons.arrow_downward;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icone, size: 12, color: cor),
-        Text(' ${percentual.abs().toStringAsFixed(1)}%', style: TextStyle(color: cor, fontSize: 11, fontWeight: FontWeight.bold)),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 4, 
       child: Scaffold(
-        backgroundColor: const Color(0xFFF9FAF9), // Fundo Geral Suave
+        backgroundColor: const Color(0xFFF9FAF9), 
         appBar: AppBar(
           title: const Text('Resultados Financeiros', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           backgroundColor: _lightAccent.withOpacity(0.5),
@@ -197,7 +182,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       
       _ajustesRascunho = {};
       state.ajustesConciliacao.forEach((k, v) {
-        _ajustesRascunho[k] = List<Map<String, dynamic>>.from(v);
+        _ajustesRascunho[k] = List>.from(v);
       });
 
       for (var forma in state.formasPagamento.keys) {
@@ -499,29 +484,35 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   }
 
   // ===========================================================================
-  // 🎯 A NOVA VISÃO GERAL COM AS CORES VERDE SÁLVIA
+  // 🎯 A NOVA VISÃO GERAL COM AS CORES VERDE SÁLVIA E REESTRUTURAÇÃO
   // ===========================================================================
   Widget _buildVisaoGeral(FinanceiroState state) {
+    // Serviços (Core)
     final lucroServicos = state.receitasServicos - state.despesas;
+    double percServicosVerde = 0.0, percServicosVermelho = 0.0;
+    if (state.receitasServicos > 0 || state.despesas > 0) {
+      final totalBaseServicos = state.receitasServicos + state.despesas;
+      percServicosVerde = (state.receitasServicos / totalBaseServicos).clamp(0.0, 1.0);
+      percServicosVermelho = (state.despesas / totalBaseServicos).clamp(0.0, 1.0);
+    }
+
+    // Loja (Extra)
     final lucroLoja = state.receitasProdutos - state.cmv;
-    
     double margemLoja = 0.0;
     if (state.receitasProdutos > 0) {
       margemLoja = (lucroLoja / state.receitasProdutos) * 100;
     }
 
+    // Global (Operação total)
     final lucroOperacional = lucroServicos + lucroLoja;
     final totalCustosGlobais = state.despesas + state.cmv + state.taxasPagas;
     final faturamentoBruto = state.receitasServicos + state.receitasProdutos; 
     
-    double percentualCustos = 0.0;
-    double percentualLucro = 0.0;
-    
-    if (faturamentoBruto > 0) {
-      percentualCustos = (totalCustosGlobais / faturamentoBruto).clamp(0.0, 1.0);
-      percentualLucro = 1.0 - percentualCustos;
-    } else {
-      percentualCustos = 1.0;
+    double percGlobalVerde = 0.0, percGlobalVermelho = 0.0;
+    if (faturamentoBruto > 0 || totalCustosGlobais > 0) {
+      final totalBaseGlobal = faturamentoBruto + totalCustosGlobais;
+      percGlobalVerde = (faturamentoBruto / totalBaseGlobal).clamp(0.0, 1.0);
+      percGlobalVermelho = (totalCustosGlobais / totalBaseGlobal).clamp(0.0, 1.0);
     }
 
     final saldoLivreFinal = state.lucro;
@@ -598,10 +589,80 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
+        // 🟢 BANNER 1: RESULTADO EXCLUSIVO DA OPERAÇÃO DE SERVIÇOS (Verde Claro)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: _primaryColor,
+            color: const Color(0xFFDCE6DF), // Verde Sálvia Claro (Mais claro que o Escuro)
+            borderRadius: BorderRadius.circular(16)
+          ),
+          child: Column(
+            children: [
+              const Text('LUCRO LÍQUIDO SERVIÇOS', style: TextStyle(color: Color(0xFF2C3C30), fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
+              const SizedBox(height: 8),
+              Text(_formatMoeda.format(lucroServicos), style: TextStyle(color: lucroServicos >= 0 ? const Color(0xFF2C3C30) : Colors.red.shade800, fontSize: 32, fontWeight: FontWeight.bold)),
+            ],
+          ),
+        ),
+        
+        const SizedBox(height: 16),
+
+        // 🩺 SAÚDE DO NEGÓCIO - APENAS SERVIÇOS (Corrigido o Gráfico Proporcional)
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text('SAÚDE DO NEGÓCIO (SERVIÇOS)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.black54, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Row(
+                  children: [
+                    if (percServicosVerde > 0)
+                      Expanded(flex: (percServicosVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
+                    if (percServicosVermelho > 0)
+                      Expanded(flex: (percServicosVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
+                    if (percServicosVerde == 0 && percServicosVermelho == 0) // Caso esteja tudo zerado
+                      Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${(percServicosVerde * 100).toStringAsFixed(0)}% Entradas', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                      Text('Faturamento: ${_formatMoeda.format(state.receitasServicos)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${(percServicosVermelho * 100).toStringAsFixed(0)}% Saídas', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                      Text('Despesas: -${_formatMoeda.format(state.despesas)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    ],
+                  ),
+                ],
+              )
+            ],
+          )
+        ),
+        
+        const SizedBox(height: 24),
+        const Divider(),
+        const SizedBox(height: 24),
+
+        // 🟢 BANNER 2: RESULTADO CONSOLIDADO (Serviços + Loja)
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: _primaryColor, // Verde Escuro Principal
             borderRadius: BorderRadius.circular(16)
           ),
           child: Column(
@@ -626,26 +687,29 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             ],
           ),
         ),
-        
+
         const SizedBox(height: 16),
 
+        // 🩺 SAÚDE DO NEGÓCIO - GLOBAL (Corrigido o Gráfico Proporcional)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('SAÚDE DO NEGÓCIO', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.black54, letterSpacing: 0.5)),
+              const Text('SAÚDE DO NEGÓCIO (SERVIÇOS + LOJA)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.black54, letterSpacing: 0.5)),
               const SizedBox(height: 12),
               
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
                 child: Row(
                   children: [
-                    if (percentualLucro > 0)
-                      Expanded(flex: (percentualLucro * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
-                    if (percentualCustos > 0)
-                      Expanded(flex: (percentualCustos * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
+                    if (percGlobalVerde > 0)
+                      Expanded(flex: (percGlobalVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
+                    if (percGlobalVermelho > 0)
+                      Expanded(flex: (percGlobalVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
+                    if (percGlobalVerde == 0 && percGlobalVermelho == 0) // Caso esteja tudo zerado
+                      Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
               ),
@@ -656,15 +720,15 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${(percentualLucro * 100).toStringAsFixed(0)}% Margem', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                      Text('${(percGlobalVerde * 100).toStringAsFixed(0)}% Entradas Globais', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
                       Text('Faturamento: ${_formatMoeda.format(faturamentoBruto)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                     ],
                   ),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('${(percentualCustos * 100).toStringAsFixed(0)}% Custos', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
-                      Text('Saídas: -${_formatMoeda.format(totalCustosGlobais)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                      Text('${(percGlobalVermelho * 100).toStringAsFixed(0)}% Saídas Globais', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                      Text('Saídas Totais: -${_formatMoeda.format(totalCustosGlobais)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
                     ],
                   ),
                 ],
@@ -672,9 +736,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
             ],
           )
         ),
-        
+
         const SizedBox(height: 16),
 
+        // 🖤 BANNER 3: FECHAMENTO DE CAIXA (Saldo Livre)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.blueGrey.shade900, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blueGrey.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
