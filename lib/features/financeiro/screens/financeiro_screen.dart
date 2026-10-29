@@ -17,7 +17,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final Color _lightAccent = const Color(0xFFE8EFEA);  
   final Color _borderAccent = const Color(0xFFB5C4B9); 
 
-  // Variáveis com sintaxe simplificada para evitar bugs de cópia
   final Map<String, TextEditingController> _realControllers = {};
   final Map<String, TextEditingController> _taxaControllers = {};
   Map<String, dynamic> _ajustesRascunho = {}; 
