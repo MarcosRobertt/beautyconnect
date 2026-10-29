@@ -536,8 +536,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       percGlobalVermelho = (totalCustosGlobais / totalBaseGlobal).clamp(0.0, 1.0);
     }
 
-    final saldoLivreFinal = state.lucro;
-
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -754,53 +752,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           )
         ),
 
-        const SizedBox(height: 16),
-
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.blueGrey.shade900, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blueGrey.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
-          child: Column(
-            children: [
-              const Text('FECHAMENTO DE CAIXA (SALDO LIVRE)', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
-              const SizedBox(height: 8),
-              Text(_formatMoeda.format(saldoLivreFinal), style: TextStyle(color: saldoLivreFinal >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 28, fontWeight: FontWeight.bold)),
-              
-              if (state.receitasAvulsas > 0 || state.taxasPagas > 0) ...[
-                const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: Colors.white24, height: 1)),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Lucro da Operação:', style: TextStyle(color: Colors.blueGrey.shade200, fontSize: 12)),
-                    Text(_formatMoeda.format(state.lucro), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                if (state.receitasAvulsas > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Entradas Extras (Conciliação):', style: TextStyle(color: Colors.blueGrey.shade200, fontSize: 12)),
-                        Text('+ ${_formatMoeda.format(state.receitasAvulsas)}', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                if (state.taxasPagas > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Taxas de Maquininha:', style: TextStyle(color: Colors.blueGrey.shade200, fontSize: 12)),
-                        Text('- ${_formatMoeda.format(state.taxasPagas)}', style: TextStyle(color: Colors.redAccent.shade100, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-              ]
-            ],
-          ),
-        ),
-
         const SizedBox(height: 24),
         const Text('🏦 Formas de Recebimento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         const SizedBox(height: 8),
@@ -811,6 +762,14 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           title: Text(e.key),
           trailing: Text(_formatMoeda.format(e.value), style: const TextStyle(fontWeight: FontWeight.bold)),
         )),
+        if (state.taxasPagas > 0)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.remove_circle_outline, size: 20, color: Colors.red.shade400),
+            title: const Text('Taxas de Maquininha', style: TextStyle(color: Colors.red)),
+            trailing: Text('- ${_formatMoeda.format(state.taxasPagas)}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+          ),
 
         const SizedBox(height: 24),
         const Text('🏆 Top 5 Serviços Rápido', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
