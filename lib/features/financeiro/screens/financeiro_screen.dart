@@ -19,7 +19,9 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
   final Map<String, TextEditingController> _realControllers = {};
   final Map<String, TextEditingController> _taxaControllers = {};
-  Map<String, dynamic> _ajustesRascunho = {}; 
+  
+  // Usando var para o compilador inferir e não quebrar na sua cópia
+  var _ajustesRascunho = <String, dynamic>{}; 
   String? _mesAberto; 
 
   @override
@@ -155,12 +157,13 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                   if (!_ajustesRascunho.containsKey(forma)) {
                     _ajustesRascunho[forma] = [];
                   }
-                  (_ajustesRascunho[forma] as List).add({
+                  final itemAdd = {
                     'id': const Uuid().v4(),
                     'tipo': tipo,
                     'descricao': descricaoController.text.trim(),
                     'valor': v,
-                  });
+                  };
+                  (_ajustesRascunho[forma] as List).add(itemAdd);
                 });
                 Navigator.pop(ctx);
               }
@@ -181,7 +184,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       state.ajustesConciliacao.forEach((k, v) {
         final listData = [];
         for (var item in (v as List)) {
-          listData.add(Map<String, dynamic>.from(item as Map));
+          listData.add(item);
         }
         _ajustesRascunho[k] = listData;
       });
@@ -414,8 +417,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 icon: Icon(Icons.cloud_upload_outlined, color: _primaryColor, size: 20),
                 label: Text('Salvar\nRascunho', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _primaryColor)),
                 onPressed: () async {
-                  Map<String, double> reaisSalvar = {};
-                  Map<String, double> taxasSalvar = {};
+                  var reaisSalvar = <String, double>{};
+                  var taxasSalvar = <String, double>{};
                   
                   for (var forma in state.formasPagamento.keys) {
                     final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
@@ -424,12 +427,16 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                     taxasSalvar[forma] = t;
                   }
 
-                  final Map<String, List>> payload = {};
+                  var payloadFinal = <String, List>>{};
                   for(var key in _ajustesRascunho.keys) {
-                    payload[key] = List>.from(_ajustesRascunho[key]);
+                     var listaLimpa = >[];
+                     for(var item in (_ajustesRascunho[key] as List)) {
+                        listaLimpa.add(Map<String, dynamic>.from(item as Map));
+                     }
+                     payloadFinal[key] = listaLimpa;
                   }
 
-                  await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, payload);
+                  await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, payloadFinal);
                   
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('📝 Progresso salvo na nuvem! Pode voltar mais tarde.'), backgroundColor: Colors.blue));
@@ -463,8 +470,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                           onPressed: () async {
                             Navigator.pop(ctx);
                             
-                            Map<String, double> reaisSalvar = {};
-                            Map<String, double> taxasSalvar = {};
+                            var reaisSalvar = <String, double>{};
+                            var taxasSalvar = <String, double>{};
                             
                             for (var forma in state.formasPagamento.keys) {
                               final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
@@ -473,12 +480,16 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                               taxasSalvar[forma] = t;
                             }
 
-                            final Map<String, List>> payload = {};
+                            var payloadFinal = <String, List>>{};
                             for(var key in _ajustesRascunho.keys) {
-                              payload[key] = List>.from(_ajustesRascunho[key]);
+                               var listaLimpa = >[];
+                               for(var item in (_ajustesRascunho[key] as List)) {
+                                  listaLimpa.add(Map<String, dynamic>.from(item as Map));
+                               }
+                               payloadFinal[key] = listaLimpa;
                             }
 
-                            await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, payload);
+                            await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, payloadFinal);
                             
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Conciliação finalizada e saldos atualizados!'), backgroundColor: Colors.green));
@@ -602,7 +613,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFFDCE6DF),
+            color: const Color(0xFFDCE6DF), 
             borderRadius: BorderRadius.circular(16)
           ),
           child: Column(
@@ -633,7 +644,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       Expanded(flex: (percServicosVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
                     if (percServicosVermelho > 0)
                       Expanded(flex: (percServicosVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
-                    if (percServicosVerde == 0 && percServicosVermelho == 0)
+                    if (percServicosVerde == 0 && percServicosVermelho == 0) 
                       Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
@@ -714,7 +725,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       Expanded(flex: (percGlobalVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
                     if (percGlobalVermelho > 0)
                       Expanded(flex: (percGlobalVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
-                    if (percGlobalVerde == 0 && percGlobalVermelho == 0)
+                    if (percGlobalVerde == 0 && percGlobalVermelho == 0) 
                       Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
