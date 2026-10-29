@@ -20,7 +20,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final Map<String, TextEditingController> _realControllers = {};
   final Map<String, TextEditingController> _taxaControllers = {};
   
-  // Usando var para o compilador inferir e não quebrar na sua cópia
   var _ajustesRascunho = <String, dynamic>{}; 
   String? _mesAberto; 
 
@@ -644,7 +643,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       Expanded(flex: (percServicosVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
                     if (percServicosVermelho > 0)
                       Expanded(flex: (percServicosVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
-                    if (percServicosVerde == 0 && percServicosVermelho == 0) 
+                    if (percServicosVerde == 0 && percServicosVermelho == 0)
                       Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
@@ -725,7 +724,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       Expanded(flex: (percGlobalVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
                     if (percGlobalVermelho > 0)
                       Expanded(flex: (percGlobalVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
-                    if (percGlobalVerde == 0 && percGlobalVermelho == 0) 
+                    if (percGlobalVerde == 0 && percGlobalVermelho == 0)
                       Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
