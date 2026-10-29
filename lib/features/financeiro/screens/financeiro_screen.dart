@@ -19,9 +19,9 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final Color _borderAccent = const Color(0xFFB5C4B9); // Verde Intermédio (Bordas)
 
   // 🎯 ESTADOS DA CONCILIAÇÃO
-  final Map<String, TextEditingController> _realControllers = {};
-  final Map<String, TextEditingController> _taxaControllers = {};
-  Map<String, List>> _ajustesRascunho = {}; 
+  final Map<String, TextEditingController> _realControllers = <String, TextEditingController>{};
+  final Map<String, TextEditingController> _taxaControllers = <String, TextEditingController>{};
+  Map<String, List>> _ajustesRascunho = <String, List>>{}; 
   String? _mesAberto; 
 
   @override
@@ -157,8 +157,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
               final v = double.tryParse(valorController.text.replaceAll(',', '.')) ?? 0.0;
               if (v > 0 && descricaoController.text.isNotEmpty) {
                 setState(() {
-                  _ajustesRascunho.putIfAbsent(forma, () => []);
-                  _ajustesRascunho[forma]!.add({
+                  _ajustesRascunho.putIfAbsent(forma, () => >[]);
+                  _ajustesRascunho[forma]!.add(<String, dynamic>{
                     'id': const Uuid().v4(),
                     'tipo': tipo,
                     'descricao': descricaoController.text.trim(),
@@ -180,9 +180,11 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     if (_mesAberto != mesStr) {
       _mesAberto = mesStr;
       
-      _ajustesRascunho = {};
+      _ajustesRascunho = <String, List>>{};
       state.ajustesConciliacao.forEach((k, v) {
-        _ajustesRascunho[k] = List>.from(v);
+        // Garantindo que convertemos a lista interna corretamente
+        final List> listData = (v as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        _ajustesRascunho[k] = listData;
       });
 
       for (var forma in state.formasPagamento.keys) {
@@ -408,8 +410,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 icon: Icon(Icons.cloud_upload_outlined, color: _primaryColor, size: 20),
                 label: Text('Salvar\nRascunho', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _primaryColor)),
                 onPressed: () async {
-                  Map<String, double> reaisSalvar = {};
-                  Map<String, double> taxasSalvar = {};
+                  Map<String, double> reaisSalvar = <String, double>{};
+                  Map<String, double> taxasSalvar = <String, double>{};
                   
                   for (var forma in state.formasPagamento.keys) {
                     final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
@@ -452,8 +454,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                           onPressed: () async {
                             Navigator.pop(ctx);
                             
-                            Map<String, double> reaisSalvar = {};
-                            Map<String, double> taxasSalvar = {};
+                            Map<String, double> reaisSalvar = <String, double>{};
+                            Map<String, double> taxasSalvar = <String, double>{};
                             
                             for (var forma in state.formasPagamento.keys) {
                               final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
