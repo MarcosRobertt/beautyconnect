@@ -13,15 +13,14 @@ class FinanceiroScreen extends ConsumerStatefulWidget {
 class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
   final _formatMoeda = NumberFormat.currency(locale: 'pt_BR', symbol: 'R\$');
   
-  // 🎨 NOVA IDENTIDADE VISUAL (VERDE SÁLVIA)
   final Color _primaryColor = const Color(0xFF3A4E40); 
   final Color _lightAccent = const Color(0xFFE8EFEA);  
   final Color _borderAccent = const Color(0xFFB5C4B9); 
 
-  // 🎯 ESTADOS DA CONCILIAÇÃO (Reescrito para evitar corrupção no Copy/Paste)
-  final Map<String, TextEditingController> _realControllers = Map<String, TextEditingController>();
-  final Map<String, TextEditingController> _taxaControllers = Map<String, TextEditingController>();
-  Map<String, List>> _ajustesRascunho = Map<String, List>>(); 
+  // Variáveis com sintaxe simplificada para evitar bugs de cópia
+  final Map<String, TextEditingController> _realControllers = {};
+  final Map<String, TextEditingController> _taxaControllers = {};
+  Map<String, dynamic> _ajustesRascunho = {}; 
   String? _mesAberto; 
 
   @override
@@ -155,14 +154,14 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
               if (v > 0 && descricaoController.text.isNotEmpty) {
                 setState(() {
                   if (!_ajustesRascunho.containsKey(forma)) {
-                    _ajustesRascunho[forma] = List>.empty(growable: true);
+                    _ajustesRascunho[forma] = [];
                   }
-                  final Map<String, dynamic> novoItem = Map<String, dynamic>();
-                  novoItem['id'] = const Uuid().v4();
-                  novoItem['tipo'] = tipo;
-                  novoItem['descricao'] = descricaoController.text.trim();
-                  novoItem['valor'] = v;
-                  _ajustesRascunho[forma]!.add(novoItem);
+                  (_ajustesRascunho[forma] as List).add({
+                    'id': const Uuid().v4(),
+                    'tipo': tipo,
+                    'descricao': descricaoController.text.trim(),
+                    'valor': v,
+                  });
                 });
                 Navigator.pop(ctx);
               }
@@ -179,9 +178,9 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     if (_mesAberto != mesStr) {
       _mesAberto = mesStr;
       
-      _ajustesRascunho = Map<String, List>>();
+      _ajustesRascunho = {};
       state.ajustesConciliacao.forEach((k, v) {
-        final List> listData = List>.empty(growable: true);
+        final listData = [];
         for (var item in (v as List)) {
           listData.add(Map<String, dynamic>.from(item as Map));
         }
@@ -202,12 +201,14 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     
     double rascunhoEntradasGlobais = 0.0;
     double rascunhoSaidasGlobais = 0.0;
-    _ajustesRascunho.forEach((forma, lista) {
+    
+    for (var key in _ajustesRascunho.keys) {
+      final lista = _ajustesRascunho[key] as List;
       for (var aj in lista) {
         if (aj['tipo'] == 'entrada') rascunhoEntradasGlobais += (aj['valor'] as num).toDouble();
         if (aj['tipo'] == 'saida') rascunhoSaidasGlobais += (aj['valor'] as num).toDouble();
       }
-    });
+    }
 
     for (var entry in state.formasPagamento.entries) {
       final realCtrl = _getRealController(entry.key);
@@ -275,7 +276,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
           final valReal = double.tryParse(realCtrl.text.replaceAll(',', '.')) ?? 0.0;
           final valTaxa = double.tryParse(taxaCtrl.text.replaceAll(',', '.')) ?? 0.0;
           
-          final listaAjustesLocal = _ajustesRascunho.containsKey(forma) ? _ajustesRascunho[forma]! : List>.empty();
+          final listaAjustesLocal = _ajustesRascunho.containsKey(forma) ? (_ajustesRascunho[forma] as List) : [];
           double totEntradasLocal = 0;
           double totSaidasLocal = 0;
           for (var aj in listaAjustesLocal) {
@@ -355,7 +356,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                                 const SizedBox(width: 8),
                                 InkWell(
                                   onTap: () {
-                                    setState(() => _ajustesRascunho[forma]!.removeWhere((x) => x['id'] == aj['id']));
+                                    setState(() {
+                                      final listRef = _ajustesRascunho[forma] as List;
+                                      listRef.removeWhere((x) => x['id'] == aj['id']);
+                                    });
                                   },
                                   child: const Icon(Icons.close, size: 16, color: Colors.grey),
                                 )
@@ -411,8 +415,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                 icon: Icon(Icons.cloud_upload_outlined, color: _primaryColor, size: 20),
                 label: Text('Salvar\nRascunho', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _primaryColor)),
                 onPressed: () async {
-                  Map<String, double> reaisSalvar = Map<String, double>();
-                  Map<String, double> taxasSalvar = Map<String, double>();
+                  Map<String, double> reaisSalvar = {};
+                  Map<String, double> taxasSalvar = {};
                   
                   for (var forma in state.formasPagamento.keys) {
                     final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
@@ -421,7 +425,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                     taxasSalvar[forma] = t;
                   }
 
-                  await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
+                  final Map<String, List>> payload = {};
+                  for(var key in _ajustesRascunho.keys) {
+                    payload[key] = List>.from(_ajustesRascunho[key]);
+                  }
+
+                  await ref.read(financeiroControllerProvider.notifier).salvarRascunhoConciliacao(reaisSalvar, taxasSalvar, payload);
                   
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('📝 Progresso salvo na nuvem! Pode voltar mais tarde.'), backgroundColor: Colors.blue));
@@ -435,7 +444,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
               child: FilledButton.icon(
                 style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), backgroundColor: _primaryColor),
                 icon: const Icon(Icons.save),
-                label: const Text('FINALIZAR E GRAVAR MÊS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                label: const Text('FINALIZAR E GRAVAR', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                 onPressed: () {
                   showDialog(
                     context: context,
@@ -455,8 +464,8 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                           onPressed: () async {
                             Navigator.pop(ctx);
                             
-                            Map<String, double> reaisSalvar = Map<String, double>();
-                            Map<String, double> taxasSalvar = Map<String, double>();
+                            Map<String, double> reaisSalvar = {};
+                            Map<String, double> taxasSalvar = {};
                             
                             for (var forma in state.formasPagamento.keys) {
                               final r = double.tryParse(_getRealController(forma).text.replaceAll(',', '.')) ?? 0.0;
@@ -465,7 +474,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                               taxasSalvar[forma] = t;
                             }
 
-                            await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, _ajustesRascunho);
+                            final Map<String, List>> payload = {};
+                            for(var key in _ajustesRascunho.keys) {
+                              payload[key] = List>.from(_ajustesRascunho[key]);
+                            }
+
+                            await ref.read(financeiroControllerProvider.notifier).salvarConciliacao(reaisSalvar, taxasSalvar, payload);
                             
                             if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('✅ Conciliação finalizada e saldos atualizados!'), backgroundColor: Colors.green));
@@ -486,11 +500,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
     );
   }
 
-  // ===========================================================================
-  // 🎯 A NOVA VISÃO GERAL COM AS CORES VERDE SÁLVIA E REESTRUTURAÇÃO
-  // ===========================================================================
   Widget _buildVisaoGeral(FinanceiroState state) {
-    // Serviços (Core)
     final lucroServicos = state.receitasServicos - state.despesas;
     double percServicosVerde = 0.0, percServicosVermelho = 0.0;
     if (state.receitasServicos > 0 || state.despesas > 0) {
@@ -499,14 +509,12 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
       percServicosVermelho = (state.despesas / totalBaseServicos).clamp(0.0, 1.0);
     }
 
-    // Loja (Extra)
     final lucroLoja = state.receitasProdutos - state.cmv;
     double margemLoja = 0.0;
     if (state.receitasProdutos > 0) {
       margemLoja = (lucroLoja / state.receitasProdutos) * 100;
     }
 
-    // Global (Operação total)
     final lucroOperacional = lucroServicos + lucroLoja;
     final totalCustosGlobais = state.despesas + state.cmv + state.taxasPagas;
     final faturamentoBruto = state.receitasServicos + state.receitasProdutos; 
@@ -592,11 +600,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
-        // 🟢 BANNER 1: RESULTADO EXCLUSIVO DA OPERAÇÃO DE SERVIÇOS (Verde Claro)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFFDCE6DF), // Verde Sálvia Claro (Mais claro que o Escuro)
+            color: const Color(0xFFDCE6DF),
             borderRadius: BorderRadius.circular(16)
           ),
           child: Column(
@@ -610,7 +617,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         
         const SizedBox(height: 16),
 
-        // 🩺 SAÚDE DO NEGÓCIO - APENAS SERVIÇOS (Corrigido o Gráfico Proporcional)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
@@ -628,7 +634,7 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       Expanded(flex: (percServicosVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
                     if (percServicosVermelho > 0)
                       Expanded(flex: (percServicosVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
-                    if (percServicosVerde == 0 && percServicosVermelho == 0) // Caso esteja tudo zerado
+                    if (percServicosVerde == 0 && percServicosVermelho == 0)
                       Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
@@ -661,11 +667,10 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
         const Divider(),
         const SizedBox(height: 24),
 
-        // 🟢 BANNER 2: RESULTADO CONSOLIDADO (Serviços + Loja)
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: _primaryColor, // Verde Escuro Principal
+            color: _primaryColor, 
             borderRadius: BorderRadius.circular(16)
           ),
           child: Column(
@@ -693,7 +698,6 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
 
         const SizedBox(height: 16),
 
-        // 🩺 SAÚDE DO NEGÓCIO - GLOBAL (Corrigido o Gráfico Proporcional)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
@@ -711,9 +715,276 @@ class _FinanceiroScreenState extends ConsumerState<FinanceiroScreen> {
                       Expanded(flex: (percGlobalVerde * 100).toInt(), child: Container(height: 12, color: Colors.green.shade400)),
                     if (percGlobalVermelho > 0)
                       Expanded(flex: (percGlobalVermelho * 100).toInt(), child: Container(height: 12, color: Colors.red.shade400)),
-                    if (percGlobalVerde == 0 && percGlobalVermelho == 0) // Caso esteja tudo zerado
+                    if (percGlobalVerde == 0 && percGlobalVermelho == 0)
                       Expanded(flex: 1, child: Container(height: 12, color: Colors.grey.shade300)),
                   ],
                 ),
               ),
-              const SizedBox(height:
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('${(percGlobalVerde * 100).toStringAsFixed(0)}% Entradas Globais', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                      Text('Faturamento: ${_formatMoeda.format(faturamentoBruto)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text('${(percGlobalVermelho * 100).toStringAsFixed(0)}% Saídas Globais', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.red.shade700)),
+                      Text('Saídas Totais: -${_formatMoeda.format(totalCustosGlobais)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                    ],
+                  ),
+                ],
+              )
+            ],
+          )
+        ),
+
+        const SizedBox(height: 16),
+
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(color: Colors.blueGrey.shade900, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.blueGrey.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))]),
+          child: Column(
+            children: [
+              const Text('FECHAMENTO DE CAIXA (SALDO LIVRE)', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+              const SizedBox(height: 8),
+              Text(_formatMoeda.format(saldoLivreFinal), style: TextStyle(color: saldoLivreFinal >= 0 ? Colors.greenAccent : Colors.redAccent, fontSize: 28, fontWeight: FontWeight.bold)),
+              
+              if (state.receitasAvulsas > 0 || state.taxasPagas > 0) ...[
+                const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(color: Colors.white24, height: 1)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Lucro da Operação:', style: TextStyle(color: Colors.blueGrey.shade200, fontSize: 12)),
+                    Text(_formatMoeda.format(state.lucro), style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                if (state.receitasAvulsas > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Entradas Extras (Conciliação):', style: TextStyle(color: Colors.blueGrey.shade200, fontSize: 12)),
+                        Text('+ ${_formatMoeda.format(state.receitasAvulsas)}', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                if (state.taxasPagas > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Taxas de Maquininha:', style: TextStyle(color: Colors.blueGrey.shade200, fontSize: 12)),
+                        Text('- ${_formatMoeda.format(state.taxasPagas)}', style: TextStyle(color: Colors.redAccent.shade100, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+              ]
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        const Text('🏦 Formas de Recebimento', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 8),
+        ...state.formasPagamento.entries.map((e) => ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.payments_outlined, size: 20, color: Colors.blueGrey),
+          title: Text(e.key),
+          trailing: Text(_formatMoeda.format(e.value), style: const TextStyle(fontWeight: FontWeight.bold)),
+        )),
+
+        const SizedBox(height: 24),
+        const Text('🏆 Top 5 Serviços Rápido', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 8),
+        if (state.topServicos.isEmpty)
+           const Text('Nenhum serviço concluído neste mês.', style: TextStyle(color: Colors.grey)),
+        ...state.topServicos.entries.take(5).map((e) => ListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.star, color: Colors.amber, size: 20),
+          title: Text(e.key),
+          trailing: Text(_formatMoeda.format(e.value), style: const TextStyle(fontWeight: FontWeight.bold)),
+        )),
+        const SizedBox(height: 30),
+      ],
+    );
+  }
+
+  Widget _buildCaixaDiario(FinanceiroState state) {
+    final diasMovimentados = state.fluxoDiario.entries.where((e) => e.value['receita']! > 0 || e.value['despesa']! > 0).toList()..sort((a,b) => b.key.compareTo(a.key));
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 16.0),
+          child: _buildSeletorMes(state), 
+        ),
+        Expanded(
+          child: diasMovimentados.isEmpty
+            ? const Center(child: Text('Nenhuma movimentação neste mês.'))
+            : ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: diasMovimentados.length,
+                itemBuilder: (context, index) {
+                  final dia = diasMovimentados[index].key;
+                  final receita = diasMovimentados[index].value['receita']!;
+                  final despesa = diasMovimentados[index].value['despesa']!;
+                  final saldo = receita - despesa;
+                  final corSaldo = saldo >= 0 ? Colors.green : Colors.red;
+
+                  return Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: _borderAccent)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Dia ${dia.toString().padLeft(2, '0')} de ${DateFormat('MMMM', 'pt_BR').format(state.mesReferencia)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          const Divider(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Entradas: ${_formatMoeda.format(receita)}', style: const TextStyle(color: Colors.green, fontSize: 13)),
+                              Text('Saídas: ${_formatMoeda.format(despesa)}', style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('Saldo do dia:', style: TextStyle(fontWeight: FontWeight.bold)),
+                              Text(_formatMoeda.format(saldo), style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: corSaldo)),
+                            ],
+                          )
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildVisaoAnual(FinanceiroState state) {
+    final meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+    double maxValor = state.faturamentoAnual.reduce((a, b) => a > b ? a : b);
+    if (maxValor == 0) maxValor = 1;
+
+    String formatK(double valor) {
+      if (valor == 0) return '';
+      if (valor >= 1000) {
+        return '${(valor / 1000).toStringAsFixed(1).replaceAll('.0', '').replaceAll('.', ',')}k';
+      }
+      return valor.toStringAsFixed(0);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(ano: state.anoReferencia - 1)),
+              
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        title: const Text("Selecione o Ano"),
+                        content: SizedBox(
+                          width: 300,
+                          height: 300,
+                          child: YearPicker(
+                            firstDate: DateTime(2020),
+                            lastDate: DateTime(2035),
+                            selectedDate: DateTime(state.anoReferencia, 1),
+                            onChanged: (DateTime dateTime) {
+                              Navigator.pop(context);
+                              ref.read(financeiroControllerProvider.notifier).carregarDados(ano: dateTime.year);
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Faturamento ${state.anoReferencia}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _primaryColor)),
+                      const SizedBox(width: 4),
+                      Icon(Icons.arrow_drop_down, color: _primaryColor),
+                    ],
+                  ),
+                ),
+              ),
+
+              IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => ref.read(financeiroControllerProvider.notifier).carregarDados(ano: state.anoReferencia + 1)),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: List.generate(12, (index) {
+                final valor = state.faturamentoAnual[index];
+                final alturaPercent = valor / maxValor;
+
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (valor > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            formatK(valor), 
+                            style: const TextStyle(fontSize: 10, color: Colors.blueGrey, fontWeight: FontWeight.bold), 
+                            maxLines: 1, 
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                          ),
+                        ),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        height: 200 * alturaPercent,
+                        decoration: BoxDecoration(
+                          color: _primaryColor.withOpacity(valor > 0 ? 0.8 : 0.1),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4))
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(meses[index], style: const TextStyle(fontSize: 10)),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 40),
+          const Text('Gráfico representa Receitas Globais (Serviços + Produtos)', style: TextStyle(fontSize: 11, color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+}
